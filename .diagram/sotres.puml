@@ -1,0 +1,43 @@
+@startuml
+autonumber
+!pragma teoz true
+
+title "So-t-Res Internal Process"
+
+participant TransactionProcessorParticipant as tpp
+participant RequestContextHelper as rch
+participant AbstractTransactionHandler as ath
+participant SenderProtocolStrategy as sps
+
+Network -> tpp: listen tcp message
+note right tpp
+ - MTI not in (0800, 0810)
+end note
+tpp -> rch: convert ISO8583 message into internal DTO (RequestContext)
+tpp -> tpp: decorate trace & span
+tpp -> tpp: log iso message
+tpp -> ath: find transaction handler
+note right tpp
+ - based on RequestContext selector
+end note
+alt not found
+  tpp --> Network: return RC 96
+else found
+  tpp -> ath: validate request
+  tpp -> ath: process request
+  ath --> tpp: return RequestContext
+  tpp -> sps: send message based on chosen protocol, right now only support REST API
+  sps --> tpp: return response
+  alt success
+    tpp -> tpp: handle response
+    tpp --> Network: return response
+  else
+    tpp -> tpp: handle error
+    alt not timeout
+      tpp -> Network: return RC 96
+    end
+  end
+end
+
+
+@enduml

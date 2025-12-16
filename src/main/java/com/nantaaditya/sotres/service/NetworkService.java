@@ -1,0 +1,144 @@
+package com.nantaaditya.sotres.service;
+
+import com.github.kpavlov.jreactive8583.client.Iso8583Client;
+import com.github.kpavlov.jreactive8583.iso.MessageFactory;
+import com.nantaaditya.sotres.configuration.PackagerConfiguration;
+import com.nantaaditya.sotres.helper.DateTimeHelper;
+import com.nantaaditya.sotres.helper.ErrorHelper;
+import com.nantaaditya.sotres.helper.HealthCheckHelper;
+import com.nantaaditya.sotres.helper.IsoFieldHelper;
+import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
+import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
+import com.nantaaditya.sotres.model.constant.PackagerConstant;
+import com.nantaaditya.sotres.properties.IsoMessageProperties;
+import com.solab.iso8583.IsoMessage;
+import com.solab.iso8583.IsoType;
+import java.time.ZonedDateTime;
+import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.stereotype.Component;
+
+@Slf4j
+@Component
+public class NetworkService {
+
+  private final Iso8583Client<IsoMessage> iso8583Client;
+  private final HealthCheckHelper healthCheckHelper;
+  private final MessageFactory<IsoMessage> messageFactory;
+  private final IsoMessageLoggerHelper isoMessageLoggerHelper;
+  private final IsoMessageProperties isoMessageProperties;
+  private final ThreadPoolTaskScheduler scheduler;
+
+  public NetworkService(Iso8583Client<IsoMessage> iso8583Client, PackagerConfiguration packagerConfiguration,
+      HealthCheckHelper healthCheckHelper, IsoMessageProperties isoMessageProperties,
+      IsoMessageLoggerHelper isoMessageLoggerHelper,
+      ThreadPoolTaskScheduler scheduler) {
+
+    this.iso8583Client = iso8583Client;
+    this.healthCheckHelper = healthCheckHelper;
+    this.isoMessageProperties = isoMessageProperties;
+    this.messageFactory = packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT);
+    this.isoMessageLoggerHelper = isoMessageLoggerHelper;
+    this.scheduler = scheduler;
+    this.scheduler.setPoolSize(3);
+    this.scheduler.initialize();
+  }
+
+  @EventListener(ApplicationReadyEvent.class)
+  public void onStart() {
+    Runnable task = () -> {
+      if (isoMessageProperties.network().scheduledEchoEnabled()) {
+        sendEcho();
+      }
+    };
+    this.scheduler.scheduleAtFixedRate(task, isoMessageProperties.network().echoInterval());
+
+  }
+
+  @Async
+  public void sendSignOn() {
+    try {
+      if (iso8583Client.isConnected()) {
+        IsoMessage request = constructMessage(NetworkInformationCode.LOGON, "Log on");
+        isoMessageLoggerHelper.logIsoMessage(request);
+        iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+      }
+    } catch (InterruptedException e) {
+      ErrorHelper.loggingError(
+          "#Network - send sign on failed. with message : {} , and root cause : {}", e);
+    }
+  }
+
+  @Async
+  public void sendSignOff() {
+    try {
+      if (iso8583Client.isConnected()) {
+        IsoMessage request = constructMessage(NetworkInformationCode.LOGOFF, "Log off");
+        isoMessageLoggerHelper.logIsoMessage(request);
+        iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+      }
+    } catch (InterruptedException e) {
+      ErrorHelper.loggingError(
+          "#Network - send sign off failed. with message : {} , and root cause : {}", e);
+    }
+  }
+
+  public boolean sendEcho() {
+    try {
+      if (iso8583Client.isConnected() && healthCheckHelper.isSignedOn()) {
+        IsoMessage request = constructMessage(NetworkInformationCode.ECHO, "Echo");
+        isoMessageLoggerHelper.logIsoMessage(request);
+        iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+        return true;
+      }
+      return false;
+    } catch (InterruptedException e) {
+      ErrorHelper.loggingError(
+          "#Network - send echo failed. with message : {} , and root cause : {}", e);
+      return false;
+    }
+  }
+
+  private IsoMessage constructMessage(NetworkInformationCode nic, String message) {
+    IsoMessage isoMessage = this.messageFactory.newMessage(0x800);
+
+    isoMessage.setValue(7, DateTimeHelper.getDateInFormat(
+            ZonedDateTime.now(DateTimeHelper.GMT_ZONE), DateTimeHelper.TRANSMISSION_DATE_TIME_FORMAT),
+        IsoType.NUMERIC, 10);
+    isoMessage.setValue(11, IsoFieldHelper.generateNumeric(6), IsoType.NUMERIC, 6);
+
+    if (NetworkInformationCode.LOGON.equals(nic)) {
+      constructNetworkManagementData(isoMessage);
+    } else if (NetworkInformationCode.CUTOVER.equals(nic)) {
+      isoMessage.setValue(15, DateTimeHelper.getDateInFormat(ZonedDateTime.now(), "MMdd"),
+          IsoType.NUMERIC, 4);
+    }
+
+    isoMessage.setValue(70, nic.getCode(), IsoType.NUMERIC, 3);
+
+    return isoMessage;
+  }
+
+  private void constructNetworkManagementData(IsoMessage isoMessage) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("60");
+    builder.append("1");
+    builder.append("1");
+    builder.append("0");
+    builder.append("0");
+    builder.append("0");
+    builder.append("1");
+    builder.append("1");
+    builder.append("2");
+    builder.append("N");
+    builder.append("0");
+    builder.append("0");
+    builder.append("360");
+    builder.append("2");
+    isoMessage.setValue(48, builder.toString(), IsoType.LLLVAR, 20);
+  }
+}

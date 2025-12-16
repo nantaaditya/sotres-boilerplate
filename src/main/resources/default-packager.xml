@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE j8583-config PUBLIC "-//J8583//DTD CONFIG 1.0//EN"
+        "http://j8583.sourceforge.net/j8583.dtd">
+<j8583-config>
+
+  <!-- transaction message -->
+  <parse type="0100">
+    <field num="2" type="LLVAR" length="19">Primary Account Number</field>
+    <field num="3" type="NUMERIC" length="6">Processing Code</field>
+    <field num="4" type="NUMERIC" length="12">Amount, Transaction</field>
+    <field num="7" type="NUMERIC" length="10">Transmission Date Time</field>
+    <field num="11" type="NUMERIC" length="6">System Trace Audit Number</field>
+    <field num="12" type="NUMERIC" length="6">Time, Local Transaction</field>
+    <field num="13" type="NUMERIC" length="4">Date, Local Transaction</field>
+    <field num="14" type="NUMERIC" length="4">Date Expiration, Local Transaction</field>
+    <field num="15" type="NUMERIC" length="4">Date, Settlement</field>
+    <field num="17" type="NUMERIC" length="4">Date, Capture</field>
+    <field num="18" type="NUMERIC" length="4">Merchant Type</field>
+    <field num="19" type="NUMERIC" length="3">Acquiring Institution Country Code</field>
+    <field num="22" type="NUMERIC" length="3">Point of Service Entry Mode</field>
+    <field num="28" type="LLVAR" length="9">Amount, Transaction Fee</field>
+    <field num="32" type="LLVAR" length="11">Acquiring Institution Identification Code</field>
+    <field num="33" type="LLVAR" length="11">Forwarding Institution Identification Code</field>
+    <field num="35" type="LLVAR" length="37">Track 2 Data</field>
+    <field num="37" type="ALPHA" length="12">Retrieval Reference Number</field>
+    <field num="41" type="ALPHA" length="16">Card Acceptor Terminal Identification</field>
+    <field num="42" type="ALPHA" length="15">Card Acceptor Identification Code</field>
+    <field num="43" type="ALPHA" length="40">Card Acceptor Name and Location</field>
+    <field num="48" type="LLLVAR" length="999">Additional Data - Private</field>
+    <field num="49" type="ALPHA" length="3">Currency Code, Transaction</field>
+    <field num="100" type="LLVAR" length="11">Issuer Institution Identification Code</field>
+    <field num="102" type="LLVAR" length="28">From Account Number</field>
+    <field num="123" type="LLLVAR" length="20">Invoice Number</field>
+  </parse>
+  <parse type="0110" extends="0100">
+    <field num="38" type="ALPHA" length="6">Authorization Identification Response</field>
+    <field num="39" type="ALPHA" length="2">Response Code</field>
+  </parse>
+
+  <parse type="0200" extends="0100">
+  </parse>
+  <parse type="0210" extends="0110">
+  </parse>
+
+  <parse type="0420" extends="0110">
+    <field num="90" type="ALPHA" length="42">Original Data Element</field>
+  </parse>
+  <parse type="0430" extends="0420">
+  </parse>
+
+  <parse type="0421" extends="0420">
+  </parse>
+  <parse type="0431" extends="0420">
+  </parse>
+
+  <parse type="0422" extends="0420">
+  </parse>
+  <parse type="0432" extends="0420">
+  </parse>
+
+  <parse type="0423" extends="0420">
+  </parse>
+  <parse type="0433" extends="0420">
+  </parse>
+
+  <!-- network message -->
+  <parse type="0800">
+    <field num="7" type="NUMERIC" length="10"/>
+    <field num="11" type="NUMERIC" length="6"/>
+    <field num="15" type="NUMERIC" length="4"/>
+    <field num="48" type="LLLVAR" length="20"/>
+    <field num="70" type="NUMERIC" length="3"/>
+  </parse>
+  <parse type="0810" extends="0800">
+    <field num="39" type="NUMERIC" length="2"/>
+  </parse>
+
+</j8583-config>

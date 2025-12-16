@@ -1,0 +1,132 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  version: ${APP_VERSION:1.0.0-SNAPSHOT}
+  log-style: ${APP_LOG_STYLE:json}
+  log-pattern-json: >-
+    {"timestamp":"%d{yyyy-MM-dd HH:mm:ss:SSS}", "level":"%level", "app_version":"${app.version}", "class":"%logger{36}", "message":"%enc{%replace{%message}{[\r\n]+}{}}{JSON}. %enc{%replace{%xThrowable}{[\r\n]+}{|}}{JSON}","trace_id":"%X{traceId}","span_id":"%X{spanId}","request_id":"%X{reqId}"}\n
+  log-pattern-text: >-
+    %d{yyyy-MM-dd HH:mm:ss.SSS} --- [${APP_NAME:-}] [%-10thread] %-5level | requestId: [%X{reqId}] - trace: [%X{traceId}-%X{spanId}] | %logger{36} : %msg%n
+
+spring:
+  application.name: ${APPLICATION_NAME:sotres-api}
+  profiles:
+    active: ${ACTIVE_PROFILE:nonprod}
+  webflux:
+    base-path: ${CONTEXT_PATH:/sotres}
+  r2dbc:
+    url: ${DB_URL:r2dbc:postgresql://localhost:5432/sotres_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:changeme}
+    pool:
+      enabled: ${R2DBC_POOL_ENABLED:true}
+      initial-size: ${R2DBC_INITIAL_SIZE:5}
+      max-size: ${R2DBC_MAX_SIZE:10}
+      max-idle-time: ${R2DBC_IDLE_TIME:PT1M}
+      max-life-time: ${R2DBC_MAX_LIFE_TIME:PT5M}
+      max-acquire-time: ${R2DBC_MAX_ACQUIRE_TIME:PT5S}
+      validation-query: SELECT 1
+
+logging:
+  level:
+    root: ${ROOT_LOG_LEVEL:INFO}
+    org.zalando.logbook: ${ZALANDO_LOG_LEVEL:TRACE}
+    org.springframework.r2dbc.core: ${R2DBC_LOG_LEVEL:DEBUG}
+    io.r2dbc.postgresql.QUERY: ${POSTGRESQL_LOG_LEVEL:DEBUG}
+    io.r2dbc.postgresql.PARAM: ${POSTGRESQL_LOG_LEVEL:DEBUG}
+  file:
+    path: ${LOG_PATH:logs/}
+  config: classpath:log4j2-spring-${spring.profiles.active}.xml
+
+iso8583.configuration:
+  outgoing-protocol: ${OUTGOING_PROTOCOL:REST}
+  log:
+    default-log-handler-enabled: ${DEFAULT_LOG_HANDLER_ENABLED:true}
+    masking-enabled: ${ISO8583_MASKING_ENABLED:true}
+    field-description-enabled: ${ISO8583_FIELD_DESCRIPTION_ENABLED:true}
+  connection:
+    host: ${ISO8583_HOST:localhost}
+    port: ${ISO8583_PORT:13001}
+    worker-thread-count: ${ISO8583_WORKER_THREAD_COUNT:100}
+    forwarding-institution-id: ${FORWARDING_INSTITUTION_ID:625}
+  network:
+    reconnect-interval: ${RECONNECT_INTERVAL:60000}
+    time-out: ${TIME_OUT_SECOND:15000}
+    scheduled-echo-enabled: ${SCHEDULED_ECHO_ENABLED:true}
+    echo-interval: ${ECHO_INTERVAL_SECOND:30000}
+
+# Participant Pool Configurations
+participant.configuration:
+  transaction:
+    core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
+    queue-size: ${TRANSACTION_QUEUE_SIZE:50}
+    prefix: ${TRANSACTION_PREFIX:TransactionManager}
+
+client:
+  configurations:
+    transaction:
+      hostname: ${TRANSACTION_CLIENT_HOSTNAME:http://localhost:8080}
+      max-connections: ${TRANSACTION_MAX_CONNECTION:50}
+      max-idle-time: ${TRANSACTION_MAX_IDLE_TIME:30000}
+      max-life-time: ${TRANSACTION_MAX_LIFE_TIME:60000}
+      evict-in-background: ${TRANSACTION_EVICT_BACKGROUND:120000}
+      pending-acquire-time-out:
+      client-connect-time-out: ${TRANSACTION_CLIENT_CONNECT_TIMEOUT:5000}
+      client-read-time-out: ${TRANSACTION_CLIENT_READ_TIMEOUT:10000}
+      client-write-time-out: ${TRANSACTION_CLIENT_WRITE_TIMEOUT:10000}
+      time-unit: ${TRANSACTION_CLIENT_TIMEUNIT:MILLISECONDS}
+      retry-configuration:
+        max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
+        min-back-off: ${TRANSACTION_RETRY_MIN_BACK_OFF:1}
+        retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:reactor.netty.http.client.PrematureCloseException:true}
+
+# Actuator Configurations
+management:
+  server.port: ${ACTUATOR_PORT:1000}
+  endpoint:
+    shutdown.access: ${ACTUATOR_SHUTDOWN:none}
+    health.show-details: ${HEALTH_DETAIL:always}
+  endpoints:
+    web:
+      exposure.include: ${ACTUATOR_EXPOSED:*}
+  prometheus:
+    metrics:
+      export:
+        enabled: ${PROMETHEUS_ENABLED:true}
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    baggage:
+      correlation:
+        fields: ${TRACING_CORRELATION_FIELDS:reqId}
+      local-fields: ${TRACING_LOCAL_FIELDS:reqId}
+      remote-fields: ${TRACING_REMOTE_FIELDS:reqId}
+    propagation:
+      type: w3c, b3, b3_multi
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+apps:
+  log:
+    sensitive-field: ${SENSITIVE_FIELD:cardNo}
+  async.configurations:
+    default:
+      core-pool-size: ${ASYNC_CORE_POOL_SIZE:5}
+      max-pool-size: ${ASYNC_MAX_POOL_SIZE:25}
+      queue-capacity: ${ASYNC_QUEUE_CAPACITY:50}
+      keep-alive-seconds: ${ASYNC_KEEP_ALIVE_SECONDS:30}
+      thread-name-prefix: ${ASYNC_THREAD_NAME_PREFIX:default-async-}
+  scheduler.configurations:
+    retry-processor:
+      scheduler-type: ${RETRY_PROCESSOR_TYPE:BOUNDED_ELASTIC}
+      bounded-elastic:
+        name: ${RETRY_PROCESSOR_SCHEDULER_NAME:retry-processor}
+        daemon: ${RETRY_PROCESSOR_DAEMON:true}
+        core-pool-size: ${RETRY_PROCESSOR_POOL:10}
+        queue-size: ${RETRY_PROCESSOR_QUEUE:10}
+        ttl-in-seconds: ${RETRY_PROCESSOR_TTL:60}
+
