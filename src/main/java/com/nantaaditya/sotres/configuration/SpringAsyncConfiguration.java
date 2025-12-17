@@ -1,13 +1,13 @@
 package com.nantaaditya.sotres.configuration;
 
-import com.nantaaditya.sotres.helper.ErrorHelper;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Configuration;
@@ -15,7 +15,7 @@ import org.springframework.core.task.TaskDecorator;
 import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-@Slf4j
+@Log4j2
 @Configuration
 @RequiredArgsConstructor
 public class SpringAsyncConfiguration implements AsyncConfigurer {
@@ -38,10 +38,10 @@ public class SpringAsyncConfiguration implements AsyncConfigurer {
         return () -> {
           try {
             MDC.setContextMap(currentContext);
-            log.debug("copy context to async task");
+            log.debug(AppLogMessage.message("copy context to async task"));
             runnable.run();
           } catch (Throwable e) {
-            log.error("error in async task {}, {}", e.getMessage(), ErrorHelper.getRootCause(e));
+            log.error(AppLogMessage.message("error in async task {}, {}", e.getMessage()).error(e));
           } finally {
             MDC.clear();
           }
@@ -57,8 +57,8 @@ public class SpringAsyncConfiguration implements AsyncConfigurer {
     return new AsyncUncaughtExceptionHandler() {
       @Override
       public void handleUncaughtException(Throwable ex, Method method, Object... params) {
-        log.error("#Async - got error {}, method {}, params {}, at {}",
-                ex.getMessage(), method.getName(), params, ErrorHelper.getRootCause(ex));
+        log.error(AppLogMessage.message("#Async - got error {}, method {}, params {}, at {}",
+                ex.getMessage(), method.getName(), params).error(ex));
       }
     };
   }

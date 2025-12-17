@@ -1,8 +1,8 @@
 package com.nantaaditya.sotres.helper;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.constant.PropertiesGroup;
-import com.nantaaditya.sotres.properties.IsoMessageProperties;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import com.nantaaditya.sotres.model.logger.JsonLogIsoMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoValue;
@@ -10,71 +10,54 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-@Slf4j
+@Log4j2
 @Component
 public class IsoMessageLoggerHelper {
 
-  private final IsoMessageProperties isoMessageProperties;
-  private final ObjectMapper objectMapper;
   private final SystemPropertiesService systemPropertiesService;
-  @Value("${app.log-style}")
-  private String logStyle;
 
-  public IsoMessageLoggerHelper(SystemPropertiesService systemPropertiesService,
-      IsoMessageProperties isoMessageProperties, ObjectMapper objectMapper) {
+  public IsoMessageLoggerHelper(SystemPropertiesService systemPropertiesService) {
     this.systemPropertiesService = systemPropertiesService;
-    this.isoMessageProperties = isoMessageProperties;
-    this.objectMapper = objectMapper;
   }
 
   public void logIsoMessage(IsoMessage isoMessage) {
-    Map<String, Object> jsonMessage = toJson(isoMessage);
-
-    switch (logStyle) {
-      case "json": {
-        log.info("{}", jsonMessage);
-        break;
-      }
-      case "text": {
-        try {
-          String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonMessage);
-          log.info("{}", json);
-        } catch (Exception e) {
-          ErrorHelper.loggingError("#Log - failed to serialize ISO8583 message. with message : {} , and root cause : {}", e);
-        }
-        break;
-      }
-    }
+    JsonLogIsoMessage logIsoMessage = toLogMessage(isoMessage);
+    log.info(AppLogMessage.message("#ISO").isoMessage(logIsoMessage));
   }
 
-  private Map<String, Object> toJson(IsoMessage message) {
-    Map<String, Object> jsonMap = new LinkedHashMap<>();
+  private JsonLogIsoMessage toLogMessage(IsoMessage message) {
+    String direction = getDirection(message);
+    String mti = String.format("%04x", message.getType());
 
     try {
-      if (getMTI(PropertiesGroup.INCOMING_MTI).contains(message.getType())) {
-        jsonMap.put("direction", "incoming");
-      } else if (getMTI(PropertiesGroup.OUTGOING_MTI).contains(message.getType())) {
-        jsonMap.put("direction", "outgoing");
-      }
-
-      jsonMap.put("MTI", String.format("%04x", message.getType()));
+      Map<String, String> dataElements = new LinkedHashMap<>();
       for (int i = 2; i <= 127; i++) {
         if (message.hasField(i)) {
           IsoValue<?> field = message.getField(i);
           String value = field.toString();
-          jsonMap.put(String.valueOf(i), getMaskedFields().contains(i) ? maskingValue(value, i) : value);
+          dataElements.put(String.valueOf(i), getMaskedFields().contains(i) ? maskingValue(value, i) : value);
         }
       }
 
-      return jsonMap;
+      return new JsonLogIsoMessage(mti, direction, dataElements);
     } catch (Exception e) {
-      ErrorHelper.loggingError("#Log - failed to serialize ISO8583 message. with message : {} , and root cause : {}", e);
-      return Map.of("error", "failed to serialize ISO8583 message");
+      log.error(AppLogMessage.message("#Log - failed to serialize ISO8583 message. with message : {}", e.getMessage()).error(e));
+      return null;
+    }
+  }
+
+  private String getDirection(IsoMessage message) {
+    String direction;
+    if (getMTI(PropertiesGroup.INCOMING_MTI).contains(message.getType())) {
+      return "incoming";
+    } else if (getMTI(PropertiesGroup.OUTGOING_MTI).contains(message.getType())) {
+      return "outgoing";
+    } else {
+      return "unknown";
     }
   }
 

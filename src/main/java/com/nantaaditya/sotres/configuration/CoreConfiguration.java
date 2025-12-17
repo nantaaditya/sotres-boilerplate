@@ -2,9 +2,8 @@ package com.nantaaditya.sotres.configuration;
 
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
 import com.github.kpavlov.jreactive8583.client.Iso8583Client;
-import com.nantaaditya.sotres.helper.ErrorHelper;
-import com.nantaaditya.sotres.helper.StringHelper;
 import com.nantaaditya.sotres.model.constant.PackagerConstant;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.participant.NetworkProcessorParticipant;
 import com.nantaaditya.sotres.participant.TransactionProcessorParticipant;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
@@ -13,14 +12,14 @@ import com.nantaaditya.sotres.properties.embedded.IsoMessageNetworkConfiguration
 import com.solab.iso8583.IsoMessage;
 import java.net.InetSocketAddress;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Main process to connect to TCP and process the message
  */
-@Slf4j
+@Log4j2
 @Configuration
 @RequiredArgsConstructor
 public class CoreConfiguration {
@@ -56,12 +55,11 @@ public class CoreConfiguration {
     client.addMessageListener(transactionProcessorParticipant); // for transaction handling
 
     try {
-      log.info("#Channel - connecting to server");
+      log.info(AppLogMessage.message("#Channel - connecting to server"));
       client.init();
       client.connect();
     } catch (InterruptedException e) {
-      ErrorHelper.loggingError(
-          "#Channel - can't connect to server. With Message : {} , and root cause : {}", e);
+      log.error(AppLogMessage.message("#Channel - can't connect to server").error(e));
       Thread.currentThread().interrupt();
       throw new InterruptedException(e.getMessage());
     }

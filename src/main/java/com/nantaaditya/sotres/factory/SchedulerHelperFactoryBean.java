@@ -1,8 +1,8 @@
 package com.nantaaditya.sotres.factory;
 
-import com.nantaaditya.sotres.helper.ErrorHelper;
 import com.nantaaditya.sotres.helper.SchedulerHelper;
 import com.nantaaditya.sotres.model.constant.SchedulerType;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.SchedulerProperties;
 import com.nantaaditya.sotres.properties.embedded.SchedulerConfiguration;
 import com.nantaaditya.sotres.strategy.internal.BoundedElasticSchedulerStrategy;
@@ -14,12 +14,12 @@ import com.nantaaditya.sotres.strategy.internal.ThreadPoolSchedulerStrategy;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.FactoryBean;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
-@Slf4j
+@Log4j2
 public class SchedulerHelperFactoryBean implements FactoryBean<SchedulerHelper> {
 
   private final SchedulerProperties schedulerProperties;
@@ -76,8 +76,7 @@ public class SchedulerHelperFactoryBean implements FactoryBean<SchedulerHelper> 
       SchedulerStrategy schedulerStrategy = schedulerStrategies.get(configuration.getSchedulerType());
       scheduler = schedulerStrategy.createScheduler(configuration);
     } catch (Exception e) {
-      log.error("#Scheduler - failed to build scheduler {}, error {}, cause {}",
-          name, e.getMessage(), ErrorHelper.getRootCause(e));
+      log.error(AppLogMessage.message("#Scheduler - failed to build scheduler {}", name).error(e));
     } finally {
       return scheduler;
     }

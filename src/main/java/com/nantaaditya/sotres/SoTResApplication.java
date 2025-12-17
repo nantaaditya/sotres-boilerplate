@@ -3,7 +3,7 @@ package com.nantaaditya.sotres;
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
-import com.nantaaditya.sotres.properties.LogbookLogProperties;
+import com.nantaaditya.sotres.properties.LogProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.SchedulerProperties;
 import org.springframework.boot.SpringApplication;
@@ -19,7 +19,7 @@ import reactor.core.publisher.Hooks;
     AsyncTaskProperties.class,
     ClientProperties.class,
     IsoMessageProperties.class,
-    LogbookLogProperties.class,
+    LogProperties.class,
     ParticipantConfigurationProperties.class,
     SchedulerProperties.class
 })

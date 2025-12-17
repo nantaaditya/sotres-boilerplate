@@ -6,17 +6,18 @@ import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
 import com.nantaaditya.sotres.model.constant.ResponseCode;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoValue;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Component;
 
-@Slf4j
+@Log4j2
 @Component
 @RequiredArgsConstructor
 public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessage> {
@@ -54,7 +55,7 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
   private void handleSignOn(ChannelHandlerContext channelHandlerContext, IsoMessage isoMessage) {
     switch (isoMessage.getType()) {
       case 0x800: {
-        log.info("#Network - got message sign on request");
+        log.info(AppLogMessage.message("#Network - got message sign on request"));
         healthCheckHelper.setIsSignedOn(true);
         healthCheckHelper.setIsHealthy(true);
 
@@ -62,7 +63,7 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
         break;
       }
       case 0x810: {
-        log.info("#Network - got message sign on response");
+        log.info(AppLogMessage.message("#Network - got message sign on response"));
         healthCheckHelper.setIsSignedOn(isSuccess(isoMessage));
         healthCheckHelper.setIsHealthy(isSuccess(isoMessage));
         break;
@@ -75,12 +76,12 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
 
     switch (isoMessage.getType()) {
       case 0x800: {
-        log.info("#Network - got message sign off request");
+        log.info(AppLogMessage.message("#Network - got message sign off request"));
         isoFieldHelper.sendResponse(channelHandlerContext, isoMessage, ResponseCode.APPROVED.getCode());
         break;
       }
       case 0x810: {
-        log.info("#Network - got message sign off response");
+        log.info(AppLogMessage.message("#Network - got message sign off response"));
         break;
       }
     }
@@ -89,12 +90,12 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
   private void handleEcho(ChannelHandlerContext channelHandlerContext, IsoMessage isoMessage) {
     switch (isoMessage.getType()) {
       case 0x800: {
-        log.info("#Network - got message echo request");
+        log.info(AppLogMessage.message("#Network - got message echo request"));
         isoFieldHelper.sendResponse(channelHandlerContext, isoMessage, ResponseCode.APPROVED.getCode());
         break;
       }
       case 0x810: {
-        log.info("#Network - got message echo response");
+        log.info(AppLogMessage.message("#Network - got message echo response"));
         break;
       }
     }
@@ -103,12 +104,12 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
   private void handleCutOver(ChannelHandlerContext channelHandlerContext, IsoMessage isoMessage) {
     switch (isoMessage.getType()) {
       case 0x800: {
-        log.info("#Network - got message cut over request");
+        log.info(AppLogMessage.message("#Network - got message cut over request"));
         isoFieldHelper.sendResponse(channelHandlerContext, isoMessage, ResponseCode.APPROVED.getCode());
         break;
       }
       case 0x810: {
-        log.info("#Network - got message cut over response");
+        log.info(AppLogMessage.message("#Network - got message cut over response"));
         break;
       }
     }

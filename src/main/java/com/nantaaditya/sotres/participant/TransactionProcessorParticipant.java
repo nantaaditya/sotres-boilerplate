@@ -9,6 +9,7 @@ import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.ResponseCode;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -27,7 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
@@ -36,7 +37,7 @@ import reactor.core.scheduler.Scheduler;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
-@Slf4j
+@Log4j2
 @Component
 public class TransactionProcessorParticipant implements IsoMessageListener<IsoMessage> {
 
@@ -110,7 +111,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
               .execute(ctx, isoMessage, tuples.getT1()))
           .flatMap(requestContext -> {
             // process & send message using specific protocol
-            log.debug("#Transaction - DTO: {}", requestContext);
+            log.debug(AppLogMessage.message("#Transaction - DTO").additionalData(requestContext));
             return sendMessage(ctx, isoMessage, requestContext);
           })
           .contextWrite(context -> context // set up span and context
@@ -128,7 +129,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
           );
 
       MDC.setContextMap(mdc);
-      log.info("#Transaction - message with RRN {} processed", isoMessage.getField(37).toString());
+      log.info(AppLogMessage.message("#Transaction - message with RRN {} processed", isoMessage.getField(37).toString()));
       return false;
     }
   }
@@ -138,7 +139,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
       RequestContext requestContext) {
 
     if (senderProtocolStrategy == null) {
-      log.error("#Transaction - sender protocol not found: {}", isoMessageProperties.outgoingProtocol());
+      log.error(AppLogMessage.message("#Transaction - sender protocol not found: {}", isoMessageProperties.outgoingProtocol()));
       isoFieldHelper.sendResponse(context, request, ResponseCode.SYSTEM_MALFUNCTION.getCode());
       return Mono.empty();
     }
@@ -171,7 +172,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
     Optional<AbstractTransactionHandler<RequestContext>> maybeHandler = findTransactionHandler(requestContext);
 
     if (!maybeHandler.isPresent()) {
-      log.warn("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector());
+      log.warn(AppLogMessage.message("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector()));
       isoFieldHelper.sendResponse(context, isoMessage, ResponseCode.SYSTEM_MALFUNCTION.getCode());
       return Mono.empty();
     }

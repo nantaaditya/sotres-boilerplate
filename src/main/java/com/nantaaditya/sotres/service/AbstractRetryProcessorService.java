@@ -7,13 +7,11 @@ import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
 @Getter
-@Slf4j
 public abstract class AbstractRetryProcessorService {
 
   protected DeadLetterProcessRepository deadLetterProcessRepository;

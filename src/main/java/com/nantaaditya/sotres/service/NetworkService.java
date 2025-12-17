@@ -4,25 +4,25 @@ import com.github.kpavlov.jreactive8583.client.Iso8583Client;
 import com.github.kpavlov.jreactive8583.iso.MessageFactory;
 import com.nantaaditya.sotres.configuration.PackagerConfiguration;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
-import com.nantaaditya.sotres.helper.ErrorHelper;
 import com.nantaaditya.sotres.helper.HealthCheckHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
 import com.nantaaditya.sotres.model.constant.PackagerConstant;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import java.time.ZonedDateTime;
 import java.util.concurrent.TimeUnit;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
-@Slf4j
+@Log4j2
 @Component
 public class NetworkService {
 
@@ -68,8 +68,7 @@ public class NetworkService {
         iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
       }
     } catch (InterruptedException e) {
-      ErrorHelper.loggingError(
-          "#Network - send sign on failed. with message : {} , and root cause : {}", e);
+      log.error(AppLogMessage.message("#Network - send sign on failed. with message : {}", e.getMessage()).error(e));
     }
   }
 
@@ -82,8 +81,7 @@ public class NetworkService {
         iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
       }
     } catch (InterruptedException e) {
-      ErrorHelper.loggingError(
-          "#Network - send sign off failed. with message : {} , and root cause : {}", e);
+      log.error(AppLogMessage.message("#Network - send sign off failed. with message : {}", e.getMessage()).error(e));
     }
   }
 
@@ -97,8 +95,7 @@ public class NetworkService {
       }
       return false;
     } catch (InterruptedException e) {
-      ErrorHelper.loggingError(
-          "#Network - send echo failed. with message : {} , and root cause : {}", e);
+     log.error(AppLogMessage.message("#Network - send echo failed. with message : {} , and root cause : {}", e.getMessage()).error(e));
       return false;
     }
   }

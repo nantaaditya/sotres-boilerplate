@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.helper;
 
 import com.github.f4b6a3.tsid.TsidCreator;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
 import io.micrometer.tracing.Baggage;
 import io.micrometer.tracing.BaggageManager;
@@ -11,12 +12,12 @@ import io.micrometer.tracing.internal.EncodingUtils;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+@Log4j2
 @Component
 @RequiredArgsConstructor
 public class TracerHelper {
@@ -50,8 +51,7 @@ public class TracerHelper {
       baggage.makeCurrent(value);
       MDC.put(key, value);
     } catch (Exception e) {
-      log.error("#Baggage - failed to set baggage {} with value {}, error {} cause {}", key, value,
-          e.getMessage(), ErrorHelper.getRootCause(e));
+      log.error(AppLogMessage.message("#Baggage - failed to set baggage {} with value {}", key, value).error(e));
     }
   }
 

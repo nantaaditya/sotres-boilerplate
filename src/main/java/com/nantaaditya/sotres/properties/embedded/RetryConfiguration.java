@@ -1,12 +1,12 @@
 package com.nantaaditya.sotres.properties.embedded;
 
-import com.nantaaditya.sotres.helper.ErrorHelper;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 
-@Slf4j
+@Log4j2
 public record RetryConfiguration(
     int maxAttempt,
     int minBackOff,
@@ -30,15 +30,15 @@ public record RetryConfiguration(
       try {
         Class<?> clazz = Class.forName(token[0]);
         if (!Throwable.class.isAssignableFrom(clazz)) {
-          log.info("#Retry - class not extends Throwable, skipping: {}", clazz);
+          log.info(AppLogMessage.message("#Retry - class not extends Throwable, skipping: {}", clazz));
           continue;
         }
 
         Class<? extends Throwable> throwableClass = (Class<? extends Throwable>) clazz; //NOSONAR
         maps.put(throwableClass, Boolean.valueOf(token[1])); //NOSONAR
       } catch (ClassNotFoundException ex) {
-        log.error("#Retry - could not load retry exception map, error {}, {}",
-            ex.getMessage(), ErrorHelper.getRootCause(ex));
+        log.error(AppLogMessage.message("#Retry - could not load retry exception map {}",
+            ex.getMessage()).error(ex));
       }
     }
     return maps;

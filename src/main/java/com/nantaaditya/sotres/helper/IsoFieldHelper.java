@@ -6,6 +6,7 @@ import com.nantaaditya.sotres.model.constant.PropertiesGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.RequestContext.Transaction;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
@@ -21,10 +22,10 @@ import java.util.Random;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
 
-@Slf4j
+@Log4j2
 @Component
 @RequiredArgsConstructor
 public class IsoFieldHelper {
@@ -38,7 +39,7 @@ public class IsoFieldHelper {
     try {
       return String.format("%04x", type);
     } catch (Exception e) {
-      ErrorHelper.loggingError("#Network - cannot convert ISO8583 MTI. with message : {}, and root cause : {}", e);
+      log.error(AppLogMessage.message("#Network - cannot convert ISO8583 MTI. with message : {}", e.getMessage()).error(e));
     }
     return "";
   }

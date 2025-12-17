@@ -5,13 +5,14 @@ import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.ErrorHelper;
 import com.nantaaditya.sotres.helper.RetryProcessorHelper;
 import com.nantaaditya.sotres.model.internal.RetryDeadLetterProcessRequest;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
 import com.nantaaditya.sotres.service.AbstractRetryProcessorService;
 import com.nantaaditya.sotres.service.internal.DeadLetterProcessService;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+@Log4j2
 @Service
 @RequiredArgsConstructor
 public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
@@ -41,11 +42,12 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
     return getDeadLetterProcesses(request, pageRequest)
         .collectList()
         .delayUntil(deadLetterProcesses -> executeRetryProcess(request, deadLetterProcesses)
-            .doOnSuccess(result -> log.info("#Retry - [{}] [{}] total {} retry processed",
-                request.processType(), request.processName(), deadLetterProcesses.size())
+            .doOnSuccess(result -> log.info(AppLogMessage.message(
+                "#Retry - [{}] [{}] total {} retry processed",
+                request.processType(), request.processName(), deadLetterProcesses.size()))
             )
-            .doOnError(error -> log.error("#Retry - [{}] [{}] total {} retry error, {} cause {}",
-                request.processType(), request.processName(), error.getMessage(), ErrorHelper.getRootCause(error))
+            .doOnError(error -> log.error(AppLogMessage.message("#Retry - [{}] [{}] total {} retry error",
+                request.processType(), request.processName(), error.getMessage()).error(error))
             )
         )
         .then();

@@ -1,7 +1,6 @@
 package com.nantaaditya.sotres.strategy.outgoing;
 
 import com.nantaaditya.sotres.client.TransactionClient;
-import com.nantaaditya.sotres.helper.ErrorHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
@@ -12,6 +11,7 @@ import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext.Response;
 import com.nantaaditya.sotres.model.dto.TransactionException;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.nantaaditya.sotres.strategy.transaction.AbstractTransactionHandler;
 import com.solab.iso8583.IsoMessage;
@@ -25,13 +25,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+@Log4j2
 @Component
 @ConditionalOnProperty(prefix = "iso8583.configuration", name = "outgoing-protocol", havingValue = "REST")
 public class RestProtocolStrategy implements SenderProtocolStrategy {
@@ -92,7 +92,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     try {
       String responseCode = getResponseCode(responseContext);
       if (responseContext == null) {
-        log.error("#Transaction - no response from host");
+        log.error(AppLogMessage.message("#Transaction - no response from host"));
         isoFieldHelper.sendResponse(context, request, responseCode);
       } else {
         log.info("#Transaction - response code from host: {}", responseCode);
@@ -105,7 +105,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
       ObservationHelper.observeResponse(observation, responseCode, null);
     } catch (Exception e) {
       String responseCode = ResponseCode.SYSTEM_MALFUNCTION.getCode();
-      ErrorHelper.loggingError("#Transaction - failed write and flush transaction. with Message : {} , and root cause : {}", e);
+      log.error(AppLogMessage.message("#Transaction - failed write and flush transaction").error(e));
       isoFieldHelper.sendResponse(context, request, responseCode);
       ObservationHelper.observeResponse(observation, responseCode, e);
     } finally {
@@ -116,18 +116,17 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
 
   @Override
   public void handleError(ChannelHandlerContext context, IsoMessage request, Throwable throwable) {
-    ErrorHelper.loggingError("#Transaction - got exception {}, with detail {}", throwable);
+    log.error(AppLogMessage.message("#Transaction - got exception").error(throwable));
 
     if (throwable instanceof TransactionException e) {
       if (e.getOriginalError() instanceof ReadTimeoutException || e.getOriginalError() instanceof TimeoutException) {
-        log.error("#Transaction - timeout occurred for RRN {}, skipping response, with error {} and detail {}",
-            request.getObjectValue(37), throwable.getMessage(), ErrorHelper.getRootCause(throwable));
+        log.error(AppLogMessage.message("#Transaction - timeout occurred for RRN {}, skipping response",
+            request.getObjectValue(37)).error(throwable));
       } else {
         isoFieldHelper.sendResponse(context, request, ResponseCode.SYSTEM_MALFUNCTION.getCode());
       }
     } else {
-      log.error("#Transaction - skipping unknown exception {}, detail {}",
-          throwable.getMessage(), ErrorHelper.getRootCause(throwable));
+      log.error(AppLogMessage.message("#Transaction - skipping unknown exception").error(throwable));
     }
   }
 

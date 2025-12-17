@@ -1,5 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -7,12 +8,10 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 
-@Slf4j
+@Log4j2
 public class StringHelper {
-
-  public static final int SECOND_TO_MILLIS = 1000;
 
   private StringHelper() {}
 
@@ -34,7 +33,7 @@ public class StringHelper {
       return collections;
     } catch (InstantiationException | IllegalAccessException
              | NoSuchMethodException | InvocationTargetException e) {
-      log.error("#Converter - error creating collection instance {}, cause {}", e.getMessage(), ErrorHelper.getRootCause(e));
+      log.error(AppLogMessage.message("#Converter - error creating collection instance {}", e.getMessage()).error(e));
       return null;
     }
   }
@@ -58,7 +57,7 @@ public class StringHelper {
       return maps;
     } catch (InstantiationException | IllegalAccessException
              | NoSuchMethodException | InvocationTargetException e) {
-      log.error("#Converter - error creating map instance {}, cause {}", e.getMessage(), ErrorHelper.getRootCause(e));
+      log.error(AppLogMessage.message("#Converter - error creating map instance {}", e.getMessage()).error(e));
       return null;
     }
   }
@@ -120,5 +119,17 @@ public class StringHelper {
       result.add(tokenizer.nextToken());
     }
     return result;
+  }
+
+  public static String logPrepend(String value, int maxLength, char character) {
+    if (value == null) {
+      return value;
+    }
+
+    if (value.length() > maxLength) {
+      return value.substring(value.length() - maxLength);
+    }
+
+    return String.valueOf(character).repeat(maxLength - value.length()) + value;
   }
 }

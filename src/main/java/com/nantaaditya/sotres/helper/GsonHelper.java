@@ -3,9 +3,7 @@ package com.nantaaditya.sotres.helper;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
 public class GsonHelper {
 
   private GsonHelper() {}

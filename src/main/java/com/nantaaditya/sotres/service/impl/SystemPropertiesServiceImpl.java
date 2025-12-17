@@ -1,16 +1,16 @@
 package com.nantaaditya.sotres.service.impl;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
-import com.nantaaditya.sotres.helper.ErrorHelper;
 import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 
-@Slf4j
+@Log4j2
 @Service
 public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
@@ -29,8 +29,8 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
       .subscribe(
         this::loadSystemProperties,
         error -> {
-          log.error("#CONFIGURATION - error while loading properties {}, cause {}", error.getMessage(),
-              ErrorHelper.getRootCause(error));
+          log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties {}",
+                  error.getMessage()).error(error));
         }
       );
   }
@@ -54,8 +54,7 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
       .subscribe(
         this::loadSystemProperties,
         error -> {
-          log.error("#CONFIGURATION - error while loading properties key {}, error {} cause {}",
-              key.getGroup(), error.getMessage(), ErrorHelper.getRootCause(error));
+          log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties key {}", key.getGroup()).error(error));
         }
       );
   }

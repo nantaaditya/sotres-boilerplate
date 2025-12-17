@@ -1,16 +1,17 @@
 package com.nantaaditya.sotres.configuration;
 
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-@Slf4j
+@Log4j2
 @Configuration
 @RequiredArgsConstructor
 public class AsyncTaskConfiguration {
@@ -23,7 +24,7 @@ public class AsyncTaskConfiguration {
   @EventListener(ApplicationReadyEvent.class)
   public void onStart() {
     if (asyncProperties.configurations() == null || asyncProperties.configurations().isEmpty()) {
-      log.warn("#AsyncExecutor - no bean defined");
+      log.warn(AppLogMessage.message("#AsyncExecutor - no bean defined"));
       return;
     }
 
@@ -36,7 +37,7 @@ public class AsyncTaskConfiguration {
           )
       );
 
-    log.debug("#AsyncExecutor - bean {} created", asyncProperties.getBeanNames(POSTFIX_BEAN_NAME));
+    log.debug(AppLogMessage.message("#AsyncExecutor - bean {} created", asyncProperties.getBeanNames(POSTFIX_BEAN_NAME)));
   }
 
   private ThreadPoolTaskExecutor createAsyncExecutor(AsyncConfiguration configuration) {
