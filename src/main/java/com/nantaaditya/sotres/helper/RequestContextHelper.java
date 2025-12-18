@@ -1,6 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.model.constant.FeatureConstant;
+import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
@@ -37,7 +37,7 @@ public class RequestContextHelper {
     requestContext.setTransaction(IsoFieldHelper.createTransaction(isoMessage, systemPropertiesService));
     requestContext.setMerchant(IsoFieldHelper.createMerchant(isoMessage));
     requestContext.setReversal(IsoFieldHelper.createReversal(isoMessage));
-    requestContext.setFeatureConstant(FeatureConstant.getBySelector(requestContext.getSelector()));
+    requestContext.setIsoFeatureConstant(IsoFeatureConstant.getBySelector(requestContext.getSelector()));
 
     return requestContext;
   }

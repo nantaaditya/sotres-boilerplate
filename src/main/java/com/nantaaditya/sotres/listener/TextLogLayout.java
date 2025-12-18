@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.StringHelper;
+import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -56,7 +57,7 @@ public class TextLogLayout extends AbstractStringLayout {
     sb.append(event.getLevel().toString());
 
     Map<String, String> mdc = event.getContextData().toMap();
-    sb.append(String.format(" | requestId: [%s]", mdc.get("reqId")));
+    sb.append(String.format(" | requestId: [%s]", mdc.get(HeaderConstant.REQUEST_ID.getHeader())));
     sb.append(String.format(" - trace: [%s-%s]", mdc.get("traceId"), mdc.get("spanId")));
     sb.append(String.format(" | %s : ", StringHelper.logPrepend(event.getLoggerName(), 36, ' ')));
 

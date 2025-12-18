@@ -1,6 +1,6 @@
 package com.nantaaditya.sotres.service.internal;
 
-import com.nantaaditya.sotres.model.internal.RetryDeadLetterProcessRequest;
+import com.nantaaditya.sotres.model.request.RetryDeadLetterProcessRequest;
 import reactor.core.publisher.Mono;
 
 public interface DeadLetterProcessService {

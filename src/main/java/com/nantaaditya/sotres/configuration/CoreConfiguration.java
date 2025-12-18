@@ -58,13 +58,13 @@ public class CoreConfiguration {
       log.info(AppLogMessage.message("#Channel - connecting to server"));
       client.init();
       client.connect();
-    } catch (InterruptedException e) {
+    } catch (Exception e) {
       log.error(AppLogMessage.message("#Channel - can't connect to server").error(e));
       Thread.currentThread().interrupt();
       throw new InterruptedException(e.getMessage());
     }
 
-    log.info("#Channel - connected to server");
+    log.info(AppLogMessage.message("#Channel - connected to server"));
     return client;
   }
 

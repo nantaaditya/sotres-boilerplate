@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.StringHelper;
+import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import io.micrometer.core.instrument.util.StringEscapeUtils;
 import java.nio.charset.StandardCharsets;
@@ -65,7 +66,7 @@ public class JsonLogLayout extends AbstractStringLayout {
     Map<String, String> mdc = event.getContextData().toMap();
     root.put("trace_id", mdc.get("traceId"));
     root.put("span_id", mdc.get("spanId"));
-    root.put("request_id", mdc.get("reqId"));
+    root.put("request_id", mdc.get(HeaderConstant.REQUEST_ID.getHeader()));
 
     return root.toString() + System.lineSeparator();
   }

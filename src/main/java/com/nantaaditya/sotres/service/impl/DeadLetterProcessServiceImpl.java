@@ -2,10 +2,9 @@ package com.nantaaditya.sotres.service.impl;
 
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
-import com.nantaaditya.sotres.helper.ErrorHelper;
 import com.nantaaditya.sotres.helper.RetryProcessorHelper;
-import com.nantaaditya.sotres.model.internal.RetryDeadLetterProcessRequest;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import com.nantaaditya.sotres.model.request.RetryDeadLetterProcessRequest;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
 import com.nantaaditya.sotres.service.AbstractRetryProcessorService;
 import com.nantaaditya.sotres.service.internal.DeadLetterProcessService;
@@ -19,6 +18,7 @@ import org.springframework.data.domain.Sort.Direction;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Service
@@ -41,13 +41,23 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
 
     return getDeadLetterProcesses(request, pageRequest)
         .collectList()
-        .delayUntil(deadLetterProcesses -> executeRetryProcess(request, deadLetterProcesses)
+        .doOnSuccess(deadLetterProcesses -> executeRetryProcess(request, deadLetterProcesses)
             .doOnSuccess(result -> log.info(AppLogMessage.message(
                 "#Retry - [{}] [{}] total {} retry processed",
                 request.processType(), request.processName(), deadLetterProcesses.size()))
             )
             .doOnError(error -> log.error(AppLogMessage.message("#Retry - [{}] [{}] total {} retry error",
                 request.processType(), request.processName(), error.getMessage()).error(error))
+            )
+            .subscribeOn(Schedulers.boundedElastic())
+            .subscribe(
+                result -> log.debug(AppLogMessage.message("#Retry - dead letter process [{}] [{}] success",
+                    request.processType(), request.processName())),
+                error -> log.error(AppLogMessage.message("#Retry - dead letter process [{}] [{}] error",
+                    request.processType(), request.processName())
+                    .error(error)),
+                () -> log.info(AppLogMessage.message("#Retry - dead letter process [{}] [{}] done",
+                    request.processType(), request.processName()))
             )
         )
         .then();

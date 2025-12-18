@@ -17,7 +17,7 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   private final SystemPropertiesRepository systemPropertiesRepository;
 
   // [groupId: [propertyId: propertyValue]]
-  private static final Map<PropertiesGroup, Map<String, String>> PROPERTY_COLLECTION_MAP = new ConcurrentHashMap<>();
+  private final Map<PropertiesGroup, Map<String, String>> PROPERTY_COLLECTION_MAP = new ConcurrentHashMap<>();
 
   public SystemPropertiesServiceImpl(SystemPropertiesRepository systemPropertiesRepository) {
     this.systemPropertiesRepository = systemPropertiesRepository;
@@ -29,21 +29,20 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
       .subscribe(
         this::loadSystemProperties,
         error -> {
-          log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties {}",
-                  error.getMessage()).error(error));
+          log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties").error(error));
         }
       );
   }
 
   @Override
   public Map<String, String> getProperty(PropertiesGroup key) {
-    return PROPERTY_COLLECTION_MAP.getOrDefault(key.getGroup(), new ConcurrentHashMap<>());
+    return PROPERTY_COLLECTION_MAP.getOrDefault(key, new ConcurrentHashMap<>());
   }
 
   @Override
   public String getProperty(PropertiesGroup key, String propertyId) {
     return PROPERTY_COLLECTION_MAP.getOrDefault(
-        key.getGroup(),
+        key,
         new ConcurrentHashMap<>()
     ).get(propertyId);
   }
@@ -62,18 +61,12 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   private void loadSystemProperties(SystemProperties systemProperties) {
     for (PropertiesGroup group : PropertiesGroup.values()) {
       if (group.getGroup().equals(systemProperties.getGroupId())) {
-
-        if (!PROPERTY_COLLECTION_MAP.containsKey(systemProperties.getGroupId())) {
-          PROPERTY_COLLECTION_MAP.put(group, new ConcurrentHashMap<>());
-        }
-
-        Map<String, String> propertyMap = PROPERTY_COLLECTION_MAP.get(systemProperties.getGroupId());
-        if (!propertyMap.containsKey(systemProperties.getPropertyId())) {
-          PROPERTY_COLLECTION_MAP.put(group, propertyMap);
-        }
-
-        propertyMap.put(systemProperties.getPropertyId(), systemProperties.getPropertyValue());
-        PROPERTY_COLLECTION_MAP.put(group, propertyMap);
+        PROPERTY_COLLECTION_MAP
+          .computeIfAbsent(group, k -> new ConcurrentHashMap<>())
+          .put(
+              systemProperties.getPropertyId(),
+              systemProperties.getPropertyValue()
+          );
       }
     }
   }

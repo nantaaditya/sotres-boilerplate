@@ -3,7 +3,7 @@ package com.nantaaditya.sotres.model.constant;
 import lombok.Getter;
 
 @Getter
-public enum ResponseCode {
+public enum IsoResponseCode {
   APPROVED("00"),
   INVALID_MERCHANT("03"),
   DO_NOT_HONOR("05"),
@@ -31,14 +31,14 @@ public enum ResponseCode {
   
   private final String code;
   
-  ResponseCode(String code) {
+  IsoResponseCode(String code) {
     this.code = code;
   }
 
-  public static ResponseCode fromCode(String code) {
-    for (ResponseCode responseCode : ResponseCode.values()) {
-      if (responseCode.code.equals(code)) {
-        return responseCode;
+  public static IsoResponseCode fromCode(String code) {
+    for (IsoResponseCode isoResponseCode : IsoResponseCode.values()) {
+      if (isoResponseCode.code.equals(code)) {
+        return isoResponseCode;
       }
     }
     return null;

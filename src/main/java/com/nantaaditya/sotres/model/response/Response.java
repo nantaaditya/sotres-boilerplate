@@ -1,9 +1,7 @@
-package com.nantaaditya.sotres.model.internal;
+package com.nantaaditya.sotres.model.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.nantaaditya.sotres.helper.DateTimeHelper;
-import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
@@ -41,19 +39,6 @@ public class Response<T> {
   @JsonInclude(Include.NON_NULL)
   public static class ErrorMetadata {
     private Map<String, List<String>> violations;
-  }
-
-  public static <T> Response<T> success(T data) {
-    ResponseMetadata responseMetadata = ResponseMetadata.builder()
-        .code("000")
-        .description("success")
-        .time(DateTimeHelper.getDateInFormat(ZonedDateTime.now(), DateTimeHelper.ISO_8601_GMT7_FORMAT))
-        .build();
-
-    return Response.<T>builder()
-        .response(responseMetadata)
-        .data(data)
-        .build();
   }
 
 }

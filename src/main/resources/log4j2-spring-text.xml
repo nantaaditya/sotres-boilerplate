@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="INFO">
+<Configuration status="INFO" packages="com.nantaaditya.sotres">
 
   <Properties>
     <Property name="APP_NAME">${spring:spring.application.name}</Property>
@@ -81,10 +81,10 @@
   </Appenders>
 
   <Loggers>
-    <AsyncLogger name="id.alto.cms.listener.ObservationListener" additivity="false">
+    <AsyncLogger name="com.nantaaditya.sotres.listener.ObservationListener" additivity="false">
       <AppenderRef ref="metricsLog"/>
     </AsyncLogger>
-    <AsyncLogger name="id.alto.cms.configuration.TraceLogConfiguration" additivity="false">
+    <AsyncLogger name="com.nantaaditya.sotres.configuration.TraceLogConfiguration" additivity="false">
       <AppenderRef ref="traceLog"/>
     </AsyncLogger>
     <AsyncRoot level="${ROOT_LOG_LEVEL}">

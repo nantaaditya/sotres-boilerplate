@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.helper;
 
 import com.github.f4b6a3.tsid.TsidCreator;
+import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
 import io.micrometer.tracing.Baggage;
@@ -44,6 +45,10 @@ public class TracerHelper {
     return baggageManager.getAllBaggage();
   }
 
+  public String getBaggage(HeaderConstant header) {
+    return getBaggages().getOrDefault(header.getHeader(), null);
+  }
+
   public void setBaggage(String key, String value) {
     try {
       Baggage baggage = Optional.ofNullable(baggageManager.getBaggage(key))
@@ -73,6 +78,6 @@ public class TracerHelper {
   }
 
   public void createTraceContext(IsoMessage isoMessage) {
-    setBaggage("reqId", String.valueOf(isoMessage.getField(37)));
+    setBaggage(HeaderConstant.REQUEST_ID.getHeader(), String.valueOf(isoMessage.getField(37)));
   }
 }

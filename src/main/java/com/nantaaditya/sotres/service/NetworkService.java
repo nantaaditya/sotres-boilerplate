@@ -35,15 +35,16 @@ public class NetworkService {
 
   public NetworkService(Iso8583Client<IsoMessage> iso8583Client, PackagerConfiguration packagerConfiguration,
       HealthCheckHelper healthCheckHelper, IsoMessageProperties isoMessageProperties,
-      IsoMessageLoggerHelper isoMessageLoggerHelper,
-      ThreadPoolTaskScheduler scheduler) {
+      IsoMessageLoggerHelper isoMessageLoggerHelper) {
 
     this.iso8583Client = iso8583Client;
     this.healthCheckHelper = healthCheckHelper;
     this.isoMessageProperties = isoMessageProperties;
     this.messageFactory = packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT);
     this.isoMessageLoggerHelper = isoMessageLoggerHelper;
-    this.scheduler = scheduler;
+
+    this.scheduler = new ThreadPoolTaskScheduler();
+    this.scheduler.setThreadNamePrefix("Network-");
     this.scheduler.setPoolSize(3);
     this.scheduler.initialize();
   }

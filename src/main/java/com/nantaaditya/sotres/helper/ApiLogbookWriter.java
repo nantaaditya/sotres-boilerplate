@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.helper;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.logger.JsonLogHttpRequest;
@@ -32,7 +33,7 @@ public class ApiLogbookWriter implements HttpLogWriter {
       String method = (String) content.get("method");
       String url = (String) content.get("uri");
       MultiValueMap<String, String> headers = getHeaders(content);
-      Object body = content.get("body");
+      Object body = getBody(content.get("body"));
       JsonLogHttpRequest jsonLogHttpRequest = new JsonLogHttpRequest(
           method,
           url,
@@ -60,7 +61,7 @@ public class ApiLogbookWriter implements HttpLogWriter {
       int status = (int) content.get("status");
       int duration =  (int) content.get("duration");
       MultiValueMap<String, String> headers = getHeaders(content);
-      Object body = content.get("body");
+      Object body = getBody(content.get("body"));
       JsonLogHttpResponse jsonLogHttpResponse = new JsonLogHttpResponse(
           null,
           null,
@@ -90,5 +91,25 @@ public class ApiLogbookWriter implements HttpLogWriter {
       multiValueMap.put(key, headers.get(key));
     }
     return multiValueMap;
+  }
+
+  private Object getBody(Object body) {
+    try {
+      if (body == null) {
+        return null;
+      }
+
+      if (body instanceof JsonNode node) {
+        return mapper.convertValue(node, Map.class);
+      }
+
+      if (body instanceof String str) {
+        return mapper.readValue(str, Map.class);
+      }
+
+      return mapper.convertValue(body, Map.class);
+    } catch (Exception e) {
+      return body;
+    }
   }
 }

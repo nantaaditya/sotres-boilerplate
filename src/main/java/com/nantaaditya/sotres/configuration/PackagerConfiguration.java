@@ -5,17 +5,13 @@ import com.github.kpavlov.jreactive8583.iso.J8583MessageFactory;
 import com.github.kpavlov.jreactive8583.iso.MessageFactory;
 import com.github.kpavlov.jreactive8583.iso.MessageOrigin;
 import com.nantaaditya.sotres.model.constant.PackagerConstant;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
-import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.impl.SimpleTraceGenerator;
 import com.solab.iso8583.parse.ConfigParser;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Log4j2
@@ -23,7 +19,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class PackagerConfiguration {
 
-  private final SystemPropertiesService systemPropertiesService;
+  private static final int STAN = 1_000_000;
 
   public MessageFactory<IsoMessage> createMessageFactory(PackagerConstant packagerKey) {
     try {
@@ -33,7 +29,7 @@ public class PackagerConfiguration {
       factory.setForceSecondaryBitmap(true);
       factory.setAssignDate(true);
       factory.setTraceNumberGenerator(
-          new SimpleTraceGenerator((int) (System.currentTimeMillis() % 1_000_000))
+          new SimpleTraceGenerator((int) (System.currentTimeMillis() % STAN))
       );
       return new J8583MessageFactory<>(factory, ISO8583Version.V1987, MessageOrigin.OTHER);
     } catch (IOException e) {
@@ -44,9 +40,8 @@ public class PackagerConfiguration {
   private com.solab.iso8583.MessageFactory<IsoMessage> getMessageFactory(
       PackagerConstant packagerKey) throws IOException {
 
-    Map<String, String> packagers = PropertiesGroup.getMap(systemPropertiesService, PropertiesGroup.PACKAGERS);
     return packagerKey == null ?
         ConfigParser.createDefault()
-        : ConfigParser.createFromClasspathConfig(packagers.get(packagerKey.name()));
+        : ConfigParser.createFromClasspathConfig(packagerKey.getPath());
   }
 }

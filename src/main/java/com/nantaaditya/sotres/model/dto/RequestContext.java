@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.model.constant.AccountType;
-import com.nantaaditya.sotres.model.constant.FeatureConstant;
+import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import java.beans.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -82,7 +82,7 @@ public class RequestContext {
   private Merchant merchant;
   private Reversal reversal;
   @JsonIgnore
-  private FeatureConstant featureConstant;
+  private IsoFeatureConstant isoFeatureConstant;
 
   @Data
   @Builder

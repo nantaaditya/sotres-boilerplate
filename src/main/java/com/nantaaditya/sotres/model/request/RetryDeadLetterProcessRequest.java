@@ -1,4 +1,4 @@
-package com.nantaaditya.sotres.model.internal;
+package com.nantaaditya.sotres.model.request;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;

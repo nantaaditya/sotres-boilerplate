@@ -1,11 +1,13 @@
-package com.nantaaditya.sotres.controller.internal;
+package com.nantaaditya.sotres.api.internal;
 
-import com.nantaaditya.sotres.model.internal.Response;
-import com.nantaaditya.sotres.model.internal.RetryDeadLetterProcessRequest;
+import com.nantaaditya.sotres.api.BaseController;
+import com.nantaaditya.sotres.model.request.RetryDeadLetterProcessRequest;
+import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.service.internal.DeadLetterProcessService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,16 +19,19 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping(value = "/internal-api/dead_letter_process")
 @RequiredArgsConstructor
-public class DeadLetterProcessController {
+public class DeadLetterProcessController extends BaseController{
 
   private final DeadLetterProcessService deadLetterProcessService;
 
   @DeleteMapping(
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<Response<Boolean>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
-    return Mono.fromCallable(() -> Response.success(true))
-        .delayUntil(result -> deadLetterProcessService.remove(days));
+  public Mono<ResponseEntity<Response<Boolean>>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
+    return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
+        .map(this::toResponse)
+        .doOnSuccess(result ->
+          deadLetterProcessService.remove(days).subscribe()
+        );
   }
 
   @PostMapping(
@@ -34,8 +39,11 @@ public class DeadLetterProcessController {
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<Response<Boolean>> retry(@RequestBody @Valid RetryDeadLetterProcessRequest request) {
-    return Mono.fromCallable(() -> Response.success(true))
-        .delayUntil(result -> deadLetterProcessService.retry(request));
+  public Mono<ResponseEntity<Response<Boolean>>> retry(@RequestBody @Valid RetryDeadLetterProcessRequest request) {
+    return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
+        .map(this::toResponse)
+        .doOnSuccess(result ->
+            deadLetterProcessService.retry(request).subscribe()
+        );
   }
 }

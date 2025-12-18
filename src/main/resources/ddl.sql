@@ -25,3 +25,17 @@ CREATE TABLE IF NOT EXISTS system_properties (
 
 CREATE INDEX IF NOT EXISTS idx_groupid
     ON system_properties(group_id);
+
+CREATE TABLE IF NOT EXISTS public.event_logs (
+    id varchar(20) NOT NULL,
+    client_id varchar(50),
+    request_id varchar(50),
+    method varchar(10),
+    path varchar(255),
+    response_code varchar(10),
+    response_description varchar(50),
+    payload bytea,
+    created_date timestamp,
+    additional_data bytea,
+    CONSTRAINT event_logs_pkey PRIMARY KEY (id)
+);

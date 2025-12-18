@@ -10,7 +10,6 @@ import lombok.Getter;
 @Getter
 public enum PropertiesGroup {
   ISO8583_MASK_FIELDS("mask_fields", "iso8583"),
-  PACKAGERS("packagers", "packagers"),
   ACQUIRERS("acquirers", "acquirers"),
   INCOMING_MTI("mti", "incoming"),
   OUTGOING_MTI("mti", "outgoing"),

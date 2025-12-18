@@ -6,7 +6,7 @@ import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.RequestContextHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
-import com.nantaaditya.sotres.model.constant.ResponseCode;
+import com.nantaaditya.sotres.model.constant.IsoResponseCode;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -52,7 +52,8 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
   private final Scheduler scheduler;
   private final IsoMessageProperties isoMessageProperties;
 
-  private static final String PARTICIPANT_NAME = "api.public";
+  private static final String OBSERVATION_NAME = "api.public";
+  private static final String TRANSACTION_NAME = "transaction";
 
   public TransactionProcessorParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler<RequestContext>> transactionHandlers,
@@ -71,7 +72,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
     this.tracer = tracer;
     this.isoMessageProperties = isoMessageProperties;
 
-    this.scheduler = participantConfigurationProperties.getPool(PARTICIPANT_NAME).createScheduler();
+    this.scheduler = participantConfigurationProperties.getPool(TRANSACTION_NAME).createScheduler();
     this.senderProtocolStrategy = senderProtocolStrategies.stream()
         .filter(sender -> sender.getProtocol() == isoMessageProperties.outgoingProtocol())
         .findAny()
@@ -86,8 +87,8 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
   @Override
   public boolean onMessage(@NotNull ChannelHandlerContext ctx, @NotNull IsoMessage isoMessage) {
     // start observation
-    Observation observation = Observation.start(PARTICIPANT_NAME, observationRegistry);
-    Span span = tracerHelper.startSpan(tracer, PARTICIPANT_NAME);
+    Observation observation = Observation.start(OBSERVATION_NAME, observationRegistry);
+    Span span = tracerHelper.startSpan(tracer, OBSERVATION_NAME);
     Map<String, String> mdc = new HashMap<>();
 
     try (SpanInScope spanInScope = tracer.withSpan(span)) {
@@ -100,7 +101,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
           .filter(Objects::nonNull)
           .map(requestContext -> {
             // log iso message
-            ObservationHelper.observeRequest(observation, requestContext.getRrn(), requestContext.getFeatureConstant());
+            ObservationHelper.observeIsoRequest(observation, requestContext.getRrn(), requestContext.getIsoFeatureConstant());
             isoMessageLoggerHelper.logIsoMessage(isoMessage);
             return requestContext;
           })
@@ -140,7 +141,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
 
     if (senderProtocolStrategy == null) {
       log.error(AppLogMessage.message("#Transaction - sender protocol not found: {}", isoMessageProperties.outgoingProtocol()));
-      isoFieldHelper.sendResponse(context, request, ResponseCode.SYSTEM_MALFUNCTION.getCode());
+      isoFieldHelper.sendResponse(context, request, IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
       return Mono.empty();
     }
 
@@ -173,7 +174,7 @@ public class TransactionProcessorParticipant implements IsoMessageListener<IsoMe
 
     if (!maybeHandler.isPresent()) {
       log.warn(AppLogMessage.message("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector()));
-      isoFieldHelper.sendResponse(context, isoMessage, ResponseCode.SYSTEM_MALFUNCTION.getCode());
+      isoFieldHelper.sendResponse(context, isoMessage, IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
       return Mono.empty();
     }
     return Mono.fromSupplier(() -> Tuples.of(requestContext, maybeHandler.get()));

@@ -1,24 +1,33 @@
 package com.nantaaditya.sotres.model.constant;
 
-import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 import lombok.Getter;
+import org.springframework.util.AntPathMatcher;
 
+@Getter
 public enum FeatureConstant {
-  AUTHENTICATE_FOR_PAYMENT(Set.of("10.97-E001", "10.97-E002", "10.97-E003"));
 
-  @Getter
-  private Set<String> selectors;
+  GET_EXAMPLE("GET", "/api/example"),
+  POST_EXAMPLE("POST", "/api/example");
 
-  FeatureConstant(Set<String> selectors) {
-    this.selectors = selectors;
+  private String method;
+  private String path;
+
+  private static final AntPathMatcher matcher = new AntPathMatcher();
+
+  FeatureConstant(String method, String path) {
+    this.method = method;
+    this.path = path;
   }
 
-  public static FeatureConstant getBySelector(String selector) {
-    for (FeatureConstant featureConstant : FeatureConstant.values()) {
-      if (featureConstant.getSelectors().contains(selector)) {
-        return featureConstant;
-      }
-    }
-    return null;
+  public static FeatureConstant get(String method, String path) {
+    Predicate<FeatureConstant> isMatch = (FeatureConstant item)
+        -> item.getMethod().equals(method) && matcher.match(item.getPath(), path);
+
+    return Stream.of(values())
+        .filter(isMatch)
+        .findFirst()
+        .orElse(null);
   }
 }

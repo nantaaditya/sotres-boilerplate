@@ -5,8 +5,10 @@ spring:
   application.name: ${APPLICATION_NAME:sotres-api}
   webflux:
     base-path: ${CONTEXT_PATH:/sotres}
+  threads:
+    virtual.enabled: ${VIRTUAL_THREAD_ENABLED:true}
   r2dbc:
-    url: ${DB_URL:r2dbc:postgresql://localhost:5432/sotres_db}
+    url: ${DB_URL:r2dbc:postgresql://localhost:5432/boilerplate}
     username: ${DB_USER:postgres}
     password: ${DB_PASS:changeme}
     pool:
@@ -36,7 +38,7 @@ iso8583.configuration:
     masking-enabled: ${ISO8583_MASKING_ENABLED:true}
     field-description-enabled: ${ISO8583_FIELD_DESCRIPTION_ENABLED:true}
   connection:
-    host: ${ISO8583_HOST:localhost}
+    host: ${ISO8583_HOST:127.0.0.1}
     port: ${ISO8583_PORT:13001}
     worker-thread-count: ${ISO8583_WORKER_THREAD_COUNT:100}
     forwarding-institution-id: ${FORWARDING_INSTITUTION_ID:625}
@@ -47,7 +49,7 @@ iso8583.configuration:
     echo-interval: ${ECHO_INTERVAL_SECOND:30000}
 
 # Participant Pool Configurations
-participant.configuration:
+participant.configuration.pool:
   transaction:
     core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
     queue-size: ${TRANSACTION_QUEUE_SIZE:50}
@@ -61,7 +63,7 @@ client:
       max-idle-time: ${TRANSACTION_MAX_IDLE_TIME:30000}
       max-life-time: ${TRANSACTION_MAX_LIFE_TIME:60000}
       evict-in-background: ${TRANSACTION_EVICT_BACKGROUND:120000}
-      pending-acquire-time-out:
+      pending-acquire-time-out: ${TRANSACTION_PENDING_ACQUIRE_TIMEOUT:3000}
       client-connect-time-out: ${TRANSACTION_CLIENT_CONNECT_TIMEOUT:5000}
       client-read-time-out: ${TRANSACTION_CLIENT_READ_TIMEOUT:10000}
       client-write-time-out: ${TRANSACTION_CLIENT_WRITE_TIMEOUT:10000}
@@ -90,9 +92,9 @@ management:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
     baggage:
       correlation:
-        fields: ${TRACING_CORRELATION_FIELDS:reqId}
-      local-fields: ${TRACING_LOCAL_FIELDS:reqId}
-      remote-fields: ${TRACING_REMOTE_FIELDS:reqId}
+        fields: ${TRACING_CORRELATION_FIELDS:x-request-id}
+      local-fields: ${TRACING_LOCAL_FIELDS:x-request-id}
+      remote-fields: ${TRACING_REMOTE_FIELDS:x-request-id}
     propagation:
       type: w3c, b3, b3_multi
   metrics:
