@@ -6,7 +6,7 @@ import lombok.Getter;
 import org.springframework.util.AntPathMatcher;
 
 @Getter
-public enum FeatureConstant {
+public enum ApiFeatureConstant {
 
   GET_EXAMPLE("GET", "/api/example"),
   POST_EXAMPLE("POST", "/api/example");
@@ -16,13 +16,13 @@ public enum FeatureConstant {
 
   private static final AntPathMatcher matcher = new AntPathMatcher();
 
-  FeatureConstant(String method, String path) {
+  ApiFeatureConstant(String method, String path) {
     this.method = method;
     this.path = path;
   }
 
-  public static FeatureConstant get(String method, String path) {
-    Predicate<FeatureConstant> isMatch = (FeatureConstant item)
+  public static ApiFeatureConstant get(String method, String path) {
+    Predicate<ApiFeatureConstant> isMatch = (ApiFeatureConstant item)
         -> item.getMethod().equals(method) && matcher.match(item.getPath(), path);
 
     return Stream.of(values())

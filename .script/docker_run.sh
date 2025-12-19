@@ -1,0 +1,1 @@
+docker run -d --cpus="0.5" --memory="768m" -p 8080:8080 --env-file .env/dev.env --name sotres sotres:1.0.0-SNAPSHOT

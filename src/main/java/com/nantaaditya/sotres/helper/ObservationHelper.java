@@ -1,6 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.model.constant.FeatureConstant;
+import com.nantaaditya.sotres.model.constant.ApiFeatureConstant;
 import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.model.dto.TransactionException;
@@ -61,7 +61,7 @@ public class ObservationHelper {
   public static Context createApiContext(ContextDTO contextDTO) {
     Context observationContext = new Context();
 
-    FeatureConstant feature = FeatureConstant.get(contextDTO.getMethod(), contextDTO.getPath());
+    ApiFeatureConstant feature = ApiFeatureConstant.get(contextDTO.getMethod(), contextDTO.getPath());
     if (feature != null) {
       observationContext.addLowCardinalityKeyValue(KeyValue.of("feature", feature.name()));
     } else {
