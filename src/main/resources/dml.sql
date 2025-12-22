@@ -7,4 +7,5 @@ VALUES
     (4, 'mask_fields', 'iso8583', '2'),
     (5, 'currency', 'fractions', '360:2,840:2'),
     (6, 'endpoint_path', 'mapping', '10.97-E001:/api/transaction'),
-    (7, 'response', 'incoming_outgoing_mapping', '00:00');
+    (7, 'response', 'incoming_outgoing_mapping', '00:00'),
+    (8, "callback", "response_selector", "21.26-E001,21.26-E002,21.26-E003,21.36-E001,21.36-E002,21.36-E003,11.98-A001,11.98-A003");

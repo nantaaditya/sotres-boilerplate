@@ -1,0 +1,2 @@
+coordinator.sendWithCallback(request)
+    .then(...); // immediate ack, response will be handled on TransactionProcessorParticipant

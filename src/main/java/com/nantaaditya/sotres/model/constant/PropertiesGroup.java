@@ -15,7 +15,8 @@ public enum PropertiesGroup {
   OUTGOING_MTI("mti", "outgoing"),
   CURRENCY_FRACTIONS("currency", "fractions"),
   PATH_MAPPING("endpoint_path", "mapping"),
-  RESPONSE_MAPPING("response", "incoming_outgoing_mapping"),;
+  RESPONSE_MAPPING("response", "incoming_outgoing_mapping"),
+  RESPONSE_CALLBACK_SELECTOR("callback", "response_selector");
 
   private String group;
   private String propertyId;

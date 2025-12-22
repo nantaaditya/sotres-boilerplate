@@ -1,10 +1,10 @@
 package com.nantaaditya.sotres.service;
 
-import com.github.kpavlov.jreactive8583.client.Iso8583Client;
 import com.github.kpavlov.jreactive8583.iso.MessageFactory;
 import com.nantaaditya.sotres.configuration.PackagerConfiguration;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.HealthCheckHelper;
+import com.nantaaditya.sotres.helper.EnhancedIsoClient;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
@@ -26,18 +26,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class NetworkService {
 
-  private final Iso8583Client<IsoMessage> iso8583Client;
+  private final EnhancedIsoClient enhancedIsoClient;
   private final HealthCheckHelper healthCheckHelper;
   private final MessageFactory<IsoMessage> messageFactory;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
   private final IsoMessageProperties isoMessageProperties;
   private final ThreadPoolTaskScheduler scheduler;
 
-  public NetworkService(Iso8583Client<IsoMessage> iso8583Client, PackagerConfiguration packagerConfiguration,
+  public NetworkService(EnhancedIsoClient enhancedIsoClient, PackagerConfiguration packagerConfiguration,
       HealthCheckHelper healthCheckHelper, IsoMessageProperties isoMessageProperties,
       IsoMessageLoggerHelper isoMessageLoggerHelper) {
 
-    this.iso8583Client = iso8583Client;
+    this.enhancedIsoClient = enhancedIsoClient;
     this.healthCheckHelper = healthCheckHelper;
     this.isoMessageProperties = isoMessageProperties;
     this.messageFactory = packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT);
@@ -63,10 +63,10 @@ public class NetworkService {
   @Async
   public void sendSignOn() {
     try {
-      if (iso8583Client.isConnected()) {
+      if (enhancedIsoClient.isConnected()) {
         IsoMessage request = constructMessage(NetworkInformationCode.LOGON, "Log on");
         isoMessageLoggerHelper.logIsoMessage(request);
-        iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+        enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
       }
     } catch (InterruptedException e) {
       log.error(AppLogMessage.message("#Network - send sign on failed. with message : {}", e.getMessage()).error(e));
@@ -76,10 +76,10 @@ public class NetworkService {
   @Async
   public void sendSignOff() {
     try {
-      if (iso8583Client.isConnected()) {
+      if (enhancedIsoClient.isConnected()) {
         IsoMessage request = constructMessage(NetworkInformationCode.LOGOFF, "Log off");
         isoMessageLoggerHelper.logIsoMessage(request);
-        iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+        enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
       }
     } catch (InterruptedException e) {
       log.error(AppLogMessage.message("#Network - send sign off failed. with message : {}", e.getMessage()).error(e));
@@ -88,10 +88,10 @@ public class NetworkService {
 
   public boolean sendEcho() {
     try {
-      if (iso8583Client.isConnected() && healthCheckHelper.isSignedOn()) {
+      if (enhancedIsoClient.isConnected() && healthCheckHelper.isSignedOn()) {
         IsoMessage request = constructMessage(NetworkInformationCode.ECHO, "Echo");
         isoMessageLoggerHelper.logIsoMessage(request);
-        iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+        enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
         return true;
       }
       return false;

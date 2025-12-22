@@ -53,6 +53,10 @@ participant.configuration.pool:
   transaction:
     core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
     queue-size: ${TRANSACTION_QUEUE_SIZE:50}
+    flight-pool: ${TRANSACTION_FLIGHT_POOL_SIZE:100}
+    message-pool: ${TRANSACTION_MESSAGE_POOL:200}
+    flight-queue-time-out: ${TRANSACTION_FLIGHT_QUEUE_TIMEOUT:15000}
+    message-queue-time-out: ${TRANSACTION_MESSAGE_QUEUE_TIME_OUT:60000}
     prefix: ${TRANSACTION_PREFIX:TransactionManager}
 
 client:
@@ -70,7 +74,7 @@ client:
       time-unit: ${TRANSACTION_CLIENT_TIMEUNIT:MILLISECONDS}
       retry-configuration:
         max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
-        min-back-off: ${TRANSACTION_RETRY_MIN_BACK_OFF:1}
+        min-back-off: ${TRANSACTION_RETRY_MIN_BACK_OFF:500}
         retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:reactor.netty.http.client.PrematureCloseException:true}
 
 # Actuator Configurations

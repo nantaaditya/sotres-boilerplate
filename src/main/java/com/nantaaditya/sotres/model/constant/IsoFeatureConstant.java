@@ -4,21 +4,28 @@ import java.util.Set;
 import lombok.Getter;
 
 public enum IsoFeatureConstant {
-  AUTHENTICATE_FOR_PAYMENT(Set.of("10.97-E001", "10.97-E002", "10.97-E003"));
+  AUTHENTICATE_FOR_PAYMENT(
+      Set.of("10.97-E001", "10.97-E002", "10.97-E003"),
+      Set.of("11.97-E001", "11.97-E002", "11.97-E003")
+  );
 
   @Getter
-  private Set<String> selectors;
+  private Set<String> requests;
+  @Getter
+  private Set<String> responses;
 
-  IsoFeatureConstant(Set<String> selectors) {
-    this.selectors = selectors;
+  IsoFeatureConstant(Set<String> requests, Set<String> responses) {
+    this.requests = requests;
+    this.responses = responses;
   }
 
-  public static IsoFeatureConstant getBySelector(String selector) {
+  public static String getBySelector(String selector) {
     for (IsoFeatureConstant isoFeatureConstant : IsoFeatureConstant.values()) {
-      if (isoFeatureConstant.getSelectors().contains(selector)) {
-        return isoFeatureConstant;
+      if (isoFeatureConstant.getRequests().contains(selector)
+          || isoFeatureConstant.getResponses().contains(selector)) {
+        return isoFeatureConstant.name();
       }
     }
-    return null;
+    return selector;
   }
 }

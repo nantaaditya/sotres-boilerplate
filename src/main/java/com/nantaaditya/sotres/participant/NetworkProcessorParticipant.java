@@ -8,7 +8,6 @@ import com.nantaaditya.sotres.model.constant.IsoResponseCode;
 import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
-import com.solab.iso8583.IsoValue;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -39,14 +38,14 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
 
     isoMessageLoggerHelper.logIsoMessage(isoMessage);
 
-    IsoValue<Integer> nic = isoMessage.getField(70);
-    if (StringUtils.equals(nic.toString(), NetworkInformationCode.LOGON.getCode())) {
+    String nic = IsoFieldHelper.getField(isoMessage,70);
+    if (StringUtils.equals(nic, NetworkInformationCode.LOGON.getCode())) {
       handleSignOn(channelHandlerContext, isoMessage);
-    } else if (StringUtils.equals(nic.toString(), NetworkInformationCode.LOGOFF.getCode())) {
+    } else if (StringUtils.equals(nic, NetworkInformationCode.LOGOFF.getCode())) {
       handleSignOff(channelHandlerContext, isoMessage);
-    } else if (StringUtils.equals(nic.toString(), NetworkInformationCode.ECHO.getCode())) {
+    } else if (StringUtils.equals(nic, NetworkInformationCode.ECHO.getCode())) {
       handleEcho(channelHandlerContext, isoMessage);
-    } else if (StringUtils.equals(nic.toString(), NetworkInformationCode.CUTOVER.getCode())) {
+    } else if (StringUtils.equals(nic, NetworkInformationCode.CUTOVER.getCode())) {
       handleCutOver(channelHandlerContext, isoMessage);
     }
     return false;
@@ -117,6 +116,6 @@ public class NetworkProcessorParticipant implements IsoMessageListener<IsoMessag
 
   private boolean isSuccess(IsoMessage isoMessage) {
     return isoMessage.hasField(39) ?
-        StringUtils.equals(isoMessage.getField(39).toString(), IsoResponseCode.APPROVED.getCode()) : false;
+        StringUtils.equals(IsoFieldHelper.getField(isoMessage,39), IsoResponseCode.APPROVED.getCode()) : false;
   }
 }

@@ -6,6 +6,8 @@ import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import java.time.Duration;
+import java.util.Objects;
+import java.util.Optional;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.zalando.logbook.Logbook;
@@ -16,10 +18,6 @@ import reactor.util.retry.Retry;
 import reactor.util.retry.RetryBackoffSpec;
 
 public class BaseClient {
-
-  public static final String X_CLIENT_ID = "x-client-id";
-  public static final String X_REQUEST_ID = "x-request-id";
-  public static final String X_REQUEST_TIME = "x-request-time";
 
   protected WebClient createWebClient(Logbook logbook, ClientConfiguration clientConfiguration) {
     ConnectionProvider provider = ConnectionProvider.builder("custom-webclient")
@@ -51,16 +49,12 @@ public class BaseClient {
         .build();
   }
 
-  protected boolean isNeedRetryable(ClientConfiguration clientConfiguration) {
-    return clientConfiguration != null;
-  }
-
   protected static RetryBackoffSpec getRetryCondition(ClientConfiguration clientConfiguration) {
     RetryConfiguration retryConfiguration = clientConfiguration.retryConfiguration();
     if (retryConfiguration == null) {
       return null;
     }
-    return Retry.backoff(retryConfiguration.maxAttempt(), Duration.ofSeconds(retryConfiguration.maxAttempt()))
+    return Retry.backoff(retryConfiguration.maxAttempt(), Duration.ofSeconds(retryConfiguration.minBackOff()))
         .filter(throwable -> retryConfiguration.isRetryable(throwable.getClass()));
   }
 }

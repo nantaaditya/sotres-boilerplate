@@ -1,7 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
 import com.nantaaditya.sotres.model.constant.ApiFeatureConstant;
-import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.model.dto.TransactionException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -22,7 +21,7 @@ public class ObservationHelper {
 
   private ObservationHelper() {}
 
-  public static void observeIsoRequest(Observation observation, String rrn, IsoFeatureConstant feature) {
+  public static void observeIsoRequest(Observation observation, String rrn, String feature) {
     if (observation == null)
       return;
 
@@ -30,7 +29,7 @@ public class ObservationHelper {
       .ifPresent(r -> observation.highCardinalityKeyValue(REQUEST_ID, rrn));
 
     Optional.ofNullable(feature)
-      .ifPresent(r -> observation.lowCardinalityKeyValue(FEATURE, feature.name()));
+      .ifPresent(r -> observation.lowCardinalityKeyValue(FEATURE, feature));
   }
 
   public static void publishEvent(Observation observation, String key, String value) {

@@ -1,7 +1,9 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
-import com.github.kpavlov.jreactive8583.client.Iso8583Client;
+import com.nantaaditya.sotres.helper.EnhancedIsoClient;
+import com.nantaaditya.sotres.helper.IsoMessageRegistry;
+import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.PackagerConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.participant.NetworkProcessorParticipant;
@@ -9,7 +11,7 @@ import com.nantaaditya.sotres.participant.TransactionProcessorParticipant;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.embedded.IsoMessageConnectionConfiguration;
 import com.nantaaditya.sotres.properties.embedded.IsoMessageNetworkConfiguration;
-import com.solab.iso8583.IsoMessage;
+import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import java.net.InetSocketAddress;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -26,18 +28,21 @@ public class CoreConfiguration {
 
   private final IsoMessageProperties isoMessageProperties;
   private final PackagerConfiguration packagerConfiguration;
+  private final SystemPropertiesService systemPropertiesService;
+  private final IsoMessageRegistry isoMessageRegistry;
+  private final TracerHelper tracerHelper;
   private final NetworkProcessorParticipant networkProcessorParticipant;
   private final TransactionProcessorParticipant transactionProcessorParticipant;
 
   @Bean
-  public Iso8583Client<IsoMessage> client() throws InterruptedException {
+  public EnhancedIsoClient client() throws InterruptedException {
 
     IsoMessageNetworkConfiguration networkConfiguration = isoMessageProperties.network();
     IsoMessageConnectionConfiguration connectionConfiguration = isoMessageProperties.connection();
     String host = connectionConfiguration.host();
     int port = connectionConfiguration.port();
 
-    Iso8583Client<IsoMessage> client = new Iso8583Client<>(
+    EnhancedIsoClient client = new EnhancedIsoClient(
       new InetSocketAddress(host, port),
       ClientConfiguration.newBuilder()
         .reconnectInterval(networkConfiguration.reconnectInterval())
@@ -48,7 +53,10 @@ public class CoreConfiguration {
         .describeFieldsInLog(isoMessageProperties.log().fieldDescriptionEnabled())
         .addLoggingHandler(isoMessageProperties.log().defaultLogHandlerEnabled())
         .build(),
-      packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT)
+      packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT),
+      isoMessageRegistry,
+      systemPropertiesService,
+      tracerHelper
     );
 
     client.addMessageListener(networkProcessorParticipant); // for network handling

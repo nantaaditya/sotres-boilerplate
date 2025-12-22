@@ -1,26 +1,21 @@
 package com.nantaaditya.sotres.strategy.transaction;
 
-import com.nantaaditya.sotres.model.dto.RequestContext;
-import com.solab.iso8583.IsoMessage;
-import io.netty.channel.ChannelHandlerContext;
+import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
 @RequiredArgsConstructor
-public abstract class AbstractTransactionHandler<S extends RequestContext> {
+public abstract class AbstractTransactionHandler {
 
   public abstract Set<String> getSelectors();
 
-  protected abstract Mono<S> validate(ChannelHandlerContext context, IsoMessage isoMessage,
-      S requestContext);
+  protected abstract Mono<ParticipantContext> validate(ParticipantContext participantContext);
 
-  protected abstract Mono<S> process(ChannelHandlerContext context, IsoMessage isoMessage,
-      S requestContext);
+  protected abstract Mono<ParticipantContext> process(ParticipantContext participantContext);
 
-  public Mono<S> execute(ChannelHandlerContext context, IsoMessage isoMessage,
-      S requestContext) {
-    return validate(context, isoMessage, requestContext)
-        .flatMap(request -> process(context, isoMessage, request));
+  public Mono<ParticipantContext> execute(ParticipantContext participantContext) {
+    return validate(participantContext)
+        .flatMap(this::process);
   }
 }

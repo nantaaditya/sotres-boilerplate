@@ -18,17 +18,21 @@ import java.security.SecureRandom;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Random;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 @Log4j2
 @Component
 @RequiredArgsConstructor
 public class IsoFieldHelper {
+
+  private static final int DEFAULT_FRACTION_DIGIT = 2;
 
   private final PackagerConfiguration packagerConfiguration;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
@@ -74,49 +78,52 @@ public class IsoFieldHelper {
         .stream()
         .collect(Collectors.toMap(Entry::getKey, entry -> Integer.parseInt(entry.getValue())));
 
-    String de4 = isoMessage.getObjectValue(4);
-    String de49 = isoMessage.getObjectValue(49);
-    String de28 = isoMessage.getObjectValue(28);
+    String de4 = getField(isoMessage,4);
+    String de49 = getField(isoMessage,49);
+    String de28 = getField(isoMessage,28);
 
-    double originalAmount = Double.parseDouble(de4);
-    int fractionDigit = currencyFractions.getOrDefault(de49, 2);
-
-    double transactionFee = Double.parseDouble(de28.substring(1, de28.length() - 1));
-    String feeType = de28.substring(0, 1);
-    double transactionAmount = "C".equalsIgnoreCase(feeType) ?
-        (originalAmount + transactionFee) : (originalAmount - transactionFee);
+    double originalAmount = parse(de4);
+    int fractionDigit = currencyFractions.getOrDefault(de49, DEFAULT_FRACTION_DIGIT);
+    double transactionFee = parse(substring(de28,1, de28.length() - 1));
+    String feeType = substring(de28, 0, 1);
+    double transactionAmount = getCalculateTransactionAmount(feeType, originalAmount, transactionFee);
 
     return Transaction.builder()
         .originalAmount(IsoFieldHelper.convertAmount(originalAmount, fractionDigit))
-        .originalCurrencyCode(de49)
         .transactionFeeAmount(IsoFieldHelper.convertAmount(transactionFee, fractionDigit))
         .transactionAmount(IsoFieldHelper.convertAmount(transactionAmount, fractionDigit))
+        .originalCurrencyCode(de49)
         .build();
   }
 
+  private static double getCalculateTransactionAmount(String feeType, double originalAmount, double transactionFee) {
+    return  "C".equalsIgnoreCase(feeType) ?
+        (originalAmount + transactionFee) : (originalAmount - transactionFee);
+  }
+
   public static Merchant createMerchant(IsoMessage isoMessage) {
-    String de18 = isoMessage.getObjectValue(18);
-    String de43 = isoMessage.getObjectValue(43);
+    String de18 = getField(isoMessage,18);
+    String de43 = getField(isoMessage,43);
 
     return Merchant.builder()
         .merchantCategoryCode(de18)
-        .merchantName(de43.substring(0, 25))
-        .merchantCity(de43.substring(25, 38))
-        .merchantCountryCode(de43.substring(38, 40))
+        .merchantName(substring(de43,0, 25))
+        .merchantCity(substring(de43,25, 38))
+        .merchantCountryCode(substring(de43, 38, 40))
         .build();
   }
 
   public static Reversal createReversal(IsoMessage isoMessage) {
     if (!isoMessage.hasField(90)) return null;
 
-    String de90 = isoMessage.getObjectValue(90);
+    String de90 = getField(isoMessage,90);
 
     return Reversal.builder()
-        .originalMti(de90.substring(0, 4))
-        .originalStan(de90.substring(4, 10))
-        .originalTransmissionDateTime(de90.substring(10, 20))
-        .originalAcquiringInstitutionId(de90.substring(20, 31))
-        .originalForwardingInstitutionId(de90.substring(31, 42))
+        .originalMti(substring(de90, 0, 4))
+        .originalStan(substring(de90, 4, 10))
+        .originalTransmissionDateTime(substring(de90, 10, 20))
+        .originalAcquiringInstitutionId(substring(de90, 20, 31))
+        .originalForwardingInstitutionId(substring(de90, 31, 42))
         .build();
   }
 
@@ -144,6 +151,81 @@ public class IsoFieldHelper {
       sb.append(entry.getValue());
     }
     return sb.toString();
+  }
+
+  public static String getField(IsoMessage msg, int field) {
+    return Optional.ofNullable(msg)
+        .map(m -> m.getField(field))
+        .map(IsoValue::toString)
+        .orElse(null);
+  }
+
+  public static String getCorrelationId(IsoMessage request) {
+    String productIndicator = unpackTLV(getField(request, 48), 2)
+        .getOrDefault("PI", "NA"); // product indicator
+    String processingCode = Optional.ofNullable(getField(request, 3)) // processing code
+        .map(result -> substring(result, 0, 2))
+        .orElseGet(() -> "NA");
+
+    return new StringBuilder()
+        .append(productIndicator)
+        .append(".")
+        .append(processingCode)
+        .append("|")
+        .append(getField(request, 11)) // STAN
+        .append("-")
+        .append(getField(request, 37)) // RRN
+        .toString();
+  }
+
+  public static String createSelector(IsoMessage isoMessage) {
+    return createSelector(
+        getMTI(isoMessage.getType()),
+        getField(isoMessage, 3),
+        IsoFieldHelper.unpackTLV(getField(isoMessage, 48), 2)
+    );
+  }
+
+  public static String createSelector(String mti, String processingCode, Map<String, String> tlv) {
+    StringBuilder sb = new StringBuilder();
+    // mti
+    sb.append(substring(mti, 1, 3));
+    sb.append(".");
+
+    // processing code
+    if (StringUtils.isNotBlank(processingCode)) {
+      sb.append(substring(processingCode, 0, 2));
+    } else {
+      sb.append("NA");
+    }
+
+    // product indicator
+    sb.append("-");
+    sb.append(tlv.getOrDefault("PI", "NA"));
+    return sb.toString();
+  }
+
+  public static String substring(String str, int start) {
+    return substring(str, start, 0);
+  }
+
+  public static String substring(String str, int start, int end) {
+    if (str == null || str.isBlank() || start >= end) return str;
+
+    if (end > 0) {
+      return str.substring(start, end);
+    }
+
+    return str.substring(start);
+  }
+
+  public static double parse(String str) {
+    try {
+      return Double.parseDouble(str);
+    } catch (NumberFormatException e) {
+      log.error(AppLogMessage.message("#IsoField - failed to parse {}", str).error(e));
+      return Double.MIN_VALUE;
+    }
   }
 
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {

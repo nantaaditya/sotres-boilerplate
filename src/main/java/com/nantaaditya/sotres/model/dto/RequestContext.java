@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.model.constant.AccountType;
-import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import java.beans.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,7 +17,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
+import lombok.experimental.SuperBuilder;
 
 /**
  * internal DTO to map ISO8583 message
@@ -48,7 +47,7 @@ import org.apache.commons.lang3.StringUtils;
  * invoice => DE123
  */
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -77,12 +76,15 @@ public class RequestContext {
   private String issuerId;
   private String accountIdentification;
   private String invoiceNo;
+  private boolean lateResponse;
+  private boolean orphanResponse;
+  private boolean externalRequest;
 
   private Transaction transaction;
   private Merchant merchant;
   private Reversal reversal;
   @JsonIgnore
-  private IsoFeatureConstant isoFeatureConstant;
+  private String isoFeatureConstant;
 
   @Data
   @Builder
@@ -163,12 +165,12 @@ public class RequestContext {
 
   @Transient
   public AccountType getFromAccountType() {
-    return AccountType.fromCode(processingCode.substring(2, 4));
+    return AccountType.fromCode(IsoFieldHelper.substring(processingCode, 2, 4));
   }
 
   @Transient
   public AccountType getToAccountType() {
-    return AccountType.fromCode(transmissionDateTime.substring(4, 6));
+    return AccountType.fromCode(IsoFieldHelper.substring(transmissionDateTime, 4, 6));
   }
 
   @Transient
@@ -186,29 +188,14 @@ public class RequestContext {
     if (invoiceNo == null || invoiceNo.isEmpty()) return null;
 
     return new Invoice(
-        invoiceNo.substring(0, 10),
-        invoiceNo.substring(10, 20)
+        IsoFieldHelper.substring(invoiceNo, 0, 10),
+        IsoFieldHelper.substring(invoiceNo,10, 20)
     );
   }
 
   // change this mapping
   @Transient
   public String getSelector() {
-    StringBuilder sb = new StringBuilder();
-    // mti
-    sb.append(mti.substring(1, 3));
-    sb.append(".");
-
-    // processing code
-    if (StringUtils.isNotBlank(processingCode)) {
-      sb.append(processingCode.substring(0, 2));
-    } else {
-      sb.append("NA");
-    }
-
-    // product indicator
-    sb.append("-");
-    sb.append(getAdditionalDataMap().get("PI"));
-    return sb.toString();
+    return IsoFieldHelper.createSelector(mti, processingCode, getAdditionalDataMap());
   }
 }

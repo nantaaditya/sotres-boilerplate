@@ -12,6 +12,7 @@ import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.internal.EncodingUtils;
 import java.util.Map;
 import java.util.Optional;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
@@ -24,9 +25,10 @@ import reactor.core.publisher.Mono;
 public class TracerHelper {
 
   private final BaggageManager baggageManager;
+  @Getter
   private final Tracer tracer;
 
-  public TraceContext getTracer() {
+  public TraceContext getTracerContext() {
     return Optional.ofNullable(tracer)
       .map(Tracer::currentSpan)
       .map(Span::context)
@@ -78,6 +80,6 @@ public class TracerHelper {
   }
 
   public void createTraceContext(IsoMessage isoMessage) {
-    setBaggage(HeaderConstant.REQUEST_ID.getHeader(), String.valueOf(isoMessage.getField(37)));
+    setBaggage(HeaderConstant.REQUEST_ID.getHeader(), IsoFieldHelper.getField(isoMessage, 37));
   }
 }

@@ -21,6 +21,7 @@
     <java.version>25</java.version>
     <apache-common3.version>3.20.0</apache-common3.version>
     <awaitility.version>4.3.0</awaitility.version>
+    <caffeine.version>3.2.3</caffeine.version>
     <commons-codec.version>1.19.0</commons-codec.version>
     <disruptor.version>3.4.4</disruptor.version>
     <gson.version>2.13.2</gson.version>
@@ -158,6 +159,11 @@
       <groupId>com.lmax</groupId>
       <artifactId>disruptor</artifactId>
       <version>${disruptor.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+      <version>${caffeine.version}</version>
     </dependency>
 
     <!-- Test Dependency -->

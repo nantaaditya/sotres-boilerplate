@@ -29,7 +29,7 @@ public class IsoMessageLoggerHelper {
     log.info(AppLogMessage.message("#ISO").isoMessage(logIsoMessage));
   }
 
-  private JsonLogIsoMessage toLogMessage(IsoMessage message) {
+  public JsonLogIsoMessage toLogMessage(IsoMessage message) {
     String direction = getDirection(message);
     String mti = String.format("%04x", message.getType());
 
