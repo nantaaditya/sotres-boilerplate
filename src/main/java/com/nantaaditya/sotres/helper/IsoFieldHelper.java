@@ -127,13 +127,13 @@ public class IsoFieldHelper {
         .build();
   }
 
-  public static Map<String, String> unpackTLV(String raw, int tagLength) {
+  public static Map<String, String> unpackTLV(String raw, int tagLength, int lengthSize) {
     Map<String, String> tlv = new LinkedHashMap<>();
     int i = 0;
     while (i < raw.length()) {
       String tag = raw.substring(i, i + tagLength);
       i += tagLength;
-      int valueLength = Integer.parseInt(raw.substring(i, i + 2));
+      int valueLength = Integer.parseInt(raw.substring(i, i + lengthSize));
       i += 2;
       String value = raw.substring(i, i + valueLength);
       i += valueLength;
@@ -143,11 +143,11 @@ public class IsoFieldHelper {
     return tlv;
   }
 
-  public static String packTLV(Map<String, String> tlv, int tagLength) {
+  public static String packTLV(Map<String, String> tlv, int tagLength, int lengthSize) {
     StringBuilder sb = new StringBuilder();
     for (Entry<String, String> entry : tlv.entrySet()) {
       sb.append(entry.getKey());
-      sb.append(StringHelper.prepend(String.valueOf(entry.getValue().length()), '0', 2));
+      sb.append(StringHelper.prepend(String.valueOf(entry.getValue().length()), '0', lengthSize));
       sb.append(entry.getValue());
     }
     return sb.toString();
@@ -161,7 +161,7 @@ public class IsoFieldHelper {
   }
 
   public static String getCorrelationId(IsoMessage request) {
-    String productIndicator = unpackTLV(getField(request, 48), 2)
+    String productIndicator = unpackTLV(getField(request, 48), 2, 2)
         .getOrDefault("PI", "NA"); // product indicator
     String processingCode = Optional.ofNullable(getField(request, 3)) // processing code
         .map(result -> substring(result, 0, 2))
@@ -182,7 +182,7 @@ public class IsoFieldHelper {
     return createSelector(
         getMTI(isoMessage.getType()),
         getField(isoMessage, 3),
-        IsoFieldHelper.unpackTLV(getField(isoMessage, 48), 2)
+        IsoFieldHelper.unpackTLV(getField(isoMessage, 48), 2, 2)
     );
   }
 

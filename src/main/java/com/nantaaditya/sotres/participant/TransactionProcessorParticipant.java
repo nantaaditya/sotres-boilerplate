@@ -120,7 +120,7 @@ public class TransactionProcessorParticipant
           .subscribeOn(scheduler)
           .subscribe(
               senderProtocolStrategy::handleResponse, // handle response
-              throwable -> handleError(participantContext, throwable), // handle error
+              throwable -> senderProtocolStrategy.handleError(participantContext, throwable), // handle error
               () -> {
                 span.end();
                 MDC.clear();
@@ -157,10 +157,6 @@ public class TransactionProcessorParticipant
     log.debug(AppLogMessage.message("#Transaction - DTO").additionalData(ctx.getRequestContext()));
     return senderProtocolStrategy.send(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), ctx.getRequestContext())
         .map(responseContext -> ParticipantContext.response(ctx, responseContext));
-  }
-
-  private void handleError(ParticipantContext participantContext, Throwable throwable) {
-    senderProtocolStrategy.handleError(participantContext, throwable);
   }
 
   private void initiateSpan(IsoMessage isoMessage, Map<String, String> mdc) {

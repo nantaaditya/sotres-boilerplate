@@ -136,7 +136,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     return responseCodeMapping.getOrDefault(responseCode, IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
   }
 
-  protected void setApprovalCode(IsoMessage isoMessage, String approvalCode) {
+  private void setApprovalCode(IsoMessage isoMessage, String approvalCode) {
     Optional.ofNullable(approvalCode)
       .ifPresent(code -> isoMessage.setField(38, IsoType.ALPHA.value(IsoFieldHelper.substring(code,code.length() - 6), 6)));
   }

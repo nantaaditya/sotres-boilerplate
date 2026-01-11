@@ -175,12 +175,12 @@ public class RequestContext {
 
   @Transient
   public Map<String, String> getAdditionalDataMap() {
-    return IsoFieldHelper.unpackTLV(additionalData, 2);
+    return IsoFieldHelper.unpackTLV(additionalData, 2, 2);
   }
 
   @Transient
   public void packAdditionalData(Map<String, String> additionalData) {
-    this.additionalData = IsoFieldHelper.packTLV(additionalData, 2);
+    this.additionalData = IsoFieldHelper.packTLV(additionalData, 2, 2);
   }
 
   @Transient
