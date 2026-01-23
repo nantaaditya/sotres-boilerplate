@@ -3,8 +3,8 @@ package com.nantaaditya.sotres.configuration;
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
 import com.nantaaditya.sotres.helper.IsoMessageRegistry;
+import com.nantaaditya.sotres.helper.MessageFactoryHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
-import com.nantaaditya.sotres.model.constant.PackagerConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.participant.NetworkProcessorParticipant;
 import com.nantaaditya.sotres.participant.TransactionProcessorParticipant;
@@ -27,7 +27,7 @@ import org.springframework.context.annotation.Configuration;
 public class CoreConfiguration {
 
   private final IsoMessageProperties isoMessageProperties;
-  private final PackagerConfiguration packagerConfiguration;
+  private final MessageFactoryHelper messageFactoryHelper;
   private final SystemPropertiesService systemPropertiesService;
   private final IsoMessageRegistry isoMessageRegistry;
   private final TracerHelper tracerHelper;
@@ -53,7 +53,7 @@ public class CoreConfiguration {
         .describeFieldsInLog(isoMessageProperties.log().fieldDescriptionEnabled())
         .addLoggingHandler(isoMessageProperties.log().defaultLogHandlerEnabled())
         .build(),
-      packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT),
+      messageFactoryHelper.getDefaultMessageFactory(),
       isoMessageRegistry,
       systemPropertiesService,
       tracerHelper

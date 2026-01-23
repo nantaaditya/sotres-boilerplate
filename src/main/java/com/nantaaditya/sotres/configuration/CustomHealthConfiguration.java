@@ -1,7 +1,7 @@
 package com.nantaaditya.sotres.configuration;
 
-import com.nantaaditya.sotres.helper.HealthCheckHelper;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
+import com.nantaaditya.sotres.helper.HealthCheckHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;

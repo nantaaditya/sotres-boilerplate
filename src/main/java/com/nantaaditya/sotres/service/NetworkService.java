@@ -1,14 +1,12 @@
 package com.nantaaditya.sotres.service;
 
-import com.github.kpavlov.jreactive8583.iso.MessageFactory;
-import com.nantaaditya.sotres.configuration.PackagerConfiguration;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
-import com.nantaaditya.sotres.helper.HealthCheckHelper;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
+import com.nantaaditya.sotres.helper.HealthCheckHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
+import com.nantaaditya.sotres.helper.MessageFactoryHelper;
 import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
-import com.nantaaditya.sotres.model.constant.PackagerConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.solab.iso8583.IsoMessage;
@@ -28,19 +26,19 @@ public class NetworkService {
 
   private final EnhancedIsoClient enhancedIsoClient;
   private final HealthCheckHelper healthCheckHelper;
-  private final MessageFactory<IsoMessage> messageFactory;
+  private final MessageFactoryHelper messageFactoryHelper;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
   private final IsoMessageProperties isoMessageProperties;
   private final ThreadPoolTaskScheduler scheduler;
 
-  public NetworkService(EnhancedIsoClient enhancedIsoClient, PackagerConfiguration packagerConfiguration,
+  public NetworkService(EnhancedIsoClient enhancedIsoClient, MessageFactoryHelper messageFactoryHelper,
       HealthCheckHelper healthCheckHelper, IsoMessageProperties isoMessageProperties,
       IsoMessageLoggerHelper isoMessageLoggerHelper) {
 
     this.enhancedIsoClient = enhancedIsoClient;
     this.healthCheckHelper = healthCheckHelper;
     this.isoMessageProperties = isoMessageProperties;
-    this.messageFactory = packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT);
+    this.messageFactoryHelper = messageFactoryHelper;
     this.isoMessageLoggerHelper = isoMessageLoggerHelper;
 
     this.scheduler = new ThreadPoolTaskScheduler();
@@ -102,7 +100,7 @@ public class NetworkService {
   }
 
   private IsoMessage constructMessage(NetworkInformationCode nic, String message) {
-    IsoMessage isoMessage = this.messageFactory.newMessage(0x800);
+    IsoMessage isoMessage = this.messageFactoryHelper.getDefaultMessageFactory().newMessage(0x800);
 
     isoMessage.setValue(7, DateTimeHelper.getDateInFormat(
             ZonedDateTime.now(DateTimeHelper.GMT_ZONE), DateTimeHelper.TRANSMISSION_DATE_TIME_FORMAT),

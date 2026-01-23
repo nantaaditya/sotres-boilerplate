@@ -1,7 +1,5 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.configuration.PackagerConfiguration;
-import com.nantaaditya.sotres.model.constant.PackagerConstant;
 import com.nantaaditya.sotres.model.constant.PropertiesGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
@@ -34,7 +32,7 @@ public class IsoFieldHelper {
 
   private static final int DEFAULT_FRACTION_DIGIT = 2;
 
-  private final PackagerConfiguration packagerConfiguration;
+  private final MessageFactoryHelper messageFactoryHelper;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
 
   private static final Random RANDOM = new SecureRandom();
@@ -229,7 +227,7 @@ public class IsoFieldHelper {
   }
 
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {
-    IsoMessage response = packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT)
+    IsoMessage response = messageFactoryHelper.getDefaultMessageFactory()
         .createResponse(request);
     response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
     isoMessageLoggerHelper.logIsoMessage(response);
@@ -237,7 +235,7 @@ public class IsoFieldHelper {
   }
 
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, Consumer<IsoMessage> responseConsumer) {
-    IsoMessage response = packagerConfiguration.createMessageFactory(PackagerConstant.DEFAULT)
+    IsoMessage response = messageFactoryHelper.getDefaultMessageFactory()
         .createResponse(request);
     responseConsumer.accept(response);
     isoMessageLoggerHelper.logIsoMessage(response);
