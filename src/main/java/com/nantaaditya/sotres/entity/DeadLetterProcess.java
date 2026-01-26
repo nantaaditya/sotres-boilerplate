@@ -15,13 +15,17 @@ import org.springframework.data.relational.core.mapping.Table;
 public class DeadLetterProcess extends BaseEntity<Long>{
 
   private String processType;
-
   private String processName;
-
-  private String lastError;
-
+  private String idempotencyKey;
+  private String clientName;
+  private String method;
+  private String path;
+  private String headers;
   private byte[] payload;
-
-  private boolean processed;
+  private int retryCount;
+  private int maxRetry;
+  private String status;
+  private String lastError;
+  private byte[] retryHistories;
 
 }

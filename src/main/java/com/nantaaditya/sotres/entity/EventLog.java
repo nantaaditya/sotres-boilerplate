@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.domain.Persistable;
-import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 @Data
@@ -26,9 +25,7 @@ public class EventLog implements Persistable<String> {
   private String path;
   private String responseCode;
   private String responseDescription;
-  @Column
   private byte[] payload;
-  @Column
   private byte[] additionalData;
   @CreatedDate
   private LocalDateTime createdDate;

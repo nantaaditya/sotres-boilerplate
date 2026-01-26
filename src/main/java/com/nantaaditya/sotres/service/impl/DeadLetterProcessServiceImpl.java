@@ -3,6 +3,7 @@ package com.nantaaditya.sotres.service.impl;
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.RetryProcessorHelper;
+import com.nantaaditya.sotres.model.constant.RetryStatus;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.request.RetryDeadLetterProcessRequest;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
@@ -10,6 +11,7 @@ import com.nantaaditya.sotres.service.AbstractRetryProcessorService;
 import com.nantaaditya.sotres.service.internal.DeadLetterProcessService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.data.domain.PageRequest;
@@ -31,7 +33,7 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
   @Override
   public Mono<Void> remove(int days) {
     LocalDateTime now = LocalDateTime.now(DateTimeHelper.ZONE_ID);
-    return deadLetterProcessRepository.deleteByProcessedIsTrueAndCreatedDateBefore(now.minusDays(days));
+    return deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(now.minusDays(days), RetryStatus.EXHAUSTED.name());
   }
 
   @Override
@@ -40,6 +42,7 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
         Sort.by(Direction.ASC, "createdDate"));
 
     return getDeadLetterProcesses(request, pageRequest)
+        .filter(deadLetterProcess -> deadLetterProcess.getRetryCount() < deadLetterProcess.getMaxRetry())
         .collectList()
         .doOnSuccess(deadLetterProcesses -> executeRetryProcess(request, deadLetterProcesses)
             .doOnSuccess(result -> log.info(AppLogMessage.message(
@@ -54,8 +57,7 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
                 result -> log.debug(AppLogMessage.message("#Retry - dead letter process [{}] [{}] success",
                     request.processType(), request.processName())),
                 error -> log.error(AppLogMessage.message("#Retry - dead letter process [{}] [{}] error",
-                    request.processType(), request.processName())
-                    .error(error)),
+                    request.processType(), request.processName()).error(error)),
                 () -> log.info(AppLogMessage.message("#Retry - dead letter process [{}] [{}] done",
                     request.processType(), request.processName()))
             )
@@ -65,12 +67,54 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
 
   private Flux<DeadLetterProcess> getDeadLetterProcesses(RetryDeadLetterProcessRequest request,
       PageRequest pageRequest) {
-    return deadLetterProcessRepository.findByProcessTypeAndProcessNameAndProcessed(
-        request.processType(), request.processName(), false, pageRequest);
+    return deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
+        request.processType(), request.processName(),
+        Set.of(RetryStatus.NEW.name(), RetryStatus.FAILED.name()),
+        pageRequest
+    );
   }
 
   public Mono<Void> executeRetryProcess(RetryDeadLetterProcessRequest request, List<DeadLetterProcess> deadLetterProcesses) {
     AbstractRetryProcessorService processor = retryProcessorHelper.getProcessor(request.processType(), request.processName());
-    return processor.execute(deadLetterProcesses);
+
+    if (processor == null) {
+      log.warn(AppLogMessage.message(
+          "#DeadLetterProcess - no retry processor handler found with {} - {}",
+          request.processType(), request.processName()));
+      return Mono.empty();
+    }
+
+    processor.resetCounter();
+
+    return updateInProgress(deadLetterProcesses)
+        .filter(deadLetterProcess -> {
+            if (!processor.isEligibleToBeRetried(deadLetterProcess)) {
+              handleNotEligibleToBeRetried(deadLetterProcess, processor);
+              return false;
+            }
+            return true;
+        })
+        .flatMap(
+            deadLetterProcess -> processor.execute(deadLetterProcess)
+                .flatMap(result -> processor.update(deadLetterProcess, result.getT1(), result.getT2(), result.getT3()))
+            , 4
+        )
+        .then();
+  }
+
+  private void handleNotEligibleToBeRetried(DeadLetterProcess deadLetterProcess,
+      AbstractRetryProcessorService processor) {
+    deadLetterProcess.setStatus(RetryStatus.SUCCESS.name());
+    deadLetterProcess.setUpdatedBy("internal-retry-process");
+    deadLetterProcess.setUpdatedDate(LocalDateTime.now());
+    deadLetterProcessRepository.save(deadLetterProcess).subscribe();
+    processor.getNotEligibleCounter().incrementAndGet();
+    log.warn(AppLogMessage.message("#DeadLetterProccess - {} is not eligible to be retried", deadLetterProcess.getId()));
+  }
+
+  private Flux<DeadLetterProcess> updateInProgress(List<DeadLetterProcess> deadLetterProcesses) {
+    deadLetterProcesses
+        .forEach(d -> d.setStatus(RetryStatus.RETRYING.name()));
+    return deadLetterProcessRepository.saveAll(deadLetterProcesses);
   }
 }

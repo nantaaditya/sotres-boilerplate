@@ -1,51 +1,92 @@
 package com.nantaaditya.sotres.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
-import com.nantaaditya.sotres.helper.SchedulerHelper;
+import com.nantaaditya.sotres.model.constant.RetryStatus;
+import com.nantaaditya.sotres.model.dto.RetryHistoryContext;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
-import reactor.core.publisher.Flux;
+import lombok.extern.log4j.Log4j2;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuple3;
 
+@Log4j2
 @Getter
 public abstract class AbstractRetryProcessorService {
 
   protected DeadLetterProcessRepository deadLetterProcessRepository;
   protected ObjectMapper objectMapper;
-  protected Scheduler scheduler;
+
+  @Getter
+  private final AtomicInteger successCounter = new AtomicInteger(0);
+  @Getter
+  private final AtomicInteger failedCounter = new AtomicInteger(0);
+  @Getter
+  private final AtomicInteger notEligibleCounter = new AtomicInteger(0);
 
   protected AbstractRetryProcessorService(DeadLetterProcessRepository deadLetterProcessRepository,
-      ObjectMapper objectMapper, SchedulerHelper schedulerHelper) {
+      ObjectMapper objectMapper) {
     this.deadLetterProcessRepository = deadLetterProcessRepository;
     this.objectMapper = objectMapper;
-    this.scheduler = schedulerHelper.from("retry-processor");
   }
 
   public abstract String getProcessType();
   public abstract String getProcessName();
-  protected abstract Mono<DeadLetterProcess> doProcess(DeadLetterProcess deadLetterProcess);
+  public abstract boolean isEligibleToBeRetried(DeadLetterProcess deadLetterProcess);
+  public abstract Mono<Tuple3<Boolean, String, Throwable>> execute(DeadLetterProcess deadLetterProcess);
+  public abstract void onSuccess(DeadLetterProcess deadLetterProcess, String response);
+  public abstract void onError(DeadLetterProcess deadLetterProcess, Throwable throwable);
 
-  protected int getParallelism() {
-    return 10;
+  public final void resetCounter() {
+    successCounter.setRelease(0);
+    failedCounter.setRelease(0);
+    notEligibleCounter.setRelease(0);
   }
 
-  public Mono<Void> execute(List<DeadLetterProcess> deadLetterProcesses) {
-    return Flux.fromIterable(deadLetterProcesses)
-      .flatMap(deadLetterProcess -> update(deadLetterProcess), getParallelism())
-      .flatMap(deadLetterProcess -> doProcess(deadLetterProcess), getParallelism())
-      .subscribeOn(scheduler)
-      .then();
-  }
+  public final <T> Mono<DeadLetterProcess> update(DeadLetterProcess deadLetterProcess, boolean result,
+      String response, Throwable throwable) {
+    if (result) {
+      onSuccess(deadLetterProcess, response);
+      deadLetterProcess.setStatus(RetryStatus.SUCCESS.name());
+      successCounter.incrementAndGet();
+    } else {
+      onError(deadLetterProcess, throwable);
+      boolean isMaxRetry = deadLetterProcess.getRetryCount() + 1 < deadLetterProcess.getMaxRetry();
+      deadLetterProcess.setStatus(isMaxRetry ? RetryStatus.FAILED.name() : RetryStatus.EXHAUSTED.name());
+      failedCounter.incrementAndGet();
+    }
 
-  private Mono<DeadLetterProcess> update(DeadLetterProcess deadLetterProcess) {
-    deadLetterProcess.setProcessed(true);
+    Optional.ofNullable(throwable)
+        .ifPresent(t -> deadLetterProcess.setLastError(t.getMessage()));
+    updateRetryHistories(deadLetterProcess, response, throwable);
+    deadLetterProcess.setRetryCount(deadLetterProcess.getRetryCount() + 1);
     deadLetterProcess.setUpdatedBy("internal-retry-process");
     deadLetterProcess.setUpdatedDate(LocalDateTime.now());
     return deadLetterProcessRepository.save(deadLetterProcess);
+  }
+
+  private <T> void updateRetryHistories(DeadLetterProcess deadLetterProcess, String response,
+      Throwable throwable) {
+    try {
+      List<RetryHistoryContext> retryHistories = objectMapper.readValue(deadLetterProcess.getRetryHistories(),
+          new TypeReference<List<RetryHistoryContext>>(){});
+      retryHistories.add(new RetryHistoryContext(
+          deadLetterProcess.getRetryCount() + 1,
+          Optional.ofNullable(response).orElse(null),
+          Optional.ofNullable(throwable).map(Throwable::getMessage).orElse(null)
+      ));
+      deadLetterProcess.setRetryHistories(objectMapper.writeValueAsBytes(retryHistories));
+    } catch (IOException e) {
+      log.error(AppLogMessage.message("#Retry - failed to update retry histories {}", deadLetterProcess.getId()).error(e));
+    }
   }
 
 }
