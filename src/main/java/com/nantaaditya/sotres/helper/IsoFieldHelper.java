@@ -46,6 +46,36 @@ public class IsoFieldHelper {
     return "";
   }
 
+  public static boolean isMTIRequest(int type) {
+    String mti = getMTI(type);
+    if (mti == null || mti.length() < 4) {
+      return false;
+    }
+
+    char functionDigit = mti.charAt(2);
+
+    return switch (functionDigit) {
+      case '0', '2', '4' -> true; // 0=Req, 2=Advice, 4=Notif
+      case '1', '3', '5' -> false; // 1=ReqRes, 3=AdvRes, 5=NotifRes
+      default -> false;
+    };
+  }
+
+  public static boolean isMTIResponse(int type) {
+    String mti = getMTI(type);
+    if (mti == null || mti.length() < 4) {
+      return false;
+    }
+
+    char functionDigit = mti.charAt(2);
+
+    return switch (functionDigit) {
+      case '0', '2', '4' -> false; // 0=Req, 2=Advice, 4=Notif
+      case '1', '3', '5' -> true; // 1=ReqRes, 3=AdvRes, 5=NotifRes
+      default -> false;
+    };
+  }
+
   public static BigDecimal convertAmount(double amount, int fractionDigit) {
     if (fractionDigit < 1 || amount == 0) {
       return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -173,6 +203,8 @@ public class IsoFieldHelper {
         .append(getField(request, 11)) // STAN
         .append("-")
         .append(getField(request, 37)) // RRN
+        .append("-")
+        .append(getField(request, 7)) // Date
         .toString();
   }
 
@@ -227,18 +259,20 @@ public class IsoFieldHelper {
   }
 
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {
-    IsoMessage response = messageFactoryHelper.getDefaultMessageFactory()
-        .createResponse(request);
-    response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
+    sendResponse(context, request, response -> {
+      response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
+    });
+  }
+
+  public void sendResponse(ChannelHandlerContext context, IsoMessage request, Consumer<IsoMessage> responseConsumer) {
+    IsoMessage response = createResponse(request);
+    responseConsumer.accept(response);
     isoMessageLoggerHelper.logIsoMessage(response);
     context.writeAndFlush(response);
   }
 
-  public void sendResponse(ChannelHandlerContext context, IsoMessage request, Consumer<IsoMessage> responseConsumer) {
-    IsoMessage response = messageFactoryHelper.getDefaultMessageFactory()
-        .createResponse(request);
-    responseConsumer.accept(response);
-    isoMessageLoggerHelper.logIsoMessage(response);
-    context.writeAndFlush(response);
+
+  public IsoMessage createResponse(IsoMessage request) {
+    return messageFactoryHelper.getDefaultMessageFactory().createResponse(request);
   }
 }

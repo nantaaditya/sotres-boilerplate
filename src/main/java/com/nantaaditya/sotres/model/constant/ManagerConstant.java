@@ -4,7 +4,8 @@ import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 
 public enum ManagerConstant {
-  TRANSACTION("transaction");
+  TRANSACTION("transaction"),
+  API("api");
 
   @Getter
   private String pool;

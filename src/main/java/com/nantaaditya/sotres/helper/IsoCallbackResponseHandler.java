@@ -1,6 +1,5 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.IsoCallbackConstant;
 import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.PropertiesGroup;
@@ -21,18 +20,18 @@ public class IsoCallbackResponseHandler
     implements IsoCallbackConstant {
 
   private final TracerHelper tracerHelper;
-  private final IsoMessageRegistry isoMessageRegistry;
-  private final List<String> responseCallbackSelectors;
+  private final IsoCallbackRegistry isoCallbackRegistry;
+  private final List<String> registryCallbackSelectors;
 
-  public IsoCallbackResponseHandler(IsoMessageRegistry isoMessageRegistry,
+  public IsoCallbackResponseHandler(IsoCallbackRegistry isoCallbackRegistry,
       SystemPropertiesService systemPropertiesService,
       TracerHelper tracerHelper) {
 
-    this.isoMessageRegistry = isoMessageRegistry;
+    this.isoCallbackRegistry = isoCallbackRegistry;
     this.tracerHelper = tracerHelper;
-    this.responseCallbackSelectors = PropertiesGroup.getList(
+    this.registryCallbackSelectors = PropertiesGroup.getList(
         systemPropertiesService,
-        PropertiesGroup.RESPONSE_CALLBACK_SELECTOR
+        PropertiesGroup.REGISTRY_CALLBACK_SELECTOR
     );
 
   }
@@ -45,11 +44,11 @@ public class IsoCallbackResponseHandler
 
     Span span = tracerHelper.getTracer().nextSpan().name(CALLBACK_NAME).start();
     try (Tracer.SpanInScope ws = tracerHelper.getTracer().withSpan(span)) {
-      tracerHelper.setBaggage(HeaderConstant.REQUEST_ID.getHeader(), IsoFieldHelper.getField(msg, 37));
+      tracerHelper.createTraceContext(msg);
 
       // match is response callback
-      if (this.responseCallbackSelectors.contains(selector)) {
-        RegistryContext registryContext = isoMessageRegistry.onResponse(msg);
+      if (this.registryCallbackSelectors.contains(selector)) {
+        RegistryContext registryContext = isoCallbackRegistry.onResponse(msg);
         if (registryContext.lateResponse()) {
           isoCategory = IsoCategory.LATE_RESPONSE;
         } else if (registryContext.unknownMatchResponse()) {

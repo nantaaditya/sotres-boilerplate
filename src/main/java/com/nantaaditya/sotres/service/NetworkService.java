@@ -60,28 +60,12 @@ public class NetworkService {
 
   @Async
   public void sendSignOn() {
-    try {
-      if (enhancedIsoClient.isConnected()) {
-        IsoMessage request = constructMessage(NetworkInformationCode.LOGON, "Log on");
-        isoMessageLoggerHelper.logIsoMessage(request);
-        enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
-      }
-    } catch (InterruptedException e) {
-      log.error(AppLogMessage.message("#Network - send sign on failed. with message : {}", e.getMessage()).error(e));
-    }
+    sendMessage(NetworkInformationCode.LOGON, "log on");
   }
 
   @Async
   public void sendSignOff() {
-    try {
-      if (enhancedIsoClient.isConnected()) {
-        IsoMessage request = constructMessage(NetworkInformationCode.LOGOFF, "Log off");
-        isoMessageLoggerHelper.logIsoMessage(request);
-        enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
-      }
-    } catch (InterruptedException e) {
-      log.error(AppLogMessage.message("#Network - send sign off failed. with message : {}", e.getMessage()).error(e));
-    }
+    sendMessage(NetworkInformationCode.LOGOFF, "log off");
   }
 
   public boolean sendEcho() {
@@ -96,6 +80,18 @@ public class NetworkService {
     } catch (InterruptedException e) {
      log.error(AppLogMessage.message("#Network - send echo failed. with message : {} , and root cause : {}", e.getMessage()).error(e));
       return false;
+    }
+  }
+
+  private void sendMessage(NetworkInformationCode nic, String message) {
+    try {
+      if (enhancedIsoClient.isConnected()) {
+        IsoMessage request = constructMessage(nic, message);
+        isoMessageLoggerHelper.logIsoMessage(request);
+        enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+      }
+    } catch (InterruptedException e) {
+      log.error(AppLogMessage.message("#Network - send {} failed. with message : {}", message, e.getMessage()).error(e));
     }
   }
 

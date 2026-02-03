@@ -16,7 +16,8 @@ public enum PropertiesGroup {
   CURRENCY_FRACTIONS("currency", "fractions"),
   PATH_MAPPING("endpoint_path", "mapping"),
   RESPONSE_MAPPING("response", "incoming_outgoing_mapping"),
-  RESPONSE_CALLBACK_SELECTOR("callback", "response_selector");
+  REGISTRY_RESPONSE_SELECTOR("registry", "response_selector"), // selector when use sendWithResponse
+  REGISTRY_CALLBACK_SELECTOR("registry", "callback_selector"); // selector when use sendWithCallback
 
   private String group;
   private String propertyId;

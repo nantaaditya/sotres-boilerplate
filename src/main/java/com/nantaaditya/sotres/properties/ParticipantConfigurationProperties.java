@@ -5,7 +5,7 @@ import com.nantaaditya.sotres.properties.embedded.ParticipantPoolConfiguration;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@ConfigurationProperties("participant.configuration")
+@ConfigurationProperties("participant.clientConfiguration")
 public record ParticipantConfigurationProperties(
     Map<ManagerConstant, ParticipantPoolConfiguration> pool
 ) {

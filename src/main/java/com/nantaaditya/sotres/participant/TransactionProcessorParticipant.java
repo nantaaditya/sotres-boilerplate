@@ -11,9 +11,12 @@ import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.IsoResponseCode;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
+import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -33,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import lombok.extern.log4j.Log4j2;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.MDC;
@@ -55,6 +59,10 @@ public class TransactionProcessorParticipant
   private final Tracer tracer;
   private final Scheduler scheduler;
   private final IsoMessageProperties isoMessageProperties;
+  private final ClientProperties clientProperties;
+  private final List<String> responseRegistrySelectors;
+
+  private static final Set<Integer> MTIs = Set.of(0x800, 0x810);
 
   public TransactionProcessorParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler> transactionHandlers,
@@ -62,7 +70,7 @@ public class TransactionProcessorParticipant
       ObservationRegistry observationRegistry, TracerHelper tracerHelper, Tracer tracer,
       List<SenderProtocolStrategy> senderProtocolStrategies,
       ParticipantConfigurationProperties participantConfigurationProperties,
-      IsoMessageProperties isoMessageProperties) {
+      IsoMessageProperties isoMessageProperties, ClientProperties clientProperties) {
 
     this.systemPropertiesService = systemPropertiesService;
     this.transactionHandlers = transactionHandlers;
@@ -72,8 +80,13 @@ public class TransactionProcessorParticipant
     this.tracerHelper = tracerHelper;
     this.tracer = tracer;
     this.isoMessageProperties = isoMessageProperties;
+    this.clientProperties = clientProperties;
 
     this.scheduler = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).createScheduler();
+    this.responseRegistrySelectors = PropertiesGroup.getList(
+        this.systemPropertiesService,
+        PropertiesGroup.REGISTRY_RESPONSE_SELECTOR
+    );
     this.senderProtocolStrategy = senderProtocolStrategies.stream()
         .filter(sender -> sender.getProtocol() == isoMessageProperties.outgoingProtocol())
         .findAny()
@@ -82,15 +95,12 @@ public class TransactionProcessorParticipant
 
   @Override
   public boolean applies(@NotNull IsoMessage isoMessage) {
-    return isoMessage.getType() != 0x800 && isoMessage.getType() != 0x810;
+    return !MTIs.contains(isoMessage.getType());
   }
 
   @Override
   public boolean onMessage(@NotNull ChannelHandlerContext ctx, @NotNull IsoMessage isoMessage) {
     // start observation
-    IsoCategory isoCategory = (IsoCategory) ctx.channel()
-        .attr(AttributeKey.valueOf(CALLBACK_ATTRIBUTE))
-        .get();
     Observation observation = Observation.start(ObservationConstant.API_PUBLIC.getName(), observationRegistry);
     Span span = tracerHelper.startSpan(tracer, ObservationConstant.API_PUBLIC.getName());
     Map<String, String> mdc = new HashMap<>();
@@ -99,15 +109,25 @@ public class TransactionProcessorParticipant
       // initiate manual span
       TraceContext traceContext = span.context();
       initiateSpan(isoMessage, mdc);
-      ParticipantContext participantContext = new ParticipantContext();
+      IsoCategory isoCategory = (IsoCategory) ctx.channel()
+          .attr(AttributeKey.valueOf(CALLBACK_ATTRIBUTE))
+          .get();
 
-      Mono.fromCallable(() -> RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory)) // convert to internal DTO
+      ParticipantContext participantContext = new ParticipantContext();
+      RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory);  // convert to internal DTO
+
+      // propagate to the next participant
+      if (isResponseRegistryEnabled(requestContext)) {
+        return true;
+      }
+
+      Mono.fromCallable(() -> requestContext)
           .transformDeferred(contextMono -> tracerHelper.withSpanScopeAndMDC(contextMono, span, mdc))
           .filter(Objects::nonNull)
           // log & observe iso message
-          .map(requestContext -> logAndObserve(isoMessage, requestContext, observation))
+          .map(request -> logAndObserve(isoMessage, request, observation))
           // get transaction handler by selector
-          .flatMap(requestContext -> selectTransactionHandler(participantContext, ctx, isoMessage, requestContext, observation))
+          .flatMap(request -> selectTransactionHandler(participantContext, ctx, isoMessage, request, observation))
           // execute transaction handler
           .flatMap(this::executeHandler)
           // process & send message using specific protocol
@@ -128,9 +148,10 @@ public class TransactionProcessorParticipant
           );
 
       MDC.setContextMap(mdc);
-      log.info(AppLogMessage.message("#Transaction - message with RRN {} processed", IsoFieldHelper.getField(isoMessage, 37)));
-      return false;
     }
+
+    log.info(AppLogMessage.message("#Transaction - message with RRN {} processed", IsoFieldHelper.getField(isoMessage, 37)));
+    return false;
   }
 
   private RequestContext logAndObserve(IsoMessage isoMessage,
@@ -186,5 +207,10 @@ public class TransactionProcessorParticipant
     return transactionHandlers.stream()
         .filter(handler -> handler.getSelectors().contains(requestContext.getSelector()))
         .findFirst();
+  }
+
+  private boolean isResponseRegistryEnabled(RequestContext requestContext) {
+    return RegistryType.RESPONSE == clientProperties.getRegistryType()
+        && responseRegistrySelectors.contains(requestContext.getSelector());
   }
 }

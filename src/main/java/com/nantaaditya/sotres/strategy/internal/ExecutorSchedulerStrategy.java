@@ -14,7 +14,7 @@ public class ExecutorSchedulerStrategy implements SchedulerStrategy {
     return Optional.ofNullable(schedulerConfiguration)
         .map(SchedulerConfiguration::getExecutor)
         .map(this::buildScheduler)
-        .orElseThrow(() -> new IllegalArgumentException("executor scheduler configuration is null"));
+        .orElseThrow(() -> new IllegalArgumentException("executor scheduler clientConfiguration is null"));
   }
 
   private Scheduler buildScheduler(ExecutorScheduler configuration) {

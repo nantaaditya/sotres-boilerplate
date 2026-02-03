@@ -1,5 +1,6 @@
 package com.nantaaditya.sotres.properties;
 
+import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.properties.embedded.ClientConfiguration;
 import java.beans.Transient;
 import java.util.HashMap;
@@ -12,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @SuppressWarnings("squid:S1068")
 public class ClientProperties {
     private Map<String, ClientConfiguration> configurations = new HashMap<>();
+    private RegistryType registryType;
 
     @Transient
     public ClientConfiguration getConfiguration(String clientName) {
