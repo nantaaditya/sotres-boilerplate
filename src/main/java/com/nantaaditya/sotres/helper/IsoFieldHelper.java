@@ -239,7 +239,7 @@ public class IsoFieldHelper {
   }
 
   public static String substring(String str, int start) {
-    return substring(str, start, 0);
+    return substring(str, start, str.length());
   }
 
   public static String substring(String str, int start, int end) {
