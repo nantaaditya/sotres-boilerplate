@@ -39,7 +39,8 @@ public class IsoFieldHelper {
 
   public static String getMTI(int type) {
     try {
-      return String.format("%04x", type);
+      String mti = Integer.toHexString(type);
+      return StringUtils.leftPad(mti, 4, '0');
     } catch (Exception e) {
       log.error(AppLogMessage.message("#Network - cannot convert ISO8583 MTI. with message : {}", e.getMessage()).error(e));
     }

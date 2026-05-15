@@ -2,6 +2,7 @@ package com.nantaaditya.sotres.model.constant;
 
 import com.nantaaditya.sotres.helper.StringHelper;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ public enum PropertiesGroup {
     return (List<String>) StringHelper.toCollection(
         systemPropertiesService.getProperty(group, group.getPropertyId()),
         ",",
-        List.class
+        ArrayList.class
     );
   }
 

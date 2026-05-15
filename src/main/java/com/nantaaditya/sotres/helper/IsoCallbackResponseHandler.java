@@ -49,7 +49,7 @@ public class IsoCallbackResponseHandler
       tracerHelper.createTraceContext(msg);
 
       // match is response callback
-      if (this.registryCallbackSelectors.contains(selector)) {
+      if (this.registryCallbackSelectors != null && this.registryCallbackSelectors.contains(selector)) {
         RegistryContext registryContext = isoCallbackRegistry.onResponse(msg);
         if (registryContext.lateResponse()) {
           isoCategory = IsoCategory.LATE_RESPONSE;
