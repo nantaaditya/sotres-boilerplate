@@ -81,12 +81,9 @@ public class IsoFieldHelper {
       return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     }
 
-    for (int i=0; i<fractionDigit; i++) {
-      amount /= 10;
-    }
-
-    BigDecimal result = BigDecimal.valueOf(amount);
-    return result.setScale(2, RoundingMode.HALF_UP);
+    return BigDecimal.valueOf(amount)
+        .movePointLeft(fractionDigit)
+        .setScale(2, RoundingMode.HALF_UP);
   }
 
   public static String generateNumeric(int length) {
@@ -162,7 +159,7 @@ public class IsoFieldHelper {
       String tag = raw.substring(i, i + tagLength);
       i += tagLength;
       int valueLength = Integer.parseInt(raw.substring(i, i + lengthSize));
-      i += 2;
+      i += lengthSize;
       String value = raw.substring(i, i + valueLength);
       i += valueLength;
 
@@ -189,7 +186,13 @@ public class IsoFieldHelper {
   }
 
   public static String getCorrelationId(IsoMessage request) {
-    String productIndicator = unpackTLV(getField(request, 48), 2, 2)
+    String de48 = getField(request,48);
+    if (de48 == null) {
+      log.error(AppLogMessage.message("#CorrelationId is null").additionalData(request));
+      return null;
+    }
+
+    String productIndicator = unpackTLV(de48, 2, 2)
         .getOrDefault("PI", "NA"); // product indicator
     String processingCode = Optional.ofNullable(getField(request, 3)) // processing code
         .map(result -> substring(result, 0, 2))

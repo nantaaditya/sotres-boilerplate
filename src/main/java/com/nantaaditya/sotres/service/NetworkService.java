@@ -17,6 +17,7 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
@@ -78,7 +79,8 @@ public class NetworkService {
       }
       return false;
     } catch (InterruptedException e) {
-     log.error(AppLogMessage.message("#Network - send echo failed. with message : {} , and root cause : {}", e.getMessage()).error(e));
+      Thread.currentThread().interrupt();
+      log.error(AppLogMessage.message("#Network - send echo failed. with message : {} , and root cause : {}", e.getMessage()).error(e));
       return false;
     }
   }
@@ -91,6 +93,7 @@ public class NetworkService {
         enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
       }
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       log.error(AppLogMessage.message("#Network - send {} failed. with message : {}", message, e.getMessage()).error(e));
     }
   }

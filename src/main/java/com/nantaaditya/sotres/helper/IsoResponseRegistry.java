@@ -41,7 +41,7 @@ public class IsoResponseRegistry extends BaseRegistry {
         .isoMessage(isoMessageLoggerHelper.toLogMessage(request)));
 
     return sink.asMono()
-        .timeout(Duration.ofMillis(this.participantPoolConfiguration.flightPool()))
+        .timeout(Duration.ofMillis(this.participantPoolConfiguration.flightQueueTimeOut()))
         .doFinally(signalType -> {
           pendingRequests.invalidate(correlationId);
         });

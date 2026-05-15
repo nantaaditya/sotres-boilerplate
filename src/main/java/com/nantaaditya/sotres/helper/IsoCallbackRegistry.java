@@ -35,9 +35,7 @@ public class IsoCallbackRegistry extends BaseRegistry {
     );
   }
 
-  public void register(IsoMessage request) {
-    String correlationId = IsoFieldHelper.getCorrelationId(request);
-
+  public void register(String correlationId, IsoMessage request) {
     log.info(AppLogMessage.message("#ISO - registering in-flight key {}", correlationId)
         .isoMessage(isoMessageLoggerHelper.toLogMessage(request)));
 
@@ -51,7 +49,7 @@ public class IsoCallbackRegistry extends BaseRegistry {
         .isoMessage(isoMessageLoggerHelper.toLogMessage(response)));
 
     Boolean success = inFlights.getIfPresent(correlationId);
-    if (success) {
+    if (Boolean.TRUE.equals(success)) {
       remove(correlationId);
       return new RegistryContext(response, false, false);
     }

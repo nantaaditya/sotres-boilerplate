@@ -170,7 +170,7 @@ public class RequestContext {
 
   @Transient
   public AccountType getToAccountType() {
-    return AccountType.fromCode(IsoFieldHelper.substring(transmissionDateTime, 4, 6));
+    return AccountType.fromCode(IsoFieldHelper.substring(processingCode, 4, 6));
   }
 
   @Transient

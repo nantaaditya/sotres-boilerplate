@@ -25,12 +25,12 @@ import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.Tracer.SpanInScope;
 import io.netty.channel.ChannelHandlerContext;
+import jakarta.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.extern.log4j.Log4j2;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -82,13 +82,13 @@ public class TransactionResponseParticipant
    * @return
    */
   @Override
-  public boolean applies(@NonNull IsoMessage isoMessage) {
+  public boolean applies(@NotNull IsoMessage isoMessage) {
     RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, null);
     return !MTIs.contains(isoMessage.getType()) && isResponseRegistryEnabled(requestContext);
   }
 
   @Override
-  public boolean onMessage(@NonNull ChannelHandlerContext ctx, @NonNull IsoMessage isoMessage) {
+  public boolean onMessage(@NotNull ChannelHandlerContext ctx, @NotNull IsoMessage isoMessage) {
     // start observation
     Observation observation = Observation.start(ObservationConstant.API_PUBLIC.getName(), observationRegistry);
     Span span = tracerHelper.startSpan(tracer, ObservationConstant.API_PUBLIC.getName());

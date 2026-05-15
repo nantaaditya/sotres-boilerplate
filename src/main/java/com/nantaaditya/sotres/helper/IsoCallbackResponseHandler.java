@@ -23,6 +23,8 @@ public class IsoCallbackResponseHandler
   private final IsoCallbackRegistry isoCallbackRegistry;
   private final List<String> registryCallbackSelectors;
 
+  private static final AttributeKey<IsoCategory> CALLBACK_KEY = AttributeKey.valueOf(CALLBACK_ATTRIBUTE);
+
   public IsoCallbackResponseHandler(IsoCallbackRegistry isoCallbackRegistry,
       SystemPropertiesService systemPropertiesService,
       TracerHelper tracerHelper) {
@@ -61,7 +63,7 @@ public class IsoCallbackResponseHandler
       }
 
       // attach the classification to the context so the Participant can read it
-      ctx.channel().attr(AttributeKey.valueOf(CALLBACK_ATTRIBUTE)).set(isoCategory);
+      ctx.channel().attr(CALLBACK_KEY).set(isoCategory);
       // pass everything to the TransactionProcessorParticipant
       ctx.fireChannelRead(msg);
     } finally {

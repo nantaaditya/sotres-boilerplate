@@ -88,7 +88,10 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     log.debug(AppLogMessage.message("#Transaction - response from external").additionalData(response));
 
     try {
-      String responseCode = response.getResponseCode();
+      // override response before sending ISO message when necessary
+      ctx.getTransactionHandler().populateResponse(ctx);
+      String responseCode = getResponseCode(response);
+
       if (response == null) {
         log.error(AppLogMessage.message("#Transaction - no response from host"));
         isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), responseCode);
@@ -117,15 +120,24 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     log.error(AppLogMessage.message("#Transaction - got exception").error(throwable));
 
     if (throwable instanceof TransactionException e) {
+      // when timeout do nothing, will be reverse from switcher
       if (e.getOriginalError() instanceof ReadTimeoutException || e.getOriginalError() instanceof TimeoutException) {
         log.error(AppLogMessage.message("#Transaction - timeout occurred for RRN {}, no response",
             IsoFieldHelper.getField(ctx.getIsoMessage(),37)).error(throwable));
       } else {
+
         isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
       }
     } else {
+      // when unknown error do nothing, will be reverse from switcher
       log.error(AppLogMessage.message("#Transaction - skipping unknown exception").error(throwable));
     }
+  }
+
+  private String getResponseCode(ResponseContext response) {
+    return Optional.ofNullable(response)
+        .map(ResponseContext::getResponseCode)
+        .orElseGet(() -> IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
   }
 
   private String mappingResponseCode(String responseCode) {

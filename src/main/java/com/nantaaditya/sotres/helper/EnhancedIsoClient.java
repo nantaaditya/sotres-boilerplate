@@ -76,14 +76,14 @@ public class EnhancedIsoClient
 
     // leverage the base class send method
     String correlationId = IsoFieldHelper.getCorrelationId(request);
-    isoCallbackRegistry.register(request);
+    isoCallbackRegistry.register(correlationId, request);
     return Mono.create(sink -> {
       sendAsync(request)
         .addListener(future -> {
           if (future.isSuccess()) {
             sink.success(); // async ACK
           } else {
-            isoCallbackRegistry.remove(IsoFieldHelper.getCorrelationId(request));
+            isoCallbackRegistry.remove(correlationId);
             sink.error(future.cause());
           }
         });

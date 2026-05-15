@@ -16,20 +16,18 @@ public class ParticipantContext {
   private ChannelHandlerContext channelHandlerContext;
   private Observation observation;
 
-  public static ParticipantContext create(ParticipantContext participantContext,
+  public void onUpdate(
       ChannelHandlerContext ctx, IsoMessage isoMessage,
       AbstractTransactionHandler handler, RequestContext request, Observation observation) {
 
-    participantContext.channelHandlerContext = ctx;
-    participantContext.isoMessage = isoMessage;
-    participantContext.requestContext = request;
-    participantContext.observation = observation;
-
-    return participantContext;
+    this.channelHandlerContext = ctx;
+    this.isoMessage = isoMessage;
+    this.transactionHandler = handler;
+    this.requestContext = requestContext;
+    this.observation = observation;
   }
 
-  public static ParticipantContext response(ParticipantContext ctx, ResponseContext response) {
-    ctx.responseContext = response;
-    return ctx;
+  public void onResponse(ResponseContext response) {
+    this.responseContext = response;
   }
 }

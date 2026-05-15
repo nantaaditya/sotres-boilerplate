@@ -31,6 +31,7 @@ import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.Tracer.SpanInScope;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.AttributeKey;
+import jakarta.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import lombok.extern.log4j.Log4j2;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -90,7 +90,7 @@ public class TransactionProcessorParticipant
     this.senderProtocolStrategy = senderProtocolStrategies.stream()
         .filter(sender -> sender.getProtocol() == isoMessageProperties.outgoingProtocol())
         .findAny()
-        .orElse(null);
+        .orElseThrow(() -> new IllegalStateException("no sender protocol strategy found: "+isoMessageProperties.outgoingProtocol()));
   }
 
   @Override
@@ -116,7 +116,7 @@ public class TransactionProcessorParticipant
       ParticipantContext participantContext = new ParticipantContext();
       RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory);  // convert to internal DTO
 
-      // propagate to the next participant
+      // propagate to the next response participant (API -> ISO -> wait for response -> ISO -> API)
       if (isResponseRegistryEnabled(requestContext)) {
         return true;
       }
@@ -177,7 +177,10 @@ public class TransactionProcessorParticipant
 
     log.debug(AppLogMessage.message("#Transaction - DTO").additionalData(ctx.getRequestContext()));
     return senderProtocolStrategy.send(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), ctx.getRequestContext())
-        .map(responseContext -> ParticipantContext.response(ctx, responseContext));
+        .map(responseContext -> {
+          ctx.onResponse(responseContext);
+          return ctx;
+        });
   }
 
   private void initiateSpan(IsoMessage isoMessage, Map<String, String> mdc) {
@@ -197,10 +200,10 @@ public class TransactionProcessorParticipant
       isoFieldHelper.sendResponse(context, isoMessage, IsoResponseCode.UNABLE_TO_ROUTE_TRANSACTION.getCode());
       return Mono.empty();
     }
-    return Mono.fromSupplier(() -> ParticipantContext.create(
-        participantContext, context, isoMessage, maybeHandler.get(),requestContext, observation
-      )
-    );
+
+    AbstractTransactionHandler handler = maybeHandler.get();
+    participantContext.onUpdate(context, isoMessage, handler, requestContext, observation);
+    return Mono.fromSupplier(() -> participantContext);
   }
 
   private Optional<AbstractTransactionHandler> findTransactionHandler(RequestContext requestContext) {

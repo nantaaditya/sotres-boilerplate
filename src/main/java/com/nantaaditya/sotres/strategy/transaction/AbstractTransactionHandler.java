@@ -14,6 +14,10 @@ public abstract class AbstractTransactionHandler {
 
   protected abstract Mono<ParticipantContext> process(ParticipantContext participantContext);
 
+  public void populateResponse(ParticipantContext participantContext) {
+    // override on transaction handler child class
+  }
+
   public Mono<ParticipantContext> execute(ParticipantContext participantContext) {
     return validate(participantContext)
         .flatMap(this::process);

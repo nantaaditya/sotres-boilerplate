@@ -59,8 +59,8 @@ public abstract class AbstractRetryProcessorService {
       successCounter.incrementAndGet();
     } else {
       onError(deadLetterProcess, throwable);
-      boolean isMaxRetry = deadLetterProcess.getRetryCount() + 1 < deadLetterProcess.getMaxRetry();
-      deadLetterProcess.setStatus(isMaxRetry ? RetryStatus.FAILED.name() : RetryStatus.EXHAUSTED.name());
+      boolean isMaxRetry = deadLetterProcess.getRetryCount() + 1 >= deadLetterProcess.getMaxRetry();
+      deadLetterProcess.setStatus(isMaxRetry ? RetryStatus.EXHAUSTED.name() : RetryStatus.FAILED.name());
       failedCounter.incrementAndGet();
     }
 
