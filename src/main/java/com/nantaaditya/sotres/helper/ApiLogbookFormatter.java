@@ -90,15 +90,20 @@ public class ApiLogbookFormatter implements HttpLogFormatter {
   }
 
   private Optional<Map<String, List<String>>> prepareHeaders(final HttpMessage message) {
-    final Map<String, List<String>> headers = message.getHeaders();
+    Map<String, List<String>> headers = message.getHeaders();
+    if (headers == null || headers.isEmpty()) {
+      return Optional.empty();
+    }
+
+    final Map<String, List<String>> result = new LinkedHashMap<>();
     for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-      headers.put(entry.getKey(),
+      result.put(entry.getKey(),
           logProperties.isSensitiveFields(entry.getKey()) ?
               entry.getValue().stream().map(MaskingHelper::masking).toList() :
               entry.getValue()
       );
     }
-    return Optional.ofNullable(headers.isEmpty() ? null : headers);
+    return Optional.of(result);
   }
 
   private Optional<Object> prepareBody(final HttpMessage message) throws IOException {
