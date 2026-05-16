@@ -149,7 +149,8 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), any(Consumer.class));
+    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage),
+        any(Consumer.class));
     verify(observation).stop();
   }
 

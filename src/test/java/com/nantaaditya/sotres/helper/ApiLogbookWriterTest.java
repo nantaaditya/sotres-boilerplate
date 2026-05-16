@@ -19,8 +19,10 @@ import org.zalando.logbook.Precorrelation;
 @ExtendWith(MockitoExtension.class)
 class ApiLogbookWriterTest {
 
-  @Mock private Precorrelation precorrelation;
-  @Mock private Correlation correlation;
+  @Mock
+  private Precorrelation precorrelation;
+  @Mock
+  private Correlation correlation;
 
   private ApiLogbookWriter writer;
 

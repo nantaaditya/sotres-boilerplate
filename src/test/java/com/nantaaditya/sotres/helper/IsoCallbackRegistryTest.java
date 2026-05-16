@@ -3,7 +3,6 @@ package com.nantaaditya.sotres.helper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.dto.RegistryContext;
@@ -47,7 +46,8 @@ class IsoCallbackRegistryTest {
 
   @BeforeEach
   void setUp() {
-    lenient().when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(config);
+    lenient().when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
+        .thenReturn(config);
     lenient().when(isoMessageLoggerHelper.toLogMessage(any())).thenReturn(null);
     registry = new IsoCallbackRegistry(isoMessageLoggerHelper, participantConfigurationProperties);
   }

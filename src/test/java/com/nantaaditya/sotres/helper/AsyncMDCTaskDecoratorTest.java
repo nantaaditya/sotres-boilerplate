@@ -43,7 +43,8 @@ class AsyncMDCTaskDecoratorTest {
   void decorate_alwaysClearsMdcAfterExecution() {
     MDC.put("traceId", "test-trace-123");
 
-    Runnable decorated = decorator.decorate(() -> {});
+    Runnable decorated = decorator.decorate(() -> {
+    });
     MDC.clear();
     decorated.run();
 

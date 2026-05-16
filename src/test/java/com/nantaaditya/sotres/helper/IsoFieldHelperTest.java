@@ -1,8 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.registerCustomDateFormat;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;

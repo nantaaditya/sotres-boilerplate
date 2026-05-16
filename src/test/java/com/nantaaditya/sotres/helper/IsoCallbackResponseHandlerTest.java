@@ -82,7 +82,8 @@ class IsoCallbackResponseHandlerTest {
     when(msg.getField(3)).thenReturn(isoValue("000000"));
     when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
 
-    handler = new IsoCallbackResponseHandler(isoCallbackRegistry, systemPropertiesService, tracerHelper);
+    handler = new IsoCallbackResponseHandler(isoCallbackRegistry, systemPropertiesService,
+        tracerHelper);
   }
 
   @SuppressWarnings("unchecked")

@@ -19,7 +19,8 @@ import reactor.core.publisher.Flux;
 @ExtendWith(MockitoExtension.class)
 class SystemPropertiesServiceImplTest {
 
-  @Mock private SystemPropertiesRepository systemPropertiesRepository;
+  @Mock
+  private SystemPropertiesRepository systemPropertiesRepository;
 
   private SystemPropertiesServiceImpl service;
 
@@ -153,10 +154,12 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Flux.just(prop("currency", "fractions", "840:2")));
 
       service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo("360:2");
+      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo(
+          "360:2");
 
       service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo("840:2");
+      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo(
+          "840:2");
     }
   }
 }

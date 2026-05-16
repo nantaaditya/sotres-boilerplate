@@ -18,7 +18,8 @@ import org.springframework.boot.actuate.health.Status;
 @ExtendWith(MockitoExtension.class)
 class CustomHealthConfigurationTest {
 
-  @Mock private EnhancedIsoClient enhancedIsoClient;
+  @Mock
+  private EnhancedIsoClient enhancedIsoClient;
 
   private HealthCheckHelper healthCheckHelper;
   private CustomHealthConfiguration config;

@@ -46,7 +46,8 @@ class IsoResponseRegistryTest {
 
   @BeforeEach
   void setUp() {
-    when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(config);
+    when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(
+        config);
     when(isoMessageLoggerHelper.toLogMessage(any())).thenReturn(null);
     registry = new IsoResponseRegistry(isoMessageLoggerHelper, participantConfigurationProperties);
   }

@@ -36,7 +36,8 @@ class TransactionClientTest {
 
   private WireMockServer wireMockServer;
 
-  @Mock private SystemPropertiesService systemPropertiesService;
+  @Mock
+  private SystemPropertiesService systemPropertiesService;
 
   private TransactionClient transactionClient;
 

@@ -166,20 +166,24 @@ class DateTimeHelperTest {
     @DisplayName("returns formatted string for valid epoch millis")
     void getDateInFormat_validMillis_returnsFormatted() {
       long millis = 1718444445000L;
-      String result = DateTimeHelper.getDateInFormat(millis, DateTimeHelper.LOG_TIMESTAMP_FORMATTER);
-      assertThat(result).isNotNull().isNotEmpty().matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}:\\d{3}");
+      String result = DateTimeHelper.getDateInFormat(millis,
+          DateTimeHelper.LOG_TIMESTAMP_FORMATTER);
+      assertThat(result).isNotNull().isNotEmpty()
+          .matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}:\\d{3}");
     }
 
     @Test
     @DisplayName("returns null for zero millis")
     void getDateInFormat_zeroMillis_returnsNull() {
-      assertThat(DateTimeHelper.getDateInFormat(0L, DateTimeHelper.LOG_TIMESTAMP_FORMATTER)).isNull();
+      assertThat(
+          DateTimeHelper.getDateInFormat(0L, DateTimeHelper.LOG_TIMESTAMP_FORMATTER)).isNull();
     }
 
     @Test
     @DisplayName("returns null for negative millis")
     void getDateInFormat_negativeMillis_returnsNull() {
-      assertThat(DateTimeHelper.getDateInFormat(-1L, DateTimeHelper.LOG_TIMESTAMP_FORMATTER)).isNull();
+      assertThat(
+          DateTimeHelper.getDateInFormat(-1L, DateTimeHelper.LOG_TIMESTAMP_FORMATTER)).isNull();
     }
 
     @Test

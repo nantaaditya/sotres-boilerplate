@@ -22,9 +22,12 @@ import org.zalando.logbook.Logbook;
 @ExtendWith(MockitoExtension.class)
 class AppLogbookConfigurationTest {
 
-  @Mock private TracerHelper tracerHelper;
-  @Mock private LogProperties logProperties;
-  @Mock private Logbook logbook;
+  @Mock
+  private TracerHelper tracerHelper;
+  @Mock
+  private LogProperties logProperties;
+  @Mock
+  private Logbook logbook;
 
   private AppLogbookConfiguration config;
   private Gson gson;

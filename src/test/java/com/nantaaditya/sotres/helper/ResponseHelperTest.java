@@ -22,8 +22,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ResponseHelperTest {
 
-  @Mock private TracerHelper tracerHelper;
-  @Mock private ContextHelper contextHelper;
+  @Mock
+  private TracerHelper tracerHelper;
+  @Mock
+  private ContextHelper contextHelper;
 
   private ResponseHelper responseHelper;
 
@@ -40,7 +42,8 @@ class ResponseHelperTest {
 
     assertThat(result).isNotNull();
     assertThat(result.getResponse().getCode()).isEqualTo(ApiResponseCode.SUCCESS.getCode());
-    assertThat(result.getResponse().getDescription()).isEqualTo(ApiResponseCode.SUCCESS.getMessage());
+    assertThat(result.getResponse().getDescription()).isEqualTo(
+        ApiResponseCode.SUCCESS.getMessage());
     assertThat(result.getData()).isEqualTo("payload");
     assertThat(result.getError()).isNull();
   }
@@ -60,7 +63,8 @@ class ResponseHelperTest {
 
     assertThat(result).isNotNull();
     assertThat(result.getResponse().getCode()).isEqualTo(ApiResponseCode.BAD_REQUEST.getCode());
-    assertThat(result.getResponse().getDescription()).isEqualTo(ApiResponseCode.BAD_REQUEST.getMessage());
+    assertThat(result.getResponse().getDescription()).isEqualTo(
+        ApiResponseCode.BAD_REQUEST.getMessage());
     assertThat(result.getData()).isNull();
   }
 

@@ -23,11 +23,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @SuppressWarnings("rawtypes")
 class RequestContextHelperTest {
 
-  @Mock private IsoMessage isoMessage;
-  @Mock private SystemPropertiesService systemPropertiesService;
-  @Mock private IsoValue de4Field;
-  @Mock private IsoValue de28Field;
-  @Mock private IsoValue de48Field;
+  @Mock
+  private IsoMessage isoMessage;
+  @Mock
+  private SystemPropertiesService systemPropertiesService;
+  @Mock
+  private IsoValue de4Field;
+  @Mock
+  private IsoValue de28Field;
+  @Mock
+  private IsoValue de48Field;
 
   @BeforeEach
   void setUp() {
@@ -42,14 +47,16 @@ class RequestContextHelperTest {
     lenient().when(isoMessage.getField(48)).thenReturn(de48Field);
     lenient().when(isoMessage.hasField(90)).thenReturn(false);
 
-    lenient().when(systemPropertiesService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
+    lenient().when(
+            systemPropertiesService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
         .thenReturn("360:2");
   }
 
   @Test
   @DisplayName("create with SUCCESS category returns RequestContext with mti populated")
   void create_withSuccessCategory_returnsMtiInRequestContext() {
-    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, IsoCategory.SUCCESS);
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.SUCCESS);
 
     assertThat(context).isNotNull();
     assertThat(context.getMti()).isEqualTo("0200");
@@ -58,7 +65,8 @@ class RequestContextHelperTest {
   @Test
   @DisplayName("create with LATE_RESPONSE sets lateResponse flag only")
   void create_withLateResponse_setsLateResponseFlagOnly() {
-    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, IsoCategory.LATE_RESPONSE);
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.LATE_RESPONSE);
 
     assertThat(context.isLateResponse()).isTrue();
     assertThat(context.isOrphanResponse()).isFalse();
@@ -68,7 +76,8 @@ class RequestContextHelperTest {
   @Test
   @DisplayName("create with ORPHAN sets orphanResponse flag only")
   void create_withOrphan_setsOrphanResponseFlagOnly() {
-    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, IsoCategory.ORPHAN);
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.ORPHAN);
 
     assertThat(context.isOrphanResponse()).isTrue();
     assertThat(context.isLateResponse()).isFalse();
@@ -78,7 +87,8 @@ class RequestContextHelperTest {
   @Test
   @DisplayName("create with EXTERNAL_REQUEST sets externalRequest flag only")
   void create_withExternalRequest_setsExternalRequestFlagOnly() {
-    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, IsoCategory.EXTERNAL_REQUEST);
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.EXTERNAL_REQUEST);
 
     assertThat(context.isExternalRequest()).isTrue();
     assertThat(context.isLateResponse()).isFalse();
@@ -95,7 +105,8 @@ class RequestContextHelperTest {
     when(isoMessage.hasField(90)).thenReturn(true);
     lenient().when(isoMessage.getField(90)).thenReturn(de90Field);
 
-    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, IsoCategory.SUCCESS);
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.SUCCESS);
 
     assertThat(context.getReversal()).isNotNull();
     assertThat(context.getReversal().getOriginalMti()).isEqualTo("0200");

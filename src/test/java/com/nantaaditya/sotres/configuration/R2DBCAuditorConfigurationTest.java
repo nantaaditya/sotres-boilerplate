@@ -17,7 +17,8 @@ import reactor.test.StepVerifier;
 @ExtendWith(MockitoExtension.class)
 class R2DBCAuditorConfigurationTest {
 
-  @Mock private TracerHelper tracerHelper;
+  @Mock
+  private TracerHelper tracerHelper;
 
   private R2DBCAuditorConfiguration config;
 

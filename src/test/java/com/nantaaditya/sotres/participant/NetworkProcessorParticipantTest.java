@@ -13,7 +13,6 @@ import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
 import io.netty.channel.ChannelHandlerContext;
-import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,7 +40,8 @@ class NetworkProcessorParticipantTest {
   @BeforeEach
   void setUp() {
     healthCheckHelper = new HealthCheckHelper();
-    participant = new NetworkProcessorParticipant(healthCheckHelper, isoMessageLoggerHelper, isoFieldHelper);
+    participant = new NetworkProcessorParticipant(healthCheckHelper, isoMessageLoggerHelper,
+        isoFieldHelper);
   }
 
   @Test
@@ -188,7 +188,8 @@ class NetworkProcessorParticipantTest {
       participant.onMessage(ctx, msg);
 
       assertThat(healthCheckHelper.isSignedOn()).isFalse();
-      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class), any(IsoMessage.class), any(String.class));
+      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class),
+          any(IsoMessage.class), any(String.class));
     }
   }
 
@@ -215,7 +216,8 @@ class NetworkProcessorParticipantTest {
 
       participant.onMessage(ctx, msg);
 
-      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class), any(IsoMessage.class), any(String.class));
+      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class),
+          any(IsoMessage.class), any(String.class));
     }
   }
 
@@ -242,12 +244,14 @@ class NetworkProcessorParticipantTest {
 
       participant.onMessage(ctx, msg);
 
-      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class), any(IsoMessage.class), any(String.class));
+      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class),
+          any(IsoMessage.class), any(String.class));
     }
   }
 
   @Nested
   @DisplayName("unknown NIC")
   class UnknownNic {
+
   }
 }

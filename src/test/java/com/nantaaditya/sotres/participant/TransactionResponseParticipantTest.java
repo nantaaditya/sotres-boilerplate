@@ -80,7 +80,8 @@ class TransactionResponseParticipantTest {
   void setUp() {
     MDC.put("traceId", "test-trace");
 
-    when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(config);
+    when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(
+        config);
     when(systemPropertiesService.getProperty(
         PropertiesGroup.REGISTRY_RESPONSE_SELECTOR,
         PropertiesGroup.REGISTRY_RESPONSE_SELECTOR.getPropertyId()))
@@ -109,8 +110,8 @@ class TransactionResponseParticipantTest {
 
     // currency fraction map used inside createTransaction
     lenient().when(systemPropertiesService.getProperty(
-        PropertiesGroup.CURRENCY_FRACTIONS,
-        PropertiesGroup.CURRENCY_FRACTIONS.getPropertyId()))
+            PropertiesGroup.CURRENCY_FRACTIONS,
+            PropertiesGroup.CURRENCY_FRACTIONS.getPropertyId()))
         .thenReturn("360:2");
 
     participant = new TransactionResponseParticipant(

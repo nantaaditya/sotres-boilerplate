@@ -36,8 +36,10 @@ import reactor.test.StepVerifier;
 @ExtendWith(MockitoExtension.class)
 class DeadLetterProcessServiceImplTest {
 
-  @Mock private DeadLetterProcessRepository deadLetterProcessRepository;
-  @Mock private RetryProcessorHelper retryProcessorHelper;
+  @Mock
+  private DeadLetterProcessRepository deadLetterProcessRepository;
+  @Mock
+  private RetryProcessorHelper retryProcessorHelper;
 
   private DeadLetterProcessServiceImpl service;
   private RetryDeadLetterProcessRequest request;
@@ -69,7 +71,7 @@ class DeadLetterProcessServiceImplTest {
     @DisplayName("deletes exhausted records older than the given days threshold")
     void deletesExhaustedRecordsBeforeDateThreshold() {
       when(deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(
-              any(LocalDateTime.class), eq(RetryStatus.EXHAUSTED.name())))
+          any(LocalDateTime.class), eq(RetryStatus.EXHAUSTED.name())))
           .thenReturn(Mono.empty());
 
       StepVerifier.create(service.remove(7))
@@ -91,7 +93,7 @@ class DeadLetterProcessServiceImplTest {
     void filtersRecordsAtMaxRetry_completesEmpty() {
       DeadLetterProcess dlp = buildDlp(3, 3); // 3 >= 3 → filtered
       when(deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
-              eq("ORDER"), eq("PAYMENT"), anySet(), any()))
+          eq("ORDER"), eq("PAYMENT"), anySet(), any()))
           .thenReturn(Flux.just(dlp));
 
       StepVerifier.create(service.retry(request))
@@ -117,7 +119,8 @@ class DeadLetterProcessServiceImplTest {
     void setsSuccessStatus_andIncrementsNotEligibleCounter_forIneligibleRecords() {
       DeadLetterProcess dlp = buildDlp(0, 3);
       AtomicBoolean saveCalled = new AtomicBoolean(false);
-      AbstractRetryProcessorService processor = new IneligibleTestProcessor(deadLetterProcessRepository);
+      AbstractRetryProcessorService processor = new IneligibleTestProcessor(
+          deadLetterProcessRepository);
 
       when(retryProcessorHelper.getProcessor("ORDER", "PAYMENT")).thenReturn(processor);
       when(deadLetterProcessRepository.saveAll(anyList())).thenReturn(Flux.just(dlp));
@@ -139,7 +142,8 @@ class DeadLetterProcessServiceImplTest {
     void executesEligibleRecords_andSavesSuccessStatus() {
       DeadLetterProcess dlp = buildDlp(0, 3);
       AtomicBoolean saveCalled = new AtomicBoolean(false);
-      AbstractRetryProcessorService processor = new EligibleTestProcessor(deadLetterProcessRepository);
+      AbstractRetryProcessorService processor = new EligibleTestProcessor(
+          deadLetterProcessRepository);
 
       when(retryProcessorHelper.getProcessor("ORDER", "PAYMENT")).thenReturn(processor);
       when(deadLetterProcessRepository.saveAll(anyList())).thenReturn(Flux.just(dlp));
@@ -165,13 +169,19 @@ class DeadLetterProcessServiceImplTest {
     }
 
     @Override
-    public String getProcessType() { return "ORDER"; }
+    public String getProcessType() {
+      return "ORDER";
+    }
 
     @Override
-    public String getProcessName() { return "PAYMENT"; }
+    public String getProcessName() {
+      return "PAYMENT";
+    }
 
     @Override
-    public boolean isEligibleToBeRetried(DeadLetterProcess dlp) { return false; }
+    public boolean isEligibleToBeRetried(DeadLetterProcess dlp) {
+      return false;
+    }
 
     @Override
     public Mono<DeadLetterContext> execute(DeadLetterProcess dlp) {
@@ -179,10 +189,12 @@ class DeadLetterProcessServiceImplTest {
     }
 
     @Override
-    public void onSuccess(DeadLetterProcess dlp, String response) {}
+    public void onSuccess(DeadLetterProcess dlp, String response) {
+    }
 
     @Override
-    public void onError(DeadLetterProcess dlp, Throwable throwable) {}
+    public void onError(DeadLetterProcess dlp, Throwable throwable) {
+    }
   }
 
   private static class EligibleTestProcessor extends AbstractRetryProcessorService {
@@ -192,13 +204,19 @@ class DeadLetterProcessServiceImplTest {
     }
 
     @Override
-    public String getProcessType() { return "ORDER"; }
+    public String getProcessType() {
+      return "ORDER";
+    }
 
     @Override
-    public String getProcessName() { return "PAYMENT"; }
+    public String getProcessName() {
+      return "PAYMENT";
+    }
 
     @Override
-    public boolean isEligibleToBeRetried(DeadLetterProcess dlp) { return true; }
+    public boolean isEligibleToBeRetried(DeadLetterProcess dlp) {
+      return true;
+    }
 
     @Override
     public Mono<DeadLetterContext> execute(DeadLetterProcess dlp) {
@@ -206,9 +224,11 @@ class DeadLetterProcessServiceImplTest {
     }
 
     @Override
-    public void onSuccess(DeadLetterProcess dlp, String response) {}
+    public void onSuccess(DeadLetterProcess dlp, String response) {
+    }
 
     @Override
-    public void onError(DeadLetterProcess dlp, Throwable throwable) {}
+    public void onError(DeadLetterProcess dlp, Throwable throwable) {
+    }
   }
 }

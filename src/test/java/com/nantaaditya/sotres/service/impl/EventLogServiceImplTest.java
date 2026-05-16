@@ -21,10 +21,14 @@ import reactor.test.StepVerifier;
 @ExtendWith(MockitoExtension.class)
 class EventLogServiceImplTest {
 
-  @Mock private EventLogRepository eventLogRepository;
-  @Mock private SchedulerHelper schedulerHelper;
-  @Mock private ReactorHelper reactorHelper;
-  @Mock private Scheduler scheduler;
+  @Mock
+  private EventLogRepository eventLogRepository;
+  @Mock
+  private SchedulerHelper schedulerHelper;
+  @Mock
+  private ReactorHelper reactorHelper;
+  @Mock
+  private Scheduler scheduler;
 
   private EventLogServiceImpl service;
 

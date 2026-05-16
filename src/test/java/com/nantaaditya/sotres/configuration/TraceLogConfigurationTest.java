@@ -20,11 +20,16 @@ import org.springframework.boot.actuate.web.exchanges.HttpExchange;
 @ExtendWith(MockitoExtension.class)
 class TraceLogConfigurationTest {
 
-  @Mock private LogProperties logProperties;
-  @Mock private TracerHelper tracerHelper;
-  @Mock private HttpExchange trace;
-  @Mock private HttpExchange.Request request;
-  @Mock private HttpExchange.Response response;
+  @Mock
+  private LogProperties logProperties;
+  @Mock
+  private TracerHelper tracerHelper;
+  @Mock
+  private HttpExchange trace;
+  @Mock
+  private HttpExchange.Request request;
+  @Mock
+  private HttpExchange.Response response;
 
   private TraceLogConfiguration config;
 

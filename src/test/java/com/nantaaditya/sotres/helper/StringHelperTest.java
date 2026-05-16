@@ -75,7 +75,8 @@ class StringHelperTest {
     @Test
     @DisplayName("parses key-value pairs separated by row and column delimiters")
     void toCollection_keyValuePairs_returnsMap() {
-      Map<String, String> result = StringHelper.toCollection("k1:v1,k2:v2", ",", ":", HashMap.class);
+      Map<String, String> result = StringHelper.toCollection("k1:v1,k2:v2", ",", ":",
+          HashMap.class);
       assertThat(result).containsEntry("k1", "v1").containsEntry("k2", "v2");
     }
 

@@ -47,7 +47,9 @@ class GsonConfigurationTest {
   @Test
   @DisplayName("Long field serializes as JSON string")
   void long_fieldSerializesAsJsonString() {
-    record Wrapper(long id) {}
+    record Wrapper(long id) {
+
+    }
     String json = gson.toJson(new Wrapper(123456789L));
     assertThat(json).isEqualTo("{\"id\":\"123456789\"}");
   }
