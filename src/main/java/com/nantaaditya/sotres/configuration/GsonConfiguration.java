@@ -13,6 +13,7 @@ import com.google.gson.LongSerializationPolicy;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,14 +23,14 @@ public class GsonConfiguration {
   private static final JsonSerializer<Double> doubleJsonSerializer = new JsonSerializer<Double>() {
     @Override
     public JsonElement serialize(final Double src, final Type typeOfSrc, final JsonSerializationContext context) {
-      String formatted = String.format("%.2f", src);
+      String formatted = String.format(Locale.ROOT, "%.2f", src);
       return new JsonPrimitive(Double.parseDouble(formatted));
     }
   };
   private static final JsonSerializer<Float> floatJsonSerializer = new JsonSerializer<Float>() {
     @Override
     public JsonElement serialize(final Float src, final Type typeOfSrc, final JsonSerializationContext context) {
-      String formatted = String.format("%.2f", src);
+      String formatted = String.format(Locale.ROOT, "%.2f", src);
       return new JsonPrimitive(Double.parseDouble(formatted));
     }
   };
