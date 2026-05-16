@@ -6,6 +6,255 @@ This document provides technical specifications and operational details for the 
 This project serves as a foundational, reactive, single-module application built on the Spring Boot framework and [jreactive8583](https://github.com/kpavlov/jreactive-8583), 
 designed to incorporate common enterprise capabilities like robust logging, retry mechanisms, and operational endpoints.
 
+## Prerequisites
+
+Before running this project, ensure the following are installed and available:
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Java (JDK) | 25 | Virtual threads enabled by default |
+| Maven | 3.9+ | Or use the included `./mvnw` wrapper |
+| PostgreSQL | 14+ | Database named `boilerplate` must exist |
+| ISO8583 Server | — | A live ISO8583 TCP server or simulator on `ISO8583_HOST:ISO8583_PORT` |
+
+> The ISO8583 connection is required at startup. If the server is unreachable, the application will retry on a configurable interval (`RECONNECT_INTERVAL`, default 60 s).
+
+---
+
+## Database Setup
+
+Run the DDL and DML scripts against your PostgreSQL instance to create the required tables and seed the initial `system_properties` data.
+
+```bash
+psql -U postgres -d boilerplate -f src/main/resources/ddl.sql
+psql -U postgres -d boilerplate -f src/main/resources/dml.sql
+```
+
+### Tables Created
+
+| Table | Purpose |
+|---|---|
+| `dead_letter_process` | Stores failed transactions for scheduled retry processing |
+| `system_properties` | Runtime configuration loaded into a Caffeine in-memory cache on startup |
+| `event_logs` | Audit log of every HTTP request processed by the application |
+
+### Seed Data (`dml.sql`)
+
+The DML file seeds the minimum required `system_properties` rows:
+
+| `group_id` | `property_id` | Purpose |
+|---|---|---|
+| `acquirers` | `acquirers` | Acquirer network routing map |
+| `mti` | `incoming` | Allowed incoming MTI whitelist |
+| `mti` | `outgoing` | Allowed outgoing MTI whitelist |
+| `mask_fields` | `iso8583` | ISO8583 DE field numbers to mask in logs |
+| `currency` | `fractions` | Currency fraction digits (e.g. `360:2` = IDR with 2 decimal places) |
+| `endpoint_path` | `mapping` | Selector → REST path mapping for outgoing HTTP calls |
+| `response` | `incoming_outgoing_mapping` | Response code translation map |
+| `registry` | `callback_selector` | Selectors routed via callback-style response correlation |
+| `registry` | `response_selector` | Selectors routed via Mono-based response correlation |
+
+---
+
+## Environment Variables
+
+All variables have defaults defined in `application.yml`. Override them via system environment, a `.env` file, or Docker `--env-file`.
+
+### Server
+
+| Variable | Default | Description |
+|---|---|---|
+| `SERVER_PORT` | `8080` | HTTP API port |
+| `ACTUATOR_PORT` | `1000` | Metrics and actuator port |
+| `CONTEXT_PATH` | `/sotres` | WebFlux base path |
+| `APPLICATION_NAME` | `sotres-api` | Spring application name |
+
+### Database
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_URL` | `r2dbc:postgresql://localhost:5432/boilerplate` | R2DBC connection URL |
+| `DB_USER` | `postgres` | Database username |
+| `DB_PASS` | `changeme` | Database password |
+| `R2DBC_POOL_ENABLED` | `true` | Enable R2DBC connection pool |
+| `R2DBC_MAX_SIZE` | `10` | Maximum pool size |
+
+### ISO8583 Connection
+
+| Variable | Default | Description |
+|---|---|---|
+| `ISO8583_HOST` | `127.0.0.1` | Remote ISO8583 server host |
+| `ISO8583_PORT` | `13001` | Remote ISO8583 server port |
+| `FORWARDING_INSTITUTION_ID` | `625` | Institution ID used in DE11 prefix |
+| `RECONNECT_INTERVAL` | `60000` | Reconnect interval in milliseconds |
+| `TIME_OUT_SECOND` | `15000` | ISO8583 message timeout in milliseconds |
+| `SCHEDULED_ECHO_ENABLED` | `true` | Enable periodic echo (heartbeat) messages |
+| `ECHO_INTERVAL_SECOND` | `30000` | Echo interval in milliseconds |
+
+### Outgoing Strategy
+
+| Variable | Default | Description |
+|---|---|---|
+| `OUTGOING_PROTOCOL` | `REST` | How ISO8583 transactions are forwarded (`REST` is currently supported) |
+| `CLIENT_REGISTRY_TYPE` | `CALLBACK` | Response correlation mode (`CALLBACK` or `RESPONSE`) |
+| `TRANSACTION_CLIENT_HOSTNAME` | `http://localhost:8080` | Base URL of the downstream REST service |
+| `TRANSACTION_CLIENT_READ_TIMEOUT` | `10000` | HTTP client read timeout in milliseconds |
+| `TRANSACTION_RETRY_MAX_ATTEMPT` | `1` | Max HTTP retry attempts on `PrematureCloseException` |
+
+### Logging
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_PATH` | `logs/` | Directory for log files |
+| `APPS_LOG_LEVEL` | `json` | Log format: `json` or `text` |
+| `APPS_API_ENABLED` | `true` | Enable HTTP request/response logging via Logbook |
+| `APPS_TRACE_ENABLED` | `true` | Enable response time trace log |
+| `SENSITIVE_FIELD` | `cardNo` | Space-separated JSON fields to mask in logs |
+
+---
+
+## Running Locally
+
+```bash
+# 1. Initialize the database (first time only)
+psql -U postgres -d boilerplate -f src/main/resources/ddl.sql
+psql -U postgres -d boilerplate -f src/main/resources/dml.sql
+
+# 2. Build
+./mvnw install -DskipTests
+
+# 3. Run
+./mvnw spring-boot:run
+```
+
+The application starts on `http://localhost:8080/sotres` by default.
+Actuator endpoints are available on `http://localhost:1000/actuator`.
+
+---
+
+## Running with Docker
+
+```bash
+# 1. Build the JAR
+bash .script/build_jar.sh
+
+# 2. Build the Docker image
+bash .script/build_docker.sh
+
+# 3. Run the container
+docker run -d \
+  --cpus="0.5" --memory="768m" \
+  -p 8080:8080 \
+  --env-file .env/dev.env \
+  --name sotres \
+  sotres:1.0.0-SNAPSHOT
+```
+
+Create `.env/dev.env` with the environment variables listed above, overriding any defaults for your environment.
+
+---
+
+## Running Tests
+
+```bash
+# Run all tests
+./mvnw test
+
+# Run tests and generate JaCoCo coverage report
+./mvnw verify
+
+# Open coverage report (macOS)
+open target/site/jacoco/index.html
+```
+
+---
+
+## How It Works
+
+The application bridges an ISO8583 TCP channel to a downstream REST API. There are two independent processing lanes: ISO8583 message handling and HTTP API handling.
+
+### ISO8583 Transaction Flow
+
+```
+ISO8583 Server (TCP :13001)
+        │
+        ▼
+TransactionProcessorParticipant
+  ├─ Decodes ISO8583 message
+  ├─ Builds RequestContext (MTI, amount, currency, selector)
+  └─ Resolves AbstractTransactionHandler by selector
+        │
+        ▼
+AbstractTransactionHandler.process()
+  ├─ Applies business logic / enrichment
+  └─ Delegates to SenderProtocolStrategy
+        │
+        ▼
+RestProtocolStrategy.send()
+  ├─ Calls TransactionClient (reactive WebClient)
+  └─ POST to endpoint resolved from system_properties[endpoint_path]
+        │
+        ▼
+handleResponse()
+  ├─ Maps response code via system_properties[response]
+  └─ Writes ISO8583 0210 response back to TCP channel
+```
+
+**Network messages** (MTI 0800) are handled separately by `NetworkProcessorParticipant`:
+
+| Subtype | Action |
+|---|---|
+| LOGON | Marks channel as signed-on (`HealthCheckHelper.setSignedOn(true)`) |
+| LOGOFF | Marks channel as signed-off |
+| ECHO | Replies with healthy 0810 response |
+
+### Response Correlation Modes
+
+Two modes are supported, selected by `CLIENT_REGISTRY_TYPE`:
+
+| Mode | Class | Behaviour |
+|---|---|---|
+| `CALLBACK` | `IsoCallbackRegistry` | Stores a `Consumer<ResponseContext>` keyed on RRN. The callback is invoked when the matching response arrives. |
+| `RESPONSE` | `IsoResponseRegistry` | Stores a `Sinks.One<ResponseContext>` keyed on RRN. The transaction thread subscribes and waits reactively. |
+
+Unsolicited responses (0210 arriving without a prior 0200) are routed through `TransactionResponseParticipant` → `IsoResponseRegistry.onResponse()`.
+
+### HTTP API Flow
+
+```
+HTTP Request (:8080)
+      │
+      ▼
+AppFilter  (order = HIGHEST_PRECEDENCE + 2)
+  ├─ Caches request body for downstream re-reading
+  ├─ Copies request headers to response
+  ├─ Starts Micrometer Observation
+  └─ Puts ContextDTO in Reactor context
+      │
+      ▼
+Controller → Service
+      │
+      ▼
+doFinally (on complete or error):
+  ├─ Saves audit record to event_logs table
+  └─ Stops Observation
+```
+
+### Dead Letter & Retry
+
+Failed transactions that cannot be delivered are persisted to `dead_letter_process` with status `NEW`. A scheduled processor:
+
+1. Queries records where `status IN ('NEW', 'FAILED')` and `retry_count < max_retry`
+2. Re-delivers the payload
+3. Marks as `SUCCESS` on delivery, or increments `retry_count` / sets `FAILED` on error
+4. Records that reach `max_retry` are marked `EXHAUSTED` and cleaned up on a configurable schedule
+
+### System Properties Cache
+
+Runtime configuration (response mappings, path mappings, acquirer lists, etc.) is stored in the `system_properties` table and loaded into a Caffeine in-memory cache at startup via `SystemPropertiesService`. Individual groups can be reloaded at runtime without restarting the application.
+
+---
+
 ## Project Structure
 
 ### Module Structure
