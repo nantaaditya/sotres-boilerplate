@@ -15,8 +15,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuple3;
 
 @Log4j2
 @Getter
@@ -41,7 +39,7 @@ public abstract class AbstractRetryProcessorService {
   public abstract String getProcessType();
   public abstract String getProcessName();
   public abstract boolean isEligibleToBeRetried(DeadLetterProcess deadLetterProcess);
-  public abstract Mono<Tuple3<Boolean, String, Throwable>> execute(DeadLetterProcess deadLetterProcess);
+  public abstract Mono<DeadLetterContext> execute(DeadLetterProcess deadLetterProcess);
   public abstract void onSuccess(DeadLetterProcess deadLetterProcess, String response);
   public abstract void onError(DeadLetterProcess deadLetterProcess, Throwable throwable);
 
@@ -51,22 +49,21 @@ public abstract class AbstractRetryProcessorService {
     notEligibleCounter.setRelease(0);
   }
 
-  public final <T> Mono<DeadLetterProcess> update(DeadLetterProcess deadLetterProcess, boolean result,
-      String response, Throwable throwable) {
-    if (result) {
-      onSuccess(deadLetterProcess, response);
+  public final <T> Mono<DeadLetterProcess> update(DeadLetterProcess deadLetterProcess, DeadLetterContext deadLetterContext) {
+    if (deadLetterContext.success()) {
+      onSuccess(deadLetterProcess, deadLetterContext.response());
       deadLetterProcess.setStatus(RetryStatus.SUCCESS.name());
       successCounter.incrementAndGet();
     } else {
-      onError(deadLetterProcess, throwable);
+      onError(deadLetterProcess, deadLetterContext.throwable());
       boolean isMaxRetry = deadLetterProcess.getRetryCount() + 1 >= deadLetterProcess.getMaxRetry();
       deadLetterProcess.setStatus(isMaxRetry ? RetryStatus.EXHAUSTED.name() : RetryStatus.FAILED.name());
       failedCounter.incrementAndGet();
     }
 
-    Optional.ofNullable(throwable)
+    Optional.ofNullable(deadLetterContext.throwable())
         .ifPresent(t -> deadLetterProcess.setLastError(t.getMessage()));
-    updateRetryHistories(deadLetterProcess, response, throwable);
+    updateRetryHistories(deadLetterProcess, deadLetterContext.response(), deadLetterContext.throwable());
     deadLetterProcess.setRetryCount(deadLetterProcess.getRetryCount() + 1);
     deadLetterProcess.setUpdatedBy("internal-retry-process");
     deadLetterProcess.setUpdatedDate(LocalDateTime.now());
@@ -89,4 +86,9 @@ public abstract class AbstractRetryProcessorService {
     }
   }
 
+  public record DeadLetterContext (
+      boolean success,
+      String response,
+      Throwable throwable
+  ) {}
 }

@@ -96,7 +96,7 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
         })
         .flatMap(
             deadLetterProcess -> processor.execute(deadLetterProcess)
-                .flatMap(result -> processor.update(deadLetterProcess, result.getT1(), result.getT2(), result.getT3()))
+                .flatMap(result -> processor.update(deadLetterProcess, result))
             , 4
         )
         .then();
