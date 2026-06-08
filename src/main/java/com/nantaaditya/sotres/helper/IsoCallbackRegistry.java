@@ -55,7 +55,7 @@ public class IsoCallbackRegistry extends BaseRegistry {
     }
 
     // late response
-    if (registeredMessages.getIfPresent(correlationId)) {
+    if (Boolean.TRUE.equals(registeredMessages.getIfPresent(correlationId))) {
       log.warn(AppLogMessage.message("#ISO - receive late response registry key {}", correlationId)
           .isoMessage(isoMessageLoggerHelper.toLogMessage(response)));
       registeredMessages.invalidate(correlationId);
