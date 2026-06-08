@@ -209,6 +209,11 @@
       <artifactId>spring-boot-starter-web</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.schibsted.spt.data</groupId>
+      <artifactId>jslt</artifactId>
+      <version>0.1.14</version>
+    </dependency>
   </dependencies>
 
   <build>
