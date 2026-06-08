@@ -18,7 +18,9 @@ public enum PropertiesGroup {
   PATH_MAPPING("endpoint_path", "mapping"),
   RESPONSE_MAPPING("response", "incoming_outgoing_mapping"),
   REGISTRY_RESPONSE_SELECTOR("registry", "response_selector"), // selector when use sendWithResponse
-  REGISTRY_CALLBACK_SELECTOR("registry", "callback_selector"); // selector when use sendWithCallback
+  REGISTRY_CALLBACK_SELECTOR("registry", "callback_selector"), // selector when use sendWithCallback
+  CLIENT_SPEC_REQUEST("client_specification_mapper", "request"),
+  CLIENT_SPEC_RESPONSE("client_specification_mapper", "response");
 
   private String group;
   private String propertyId;
