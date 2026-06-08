@@ -10,6 +10,6 @@ public interface SystemPropertiesService {
   Map<String, String> getProperty(PropertiesGroup key);
   String getProperty(PropertiesGroup key, String propertyId);
   void reload(PropertiesGroup key);
-  Mono<String> getRawProperty(PropertiesGroup group);
+  Mono<String> getRawProperty(PropertiesGroup group, String selector);
   Flux<SystemProperties> getByGroupId(PropertiesGroup group);
 }

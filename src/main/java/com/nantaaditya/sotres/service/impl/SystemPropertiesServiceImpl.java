@@ -54,8 +54,10 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   }
 
   @Override
-  public Mono<String> getRawProperty(PropertiesGroup group) {
-    return Mono.justOrEmpty(getProperty(group, group.getPropertyId()));
+  public Mono<String> getRawProperty(PropertiesGroup group, String selector) {
+    return systemPropertiesRepository
+        .findByGroupIdAndPropertyId(group.getGroup(), selector)
+        .map(SystemProperties::getPropertyValue);
   }
 
   @Override
