@@ -193,7 +193,7 @@ public class RequestContext {
     );
   }
 
-  // change this mapping
+  // TODO: change this mapping
   @Transient
   public String getSelector() {
     return IsoFieldHelper.createSelector(mti, processingCode, getAdditionalDataMap());
