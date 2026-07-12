@@ -1,7 +1,8 @@
 package com.nantaaditya.sotres.service.impl;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -18,8 +19,8 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
   private final SystemPropertiesRepository systemPropertiesRepository;
 
-  // [PropertiesGroup: [propertyId: propertyValue]]
-  private final Map<PropertiesGroup, Map<String, String>> PROPERTY_COLLECTION_MAP = new ConcurrentHashMap<>();
+  // [ConfigGroup: [propertyId: propertyValue]]
+  private final Map<ConfigGroup, Map<String, String>> PROPERTY_COLLECTION_MAP = new ConcurrentHashMap<>();
 
   public SystemPropertiesServiceImpl(SystemPropertiesRepository systemPropertiesRepository) {
     this.systemPropertiesRepository = systemPropertiesRepository;
@@ -35,17 +36,17 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   }
 
   @Override
-  public Map<String, String> getProperty(PropertiesGroup key) {
+  public Map<String, String> getProperty(ConfigGroup key) {
     return PROPERTY_COLLECTION_MAP.getOrDefault(key, new ConcurrentHashMap<>());
   }
 
   @Override
-  public String getProperty(PropertiesGroup key, String propertyId) {
+  public String getProperty(ConfigGroup key, String propertyId) {
     return PROPERTY_COLLECTION_MAP.getOrDefault(key, new ConcurrentHashMap<>()).get(propertyId);
   }
 
   @Override
-  public void reload(PropertiesGroup key) {
+  public void reload(ConfigGroup key) {
     systemPropertiesRepository.findByGroupId(key.getGroup())
       .subscribe(
         this::loadSystemProperties,
@@ -54,19 +55,19 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   }
 
   @Override
-  public Mono<String> getRawProperty(PropertiesGroup group, String selector) {
+  public Mono<String> getRawProperty(TemplateGroup group, String selector) {
     return systemPropertiesRepository
         .findByGroupIdAndPropertyId(group.getGroup(), selector)
         .map(SystemProperties::getPropertyValue);
   }
 
   @Override
-  public Flux<SystemProperties> getByGroupId(PropertiesGroup group) {
+  public Flux<SystemProperties> getByGroupId(TemplateGroup group) {
     return systemPropertiesRepository.findByGroupId(group.getGroup());
   }
 
   @Override
-  public Mono<SystemProperties> upsert(PropertiesGroup group, String selector, String value) {
+  public Mono<SystemProperties> upsert(TemplateGroup group, String selector, String value) {
     return systemPropertiesRepository
         .findByGroupIdAndPropertyId(group.getGroup(), selector)
         .map(existing -> existing.toBuilder().propertyValue(value).build())
@@ -75,12 +76,11 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
             .propertyId(selector)
             .propertyValue(value)
             .build()))
-        .flatMap(entity -> systemPropertiesRepository.save(entity))
-        .doOnNext(this::loadSystemProperties);
+        .flatMap(entity -> systemPropertiesRepository.save(entity));
   }
 
   private void loadSystemProperties(SystemProperties sp) {
-    for (PropertiesGroup group : PropertiesGroup.values()) {
+    for (ConfigGroup group : ConfigGroup.values()) {
       if (group.getGroup().equals(sp.getGroupId())) {
         PROPERTY_COLLECTION_MAP
           .computeIfAbsent(group, k -> new ConcurrentHashMap<>())

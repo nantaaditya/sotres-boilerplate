@@ -1,7 +1,7 @@
 package com.nantaaditya.sotres.api.internal;
 
 import com.nantaaditya.sotres.api.BaseController;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import java.util.Map;
@@ -26,7 +26,7 @@ public class SystemPropertiesController extends BaseController {
       value = "/_reload",
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Boolean>>> reload(@RequestParam PropertiesGroup group) {
+  public Mono<ResponseEntity<Response<Boolean>>> reload(@RequestParam ConfigGroup group) {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
         .map(this::toResponse)
         .doOnSuccess(response -> systemPropertiesService.reload(group));
@@ -35,7 +35,7 @@ public class SystemPropertiesController extends BaseController {
   @GetMapping(
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Map<String, String>>>> find(@RequestParam PropertiesGroup key) {
+  public Mono<ResponseEntity<Response<Map<String, String>>>> find(@RequestParam ConfigGroup key) {
     return Mono.fromCallable(() -> systemPropertiesService.getProperty(key))
         .map(result -> responseHelper.success(result))
         .map(this::toResponse);

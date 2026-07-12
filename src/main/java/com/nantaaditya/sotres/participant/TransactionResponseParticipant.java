@@ -9,7 +9,7 @@ import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.IsoCallbackConstant;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -70,9 +70,9 @@ public class TransactionResponseParticipant
     this.clientProperties = clientProperties;
 
     this.scheduler = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).createScheduler();
-    this.responseRegistrySelectors = PropertiesGroup.getList(
+    this.responseRegistrySelectors = ConfigGroup.getList(
         this.systemPropertiesService,
-        PropertiesGroup.REGISTRY_RESPONSE_SELECTOR
+        ConfigGroup.REGISTRY_RESPONSE_SELECTOR
     );
   }
 

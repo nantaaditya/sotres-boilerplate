@@ -18,7 +18,8 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.embedded.ClientConfiguration;
@@ -99,11 +100,11 @@ class TransactionClientTest {
                 .withBody("{\"raw\":\"downstream_response\"}")
             )
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
         .thenReturn(Mono.just(reqBody));
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
         .thenReturn(Mono.just(normalizedResp));
 
     StepVerifier.create(transactionClient.send(buildRequest()))
@@ -125,11 +126,11 @@ class TransactionClientTest {
                 .withBody("{\"error\":\"bad_request\"}")
             )
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
         .thenReturn(Mono.just(reqBody));
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
         .thenReturn(Mono.just(normalizedResp));
 
     StepVerifier.create(transactionClient.send(buildRequest()))
@@ -146,9 +147,9 @@ class TransactionClientTest {
         post(urlPathEqualTo("/api/payment"))
             .willReturn(aResponse().withStatus(500))
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
         .thenReturn(Mono.just(reqBody));
 
     StepVerifier.create(transactionClient.send(buildRequest()))
@@ -170,11 +171,11 @@ class TransactionClientTest {
                 .withBody("{\"raw\":\"response\"}")
             )
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
         .thenReturn(Mono.just(reqBody));
-    when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
         .thenReturn(Mono.just(normalizedResp));
 
     StepVerifier.create(transactionClient.send(buildRequest()))
@@ -206,11 +207,11 @@ class TransactionClientTest {
                   .withBody("{\"raw\":\"response\"}")
               )
       );
-      when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
           .thenReturn("20.00-NA:/api/payment");
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenReturn(Mono.just(reqBody));
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(Mono.just(normalizedResp));
 
       StepVerifier.create(transactionClient.send(buildRequest()))
@@ -218,7 +219,7 @@ class TransactionClientTest {
           .verifyComplete();
 
       verify(jsltTransformationHelper)
-          .transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any(RequestContext.class));
+          .transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any(RequestContext.class));
     }
 
     @Test
@@ -235,11 +236,11 @@ class TransactionClientTest {
                   .withBody("{\"transaction_id\":\"txn-001\",\"status\":\"approved\"}")
               )
       );
-      when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
           .thenReturn("20.00-NA:/api/payment");
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenReturn(Mono.just(reqBody));
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(Mono.just(normalizedResp));
 
       StepVerifier.create(transactionClient.send(buildRequest()))
@@ -247,7 +248,7 @@ class TransactionClientTest {
           .verifyComplete();
 
       verify(jsltTransformationHelper)
-          .transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any(JsonNode.class));
+          .transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any(JsonNode.class));
     }
 
     @Test
@@ -255,7 +256,7 @@ class TransactionClientTest {
     void requestTransformError_propagatesToCaller() {
       RuntimeException transformError = new RuntimeException("JSLT compile error");
 
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenReturn(Mono.error(transformError));
 
       StepVerifier.create(transactionClient.send(buildRequest()))
@@ -277,11 +278,11 @@ class TransactionClientTest {
                   .withBody("{\"raw\":\"response\"}")
               )
       );
-      when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
           .thenReturn("20.00-NA:/api/payment");
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenReturn(Mono.just(reqBody));
-      when(jsltTransformationHelper.transform(eq(PropertiesGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(Mono.error(transformError));
 
       StepVerifier.create(transactionClient.send(buildRequest()))

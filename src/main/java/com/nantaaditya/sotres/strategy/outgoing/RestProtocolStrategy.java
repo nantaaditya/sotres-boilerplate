@@ -7,7 +7,7 @@ import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.IsoResponseCode;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext;
@@ -141,7 +141,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
   }
 
   private String mappingResponseCode(String responseCode) {
-    Map<String, String> responseCodeMapping = PropertiesGroup.getMap(systemPropertiesService, PropertiesGroup.RESPONSE_MAPPING);
+    Map<String, String> responseCodeMapping = ConfigGroup.getMap(systemPropertiesService, ConfigGroup.RESPONSE_MAPPING);
     if (responseCodeMapping == null || responseCodeMapping.isEmpty()) {
       return IsoResponseCode.SYSTEM_MALFUNCTION.getCode();
     }

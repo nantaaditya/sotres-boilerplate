@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -61,7 +62,7 @@ public class TransactionClient extends BaseClient {
     String selector = requestContext.getSelector();
 
     Mono<ResponseContext> response = jsltTransformationHelper
-        .transform(PropertiesGroup.CLIENT_SPEC_REQUEST, selector, requestContext)
+        .transform(TemplateGroup.CLIENT_SPEC_REQUEST, selector, requestContext)
         .flatMap(requestBody -> webClient.post()
             .uri(uriBuilder -> uriBuilder.path(getPath(requestContext)).build())
             .headers(httpHeaders -> {
@@ -86,7 +87,7 @@ public class TransactionClient extends BaseClient {
             })
         )
         .flatMap(rawResponse ->
-            jsltTransformationHelper.transform(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse))
+            jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse))
         .flatMap(normalized -> Mono.fromCallable(
             () -> objectMapper.treeToValue(normalized, ResponseContext.class)));
 
@@ -98,7 +99,7 @@ public class TransactionClient extends BaseClient {
   }
 
   private String getPath(RequestContext requestContext) {
-    return PropertiesGroup.getMap(systemPropertiesService, PropertiesGroup.PATH_MAPPING)
+    return ConfigGroup.getMap(systemPropertiesService, ConfigGroup.PATH_MAPPING)
         .get(requestContext.getSelector());
   }
 }

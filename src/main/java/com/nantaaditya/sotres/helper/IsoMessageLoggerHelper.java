@@ -1,6 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.logger.JsonLogIsoMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -52,9 +52,9 @@ public class IsoMessageLoggerHelper {
 
   private String getDirection(IsoMessage message) {
     String direction;
-    if (getMTI(PropertiesGroup.INCOMING_MTI).contains(message.getType())) {
+    if (getMTI(ConfigGroup.INCOMING_MTI).contains(message.getType())) {
       return "incoming";
-    } else if (getMTI(PropertiesGroup.OUTGOING_MTI).contains(message.getType())) {
+    } else if (getMTI(ConfigGroup.OUTGOING_MTI).contains(message.getType())) {
       return "outgoing";
     } else {
       return "unknown";
@@ -70,15 +70,15 @@ public class IsoMessageLoggerHelper {
 
   @NotNull
   private Set<Integer> getMaskedFields() {
-    return PropertiesGroup.getList(systemPropertiesService, PropertiesGroup.ISO8583_MASK_FIELDS)
+    return ConfigGroup.getList(systemPropertiesService, ConfigGroup.ISO8583_MASK_FIELDS)
       .stream()
       .map(String::trim)
       .map(Integer::parseInt)
       .collect(Collectors.toSet());
   }
 
-  private Set<Integer> getMTI(PropertiesGroup group) {
-    return PropertiesGroup.getList(systemPropertiesService, group)
+  private Set<Integer> getMTI(ConfigGroup group) {
+    return ConfigGroup.getList(systemPropertiesService, group)
       .stream()
       .map(String::trim)
       .map(Integer::parseInt)

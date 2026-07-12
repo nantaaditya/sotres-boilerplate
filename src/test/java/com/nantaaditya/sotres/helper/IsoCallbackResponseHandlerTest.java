@@ -5,7 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.constant.IsoCategory;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.RegistryContext;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
@@ -58,8 +58,8 @@ class IsoCallbackResponseHandlerTest {
   @BeforeEach
   void setUp() {
     when(systemPropertiesService.getProperty(
-        PropertiesGroup.REGISTRY_CALLBACK_SELECTOR,
-        PropertiesGroup.REGISTRY_CALLBACK_SELECTOR.getPropertyId()))
+        ConfigGroup.REGISTRY_CALLBACK_SELECTOR,
+        ConfigGroup.REGISTRY_CALLBACK_SELECTOR.getPropertyId()))
         .thenReturn(MATCHING_SELECTOR);
 
     // Tracer chain for span creation used inside channelRead0

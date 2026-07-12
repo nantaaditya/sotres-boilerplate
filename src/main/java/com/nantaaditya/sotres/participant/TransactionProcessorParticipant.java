@@ -11,7 +11,7 @@ import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.IsoResponseCode;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
@@ -83,9 +83,9 @@ public class TransactionProcessorParticipant
     this.clientProperties = clientProperties;
 
     this.scheduler = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).createScheduler();
-    this.responseRegistrySelectors = PropertiesGroup.getList(
+    this.responseRegistrySelectors = ConfigGroup.getList(
         this.systemPropertiesService,
-        PropertiesGroup.REGISTRY_RESPONSE_SELECTOR
+        ConfigGroup.REGISTRY_RESPONSE_SELECTOR
     );
     this.senderProtocolStrategy = senderProtocolStrategies.stream()
         .filter(sender -> sender.getProtocol() == isoMessageProperties.outgoingProtocol())

@@ -2,7 +2,7 @@ package com.nantaaditya.sotres.api.internal;
 
 import com.nantaaditya.sotres.api.BaseController;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.model.response.TemplateResponse;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -53,7 +53,7 @@ public class JsltAdminController extends BaseController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Response<TemplateResponse>>> save(
       @RequestParam String selector,
-      @RequestParam PropertiesGroup group,
+      @RequestParam TemplateGroup group,
       @RequestBody String template) {
     return systemPropertiesService.upsert(group, selector, template)
         .doOnNext(saved -> jsltTransformationHelper.evictExpression(group, selector))

@@ -1,6 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.RequestContext.Transaction;
@@ -97,8 +97,8 @@ public class IsoFieldHelper {
 
   public static Transaction createTransaction(
       IsoMessage isoMessage, SystemPropertiesService systemPropertiesService) {
-    Map<String, Integer> currencyFractions = PropertiesGroup.getMap(
-            systemPropertiesService, PropertiesGroup.CURRENCY_FRACTIONS
+    Map<String, Integer> currencyFractions = ConfigGroup.getMap(
+            systemPropertiesService, ConfigGroup.CURRENCY_FRACTIONS
         )
         .entrySet()
         .stream()

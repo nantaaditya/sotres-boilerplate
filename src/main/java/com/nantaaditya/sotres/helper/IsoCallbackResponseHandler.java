@@ -2,7 +2,7 @@ package com.nantaaditya.sotres.helper;
 
 import com.nantaaditya.sotres.model.constant.IsoCallbackConstant;
 import com.nantaaditya.sotres.model.constant.IsoCategory;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.RegistryContext;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
@@ -31,9 +31,9 @@ public class IsoCallbackResponseHandler
 
     this.isoCallbackRegistry = isoCallbackRegistry;
     this.tracerHelper = tracerHelper;
-    this.registryCallbackSelectors = PropertiesGroup.getList(
+    this.registryCallbackSelectors = ConfigGroup.getList(
         systemPropertiesService,
-        PropertiesGroup.REGISTRY_CALLBACK_SELECTOR
+        ConfigGroup.REGISTRY_CALLBACK_SELECTOR
     );
 
   }

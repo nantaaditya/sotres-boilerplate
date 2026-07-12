@@ -5,7 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,7 +49,7 @@ class SystemPropertiesServiceImplTest {
     @Test
     @DisplayName("returns empty map when group not loaded")
     void returnsEmptyMap_whenGroupNotLoaded() {
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS)).isEmpty();
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS)).isEmpty();
     }
 
     @Test
@@ -57,9 +58,9 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("currency"))
           .thenReturn(Flux.just(prop("currency", "fractions", "360:2")));
 
-      service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
 
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS))
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS))
           .containsEntry("fractions", "360:2");
     }
   }
@@ -71,7 +72,7 @@ class SystemPropertiesServiceImplTest {
     @Test
     @DisplayName("returns null when group not loaded")
     void returnsNull_whenGroupNotLoaded() {
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isNull();
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions")).isNull();
     }
 
     @Test
@@ -80,9 +81,9 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("currency"))
           .thenReturn(Flux.just(prop("currency", "fractions", "360:2")));
 
-      service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
 
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
           .isEqualTo("360:2");
     }
 
@@ -92,9 +93,9 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("currency"))
           .thenReturn(Flux.just(prop("currency", "fractions", "360:2")));
 
-      service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
 
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "unknown_key")).isNull();
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "unknown_key")).isNull();
     }
   }
 
@@ -111,7 +112,7 @@ class SystemPropertiesServiceImplTest {
       SystemPropertiesServiceImpl freshService =
           new SystemPropertiesServiceImpl(systemPropertiesRepository);
 
-      assertThat(freshService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
+      assertThat(freshService.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
           .isEqualTo("360:2");
     }
 
@@ -124,7 +125,7 @@ class SystemPropertiesServiceImplTest {
       SystemPropertiesServiceImpl freshService =
           new SystemPropertiesServiceImpl(systemPropertiesRepository);
 
-      assertThat(freshService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS)).isEmpty();
+      assertThat(freshService.getProperty(ConfigGroup.CURRENCY_FRACTIONS)).isEmpty();
     }
   }
 
@@ -138,7 +139,7 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
           .thenReturn(Mono.just(prop("client_spec_request", "10.97-E001", "{\"result\": .value}")));
 
-      StepVerifier.create(service.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
+      StepVerifier.create(service.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
           .expectNext("{\"result\": .value}")
           .verifyComplete();
     }
@@ -149,7 +150,7 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "unknown"))
           .thenReturn(Mono.empty());
 
-      StepVerifier.create(service.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, "unknown"))
+      StepVerifier.create(service.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, "unknown"))
           .verifyComplete();
     }
 
@@ -159,7 +160,7 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_response", "10.97-E001"))
           .thenReturn(Mono.just(prop("client_spec_response", "10.97-E001", "{\"mapped\": .field}")));
 
-      StepVerifier.create(service.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, "10.97-E001"))
+      StepVerifier.create(service.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, "10.97-E001"))
           .expectNext("{\"mapped\": .field}")
           .verifyComplete();
     }
@@ -177,7 +178,7 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("client_spec_request"))
           .thenReturn(Flux.just(sp1, sp2));
 
-      StepVerifier.create(service.getByGroupId(PropertiesGroup.CLIENT_SPEC_REQUEST))
+      StepVerifier.create(service.getByGroupId(TemplateGroup.CLIENT_SPEC_REQUEST))
           .expectNext(sp1, sp2)
           .verifyComplete();
     }
@@ -188,7 +189,7 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("client_spec_response"))
           .thenReturn(Flux.empty());
 
-      StepVerifier.create(service.getByGroupId(PropertiesGroup.CLIENT_SPEC_RESPONSE))
+      StepVerifier.create(service.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE))
           .verifyComplete();
     }
   }
@@ -208,7 +209,7 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Mono.empty());
       when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(Mono.just(saved));
 
-      StepVerifier.create(service.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+      StepVerifier.create(service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .assertNext(sp -> {
             assertThat(sp.getId()).isEqualTo(1L);
             assertThat(sp.getPropertyValue()).isEqualTo("{\"result\": .value}");
@@ -228,7 +229,7 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Mono.just(existing));
       when(systemPropertiesRepository.save(updated)).thenReturn(Mono.just(updated));
 
-      StepVerifier.create(service.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"new\": .value}"))
+      StepVerifier.create(service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"new\": .value}"))
           .assertNext(sp -> {
             assertThat(sp.getId()).isEqualTo(5L);
             assertThat(sp.getPropertyValue()).isEqualTo("{\"new\": .value}");
@@ -237,8 +238,8 @@ class SystemPropertiesServiceImplTest {
     }
 
     @Test
-    @DisplayName("syncs in-memory cache after successful save")
-    void upsert_syncsInMemoryCache_afterSave() {
+    @DisplayName("saves to repository and does not contaminate the flat-config cache")
+    void upsert_savesToRepository_doesNotContaminateConfigCache() {
       SystemProperties saved = SystemProperties.builder()
           .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
           .propertyValue("{\"result\": .value}").build();
@@ -247,10 +248,15 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Mono.empty());
       when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(Mono.just(saved));
 
-      service.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}").block();
+      StepVerifier.create(service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+          .assertNext(sp -> {
+            assertThat(sp.getId()).isEqualTo(1L);
+            assertThat(sp.getGroupId()).isEqualTo("client_spec_request");
+          })
+          .verifyComplete();
 
-      assertThat(service.getProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
-          .isEqualTo("{\"result\": .value}");
+      // Template group rows must not bleed into the flat-config cache
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS)).isEmpty();
     }
   }
 
@@ -266,12 +272,12 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("acquirers"))
           .thenReturn(Flux.just(prop("acquirers", "acquirers", "BANK_A")));
 
-      service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
-      service.reload(PropertiesGroup.ACQUIRERS);
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
+      service.reload(ConfigGroup.ACQUIRERS);
 
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
           .isEqualTo("360:2");
-      assertThat(service.getProperty(PropertiesGroup.ACQUIRERS, "acquirers"))
+      assertThat(service.getProperty(ConfigGroup.ACQUIRERS, "acquirers"))
           .isEqualTo("BANK_A");
     }
 
@@ -282,12 +288,12 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Flux.just(prop("currency", "fractions", "360:2")))
           .thenReturn(Flux.just(prop("currency", "fractions", "840:2")));
 
-      service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo(
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo(
           "360:2");
 
-      service.reload(PropertiesGroup.CURRENCY_FRACTIONS);
-      assertThat(service.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo(
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo(
           "840:2");
     }
   }

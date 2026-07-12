@@ -9,7 +9,7 @@ import java.util.Map;
 import lombok.Getter;
 
 @Getter
-public enum PropertiesGroup {
+public enum ConfigGroup {
   ISO8583_MASK_FIELDS("mask_fields", "iso8583"),
   ACQUIRERS("acquirers", "acquirers"),
   INCOMING_MTI("mti", "incoming"),
@@ -17,20 +17,18 @@ public enum PropertiesGroup {
   CURRENCY_FRACTIONS("currency", "fractions"),
   PATH_MAPPING("endpoint_path", "mapping"),
   RESPONSE_MAPPING("response", "incoming_outgoing_mapping"),
-  REGISTRY_RESPONSE_SELECTOR("registry", "response_selector"), // selector when use sendWithResponse
-  REGISTRY_CALLBACK_SELECTOR("registry", "callback_selector"), // selector when use sendWithCallback
-  CLIENT_SPEC_REQUEST("client_spec_request", "request"),
-  CLIENT_SPEC_RESPONSE("client_spec_response", "response");
+  REGISTRY_RESPONSE_SELECTOR("registry", "response_selector"),
+  REGISTRY_CALLBACK_SELECTOR("registry", "callback_selector");
 
   private String group;
   private String propertyId;
 
-  PropertiesGroup(String group, String propertyId) {
+  ConfigGroup(String group, String propertyId) {
     this.group = group;
     this.propertyId = propertyId;
   }
 
-  public static List<String> getList(SystemPropertiesService systemPropertiesService, PropertiesGroup group) {
+  public static List<String> getList(SystemPropertiesService systemPropertiesService, ConfigGroup group) {
     return (List<String>) StringHelper.toCollection(
         systemPropertiesService.getProperty(group, group.getPropertyId()),
         ",",
@@ -38,7 +36,7 @@ public enum PropertiesGroup {
     );
   }
 
-  public static Map<String, String> getMap(SystemPropertiesService systemPropertiesService, PropertiesGroup group) {
+  public static Map<String, String> getMap(SystemPropertiesService systemPropertiesService, ConfigGroup group) {
     return (Map<String, String>) StringHelper.toCollection(
         systemPropertiesService.getProperty(group, group.getPropertyId()),
         ",",

@@ -5,7 +5,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.constant.IsoCategory;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
@@ -48,7 +48,7 @@ class RequestContextHelperTest {
     lenient().when(isoMessage.hasField(90)).thenReturn(false);
 
     lenient().when(
-            systemPropertiesService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
+            systemPropertiesService.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
         .thenReturn("360:2");
   }
 

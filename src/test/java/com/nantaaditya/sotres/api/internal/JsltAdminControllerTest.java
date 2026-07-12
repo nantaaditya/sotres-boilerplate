@@ -10,7 +10,7 @@ import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.model.response.TemplateResponse;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -180,11 +180,11 @@ class JsltAdminControllerTest {
       TemplateResponse dto = TemplateResponse.from(saved);
       Response<TemplateResponse> successResp = successResponse(dto);
 
-      when(systemPropertiesService.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
       when(responseHelper.success(dto)).thenReturn(successResp);
 
-      StepVerifier.create(controller.save("10.97-E001", PropertiesGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
+      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
           .assertNext(entity -> {
             assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(entity.getBody().getData().template()).isEqualTo("{\"result\": .value}");
@@ -197,10 +197,10 @@ class JsltAdminControllerTest {
     @Test
     @DisplayName("propagates error from helper")
     void save_propagatesError() {
-      when(systemPropertiesService.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.error(new RuntimeException("DB write failed")));
 
-      StepVerifier.create(controller.save("10.97-E001", PropertiesGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
+      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
           .expectError(RuntimeException.class)
           .verify();
     }

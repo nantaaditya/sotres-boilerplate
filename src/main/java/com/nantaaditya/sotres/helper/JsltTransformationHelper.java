@@ -2,7 +2,7 @@ package com.nantaaditya.sotres.helper;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.schibsted.spt.data.jslt.Expression;
@@ -33,7 +33,7 @@ public class JsltTransformationHelper {
     this.objectMapper = objectMapper;
   }
 
-  public Mono<JsonNode> transform(PropertiesGroup group, String selector, Object input) {
+  public Mono<JsonNode> transform(TemplateGroup group, String selector, Object input) {
     return expressionCache.computeIfAbsent(
         cacheKey(group, selector),
         k -> systemPropertiesService.getRawProperty(group, selector)
@@ -48,35 +48,35 @@ public class JsltTransformationHelper {
     }).subscribeOn(Schedulers.boundedElastic()));
   }
 
-  public void evictExpression(PropertiesGroup group, String selector) {
+  public void evictExpression(TemplateGroup group, String selector) {
     expressionCache.remove(cacheKey(group, selector));
     log.info(AppLogMessage.message("#JSLT - evicted cache for group={} selector={}", group.getGroup(), selector));
   }
 
   public Mono<Map<String, String>> evictAndReload(String selector) {
-    evictExpression(PropertiesGroup.CLIENT_SPEC_REQUEST, selector);
-    evictExpression(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector);
+    evictExpression(TemplateGroup.CLIENT_SPEC_REQUEST, selector);
+    evictExpression(TemplateGroup.CLIENT_SPEC_RESPONSE, selector);
 
-    Mono<String> request = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
+    Mono<String> request = systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, selector)
         .flatMap(template -> {
-          Mono<Expression> compiled = compileExpression(PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), selector, template).cache();
-          expressionCache.put(cacheKey(PropertiesGroup.CLIENT_SPEC_REQUEST, selector), compiled);
+          Mono<Expression> compiled = compileExpression(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), selector, template).cache();
+          expressionCache.put(cacheKey(TemplateGroup.CLIENT_SPEC_REQUEST, selector), compiled);
           return compiled.thenReturn(template);
         })
         .defaultIfEmpty("");
 
-    Mono<String> response = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
+    Mono<String> response = systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, selector)
         .flatMap(template -> {
-          Mono<Expression> compiled = compileExpression(PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), selector, template).cache();
-          expressionCache.put(cacheKey(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector), compiled);
+          Mono<Expression> compiled = compileExpression(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), selector, template).cache();
+          expressionCache.put(cacheKey(TemplateGroup.CLIENT_SPEC_RESPONSE, selector), compiled);
           return compiled.thenReturn(template);
         })
         .defaultIfEmpty("");
 
     return Mono.zip(request, response)
         .map(t -> Map.of(
-            PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), t.getT1(),
-            PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), t.getT2()
+            TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), t.getT1(),
+            TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), t.getT2()
         ));
   }
 
@@ -84,8 +84,8 @@ public class JsltTransformationHelper {
     expressionCache.clear();
     log.info(AppLogMessage.message("#JSLT - evicted all cached expressions"));
     return Flux.merge(
-        systemPropertiesService.getByGroupId(PropertiesGroup.CLIENT_SPEC_REQUEST),
-        systemPropertiesService.getByGroupId(PropertiesGroup.CLIENT_SPEC_RESPONSE)
+        systemPropertiesService.getByGroupId(TemplateGroup.CLIENT_SPEC_REQUEST),
+        systemPropertiesService.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE)
     ).flatMap(sp -> {
       String key = cacheKey(sp.getGroupId(), sp.getPropertyId());
       Mono<Expression> compiled = compileExpression(sp.getGroupId(), sp.getPropertyId(), sp.getPropertyValue()).cache();
@@ -96,14 +96,14 @@ public class JsltTransformationHelper {
   }
 
   public Mono<Map<String, String>> getTemplates(String selector) {
-    Mono<String> request = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
+    Mono<String> request = systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, selector)
         .defaultIfEmpty("");
-    Mono<String> response = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
+    Mono<String> response = systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, selector)
         .defaultIfEmpty("");
     return Mono.zip(request, response)
         .map(t -> Map.of(
-            PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), t.getT1(),
-            PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), t.getT2()
+            TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), t.getT1(),
+            TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), t.getT2()
         ));
   }
 
@@ -127,7 +127,7 @@ public class JsltTransformationHelper {
     }).subscribeOn(Schedulers.boundedElastic());
   }
 
-  private String cacheKey(PropertiesGroup group, String selector) {
+  private String cacheKey(TemplateGroup group, String selector) {
     return group.getGroup() + ":" + selector;
   }
 

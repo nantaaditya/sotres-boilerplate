@@ -12,7 +12,7 @@ import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
@@ -96,8 +96,8 @@ class TransactionProcessorParticipantTest {
     when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(
         config);
     when(systemPropertiesService.getProperty(
-        PropertiesGroup.REGISTRY_RESPONSE_SELECTOR,
-        PropertiesGroup.REGISTRY_RESPONSE_SELECTOR.getPropertyId()))
+        ConfigGroup.REGISTRY_RESPONSE_SELECTOR,
+        ConfigGroup.REGISTRY_RESPONSE_SELECTOR.getPropertyId()))
         .thenReturn("21.00-QR");
 
     // tracer chain
@@ -128,8 +128,8 @@ class TransactionProcessorParticipantTest {
 
     // currency fraction map used inside createTransaction
     lenient().when(systemPropertiesService.getProperty(
-            PropertiesGroup.CURRENCY_FRACTIONS,
-            PropertiesGroup.CURRENCY_FRACTIONS.getPropertyId()))
+            ConfigGroup.CURRENCY_FRACTIONS,
+            ConfigGroup.CURRENCY_FRACTIONS.getPropertyId()))
         .thenReturn("360:2");
 
     participant = new TransactionProcessorParticipant(
