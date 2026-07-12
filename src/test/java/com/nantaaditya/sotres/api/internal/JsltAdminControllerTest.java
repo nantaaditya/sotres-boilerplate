@@ -12,6 +12,7 @@ import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.PropertiesGroup;
 import com.nantaaditya.sotres.model.response.Response;
+import com.nantaaditya.sotres.model.response.TemplateResponse;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import io.micrometer.observation.Observation;
 import java.util.Map;
@@ -171,21 +172,24 @@ class JsltAdminControllerTest {
   class Save {
 
     @Test
-    @DisplayName("returns 200 with saved entity after upsert and cache eviction")
-    void save_returnsUpsertedEntity() {
+    @DisplayName("returns 200 with TemplateResponse DTO after upsert and cache eviction")
+    void save_returnsTemplateResponseDto() {
       SystemProperties saved = SystemProperties.builder()
           .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
           .propertyValue("{\"result\": .value}").build();
-      Response<SystemProperties> successResp = successResponse(saved);
+      TemplateResponse dto = TemplateResponse.from(saved);
+      Response<TemplateResponse> successResp = successResponse(dto);
 
       when(systemPropertiesService.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
-      when(responseHelper.success(saved)).thenReturn(successResp);
+      when(responseHelper.success(dto)).thenReturn(successResp);
 
       StepVerifier.create(controller.save("10.97-E001", PropertiesGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
           .assertNext(entity -> {
             assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-            assertThat(entity.getBody().getData().getPropertyValue()).isEqualTo("{\"result\": .value}");
+            assertThat(entity.getBody().getData().template()).isEqualTo("{\"result\": .value}");
+            assertThat(entity.getBody().getData().selector()).isEqualTo("10.97-E001");
+            assertThat(entity.getBody().getData().group()).isEqualTo("client_spec_request");
           })
           .verifyComplete();
     }
