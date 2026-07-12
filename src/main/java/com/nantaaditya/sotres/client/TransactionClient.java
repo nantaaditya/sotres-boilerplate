@@ -87,7 +87,8 @@ public class TransactionClient extends BaseClient {
         )
         .flatMap(rawResponse ->
             jsltTransformationHelper.transform(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse))
-        .map(normalized -> objectMapper.convertValue(normalized, ResponseContext.class));
+        .flatMap(normalized -> Mono.fromCallable(
+            () -> objectMapper.treeToValue(normalized, ResponseContext.class)));
 
     if (clientConfiguration.isNeedRetryable()) {
       return response.retryWhen(getRetryCondition(clientConfiguration));

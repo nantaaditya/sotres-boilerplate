@@ -20,7 +20,8 @@ import reactor.core.scheduler.Schedulers;
 @Component
 public class JsltTransformationHelper {
 
-  private final ConcurrentHashMap<String, Expression> expressionCache = new ConcurrentHashMap<>();
+  // Stores cached (hot) Mono<Expression> so concurrent callers on the same key share one compilation.
+  private final ConcurrentHashMap<String, Mono<Expression>> expressionCache = new ConcurrentHashMap<>();
 
   private final SystemPropertiesService systemPropertiesService;
   private final ObjectMapper objectMapper;
@@ -33,18 +34,18 @@ public class JsltTransformationHelper {
   }
 
   public Mono<JsonNode> transform(PropertiesGroup group, String selector, Object input) {
-    Expression cached = expressionCache.get(cacheKey(group, selector));
-    if (cached != null) {
-      return apply(cached, input);
-    }
-    return systemPropertiesService.getRawProperty(group, selector)
-        .flatMap(template -> compileAndCache(group.getGroup(), selector, template))
-        .flatMap(expression -> apply(expression, input))
-        .switchIfEmpty(Mono.<JsonNode>fromCallable(() -> {
-          log.warn(AppLogMessage.message("#JSLT - no template for group={} selector={}, using pass-through",
-              group.getGroup(), selector));
-          return objectMapper.valueToTree(input);
-        }).subscribeOn(Schedulers.boundedElastic()));
+    return expressionCache.computeIfAbsent(
+        cacheKey(group, selector),
+        k -> systemPropertiesService.getRawProperty(group, selector)
+            .flatMap(template -> compileExpression(group.getGroup(), selector, template))
+            .cache()  // cold → hot: first subscriber triggers compilation, rest replay the result
+    )
+    .flatMap(expr -> apply(expr, input))
+    .switchIfEmpty(Mono.<JsonNode>fromCallable(() -> {
+      log.warn(AppLogMessage.message("#JSLT - no template for group={} selector={}, using pass-through",
+          group.getGroup(), selector));
+      return objectMapper.valueToTree(input);
+    }).subscribeOn(Schedulers.boundedElastic()));
   }
 
   public void evictExpression(PropertiesGroup group, String selector) {
@@ -57,11 +58,19 @@ public class JsltTransformationHelper {
     evictExpression(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector);
 
     Mono<String> request = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
-        .flatMap(template -> compileAndCache(PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), selector, template).thenReturn(template))
+        .flatMap(template -> {
+          Mono<Expression> compiled = compileExpression(PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), selector, template).cache();
+          expressionCache.put(cacheKey(PropertiesGroup.CLIENT_SPEC_REQUEST, selector), compiled);
+          return compiled.thenReturn(template);
+        })
         .defaultIfEmpty("");
 
     Mono<String> response = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
-        .flatMap(template -> compileAndCache(PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), selector, template).thenReturn(template))
+        .flatMap(template -> {
+          Mono<Expression> compiled = compileExpression(PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), selector, template).cache();
+          expressionCache.put(cacheKey(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector), compiled);
+          return compiled.thenReturn(template);
+        })
         .defaultIfEmpty("");
 
     return Mono.zip(request, response)
@@ -74,11 +83,16 @@ public class JsltTransformationHelper {
   public Mono<Void> evictAll() {
     expressionCache.clear();
     log.info(AppLogMessage.message("#JSLT - evicted all cached expressions"));
-    return Flux.concat(
+    return Flux.merge(
         systemPropertiesService.getByGroupId(PropertiesGroup.CLIENT_SPEC_REQUEST),
         systemPropertiesService.getByGroupId(PropertiesGroup.CLIENT_SPEC_RESPONSE)
-    ).flatMap(sp -> compileAndCache(sp.getGroupId(), sp.getPropertyId(), sp.getPropertyValue()))
-     .then();
+    ).flatMap(sp -> {
+      String key = cacheKey(sp.getGroupId(), sp.getPropertyId());
+      Mono<Expression> compiled = compileExpression(sp.getGroupId(), sp.getPropertyId(), sp.getPropertyValue()).cache();
+      expressionCache.put(key, compiled);
+      return compiled;
+    })
+    .then();
   }
 
   public Mono<Map<String, String>> getTemplates(String selector) {
@@ -93,11 +107,10 @@ public class JsltTransformationHelper {
         ));
   }
 
-  private Mono<Expression> compileAndCache(String groupId, String selector, String template) {
+  private Mono<Expression> compileExpression(String groupId, String selector, String template) {
     return Mono.fromCallable(() -> {
       try {
         Expression expression = Parser.compileString(template);
-        expressionCache.put(groupId + ":" + selector, expression);
         log.info(AppLogMessage.message("#JSLT - compiled template for group={} selector={}", groupId, selector));
         return expression;
       } catch (JsltException e) {
@@ -116,5 +129,9 @@ public class JsltTransformationHelper {
 
   private String cacheKey(PropertiesGroup group, String selector) {
     return group.getGroup() + ":" + selector;
+  }
+
+  private String cacheKey(String groupId, String selector) {
+    return groupId + ":" + selector;
   }
 }
