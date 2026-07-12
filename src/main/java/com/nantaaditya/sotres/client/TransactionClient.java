@@ -1,6 +1,9 @@
 package com.nantaaditya.sotres.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
+import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.PropertiesGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
@@ -24,6 +27,8 @@ import reactor.core.publisher.Mono;
 public class TransactionClient extends BaseClient {
 
   private final SystemPropertiesService systemPropertiesService;
+  private final JsltTransformationHelper jsltTransformationHelper;
+  private final ObjectMapper objectMapper;
   private final ClientProperties clientProperties;
   private final ClientConfiguration clientConfiguration;
   private final WebClient webClient;
@@ -31,10 +36,15 @@ public class TransactionClient extends BaseClient {
   @Value("${spring.application.name}")
   private String applicationName;
 
-  public TransactionClient(SystemPropertiesService systemPropertiesService, Logbook logbook,
+  public TransactionClient(SystemPropertiesService systemPropertiesService,
+      JsltTransformationHelper jsltTransformationHelper,
+      ObjectMapper objectMapper,
+      Logbook logbook,
       ClientProperties clientProperties) {
 
     this.systemPropertiesService = systemPropertiesService;
+    this.jsltTransformationHelper = jsltTransformationHelper;
+    this.objectMapper = objectMapper;
     this.clientProperties = clientProperties;
     this.clientConfiguration = this.clientProperties.getConfiguration("transaction");
     this.webClient = createWebClient(logbook, this.clientConfiguration);
@@ -47,37 +57,40 @@ public class TransactionClient extends BaseClient {
     );
   }
 
-  // TODO: mapping outgoing request from internal DTO to external spec using JOLT
-  public <R extends  RequestContext> Mono<ResponseContext> send(R requestContext) {
-    Mono<ResponseContext> response = webClient.post()
-      .uri(uriBuilder -> uriBuilder
-          .path(getPath(requestContext))
-          .build()
-      )
-      .headers(httpHeaders -> {
-        httpHeaders.set(HeaderConstant.CLIENT_ID.getHeader(), applicationName);
-        httpHeaders.set(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
-        httpHeaders.set(HeaderConstant.REQUEST_TIME.getHeader(), DateTimeHelper.getDateInFormat(ZonedDateTime.now(),
-            DateTimeHelper.ISO_8601_GMT7_FORMAT));
-      })
-      .contentType(MediaType.APPLICATION_JSON)
-      .accept(MediaType.APPLICATION_JSON)
-      .body(BodyInserters.fromValue(requestContext))
-      .exchangeToMono(clientResponse -> {
-        if (clientResponse.statusCode().is2xxSuccessful()) {
-          return clientResponse.bodyToMono(ResponseContext.class);
-        } else if (clientResponse.statusCode().is4xxClientError()) {
-          log.error(AppLogMessage.message("#Transaction - got http status {} from client", clientResponse.statusCode()));
-          return clientResponse.bodyToMono(ResponseContext.class);
-        } else {
-          return clientResponse.createException()
-              .flatMap(Mono::error);
-        }
-      });
+  public <R extends RequestContext> Mono<ResponseContext> send(R requestContext) {
+    String selector = requestContext.getSelector();
+
+    Mono<ResponseContext> response = jsltTransformationHelper
+        .transform(PropertiesGroup.CLIENT_SPEC_REQUEST, selector, requestContext)
+        .flatMap(requestBody -> webClient.post()
+            .uri(uriBuilder -> uriBuilder.path(getPath(requestContext)).build())
+            .headers(httpHeaders -> {
+              httpHeaders.set(HeaderConstant.CLIENT_ID.getHeader(), applicationName);
+              httpHeaders.set(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
+              httpHeaders.set(HeaderConstant.REQUEST_TIME.getHeader(), DateTimeHelper.getDateInFormat(
+                  ZonedDateTime.now(), DateTimeHelper.ISO_8601_GMT7_FORMAT));
+            })
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .body(BodyInserters.fromValue(requestBody))
+            .exchangeToMono(clientResponse -> {
+              if (clientResponse.statusCode().is2xxSuccessful()) {
+                return clientResponse.bodyToMono(JsonNode.class);
+              } else if (clientResponse.statusCode().is4xxClientError()) {
+                log.error(AppLogMessage.message("#Transaction - got http status {} from client",
+                    clientResponse.statusCode()));
+                return clientResponse.bodyToMono(JsonNode.class);
+              } else {
+                return clientResponse.createException().flatMap(Mono::error);
+              }
+            })
+        )
+        .flatMap(rawResponse ->
+            jsltTransformationHelper.transform(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse))
+        .map(normalized -> objectMapper.convertValue(normalized, ResponseContext.class));
 
     if (clientConfiguration.isNeedRetryable()) {
-      return response
-          .retryWhen(getRetryCondition(clientConfiguration));
+      return response.retryWhen(getRetryCondition(clientConfiguration));
     }
 
     return response;
@@ -87,5 +100,4 @@ public class TransactionClient extends BaseClient {
     return PropertiesGroup.getMap(systemPropertiesService, PropertiesGroup.PATH_MAPPING)
         .get(requestContext.getSelector());
   }
-
 }

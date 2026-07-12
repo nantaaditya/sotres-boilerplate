@@ -33,3 +33,9 @@ build/
 .vscode/
 core-api.log
 *.log
+
+.diagram/*
+graphify-out/*
+.claude/*
+architecture.json
+architecture-map.html

@@ -39,7 +39,12 @@ public class JsltTransformationHelper {
     }
     return systemPropertiesService.getRawProperty(group, selector)
         .flatMap(template -> compileAndCache(group.getGroup(), selector, template))
-        .flatMap(expression -> apply(expression, input));
+        .flatMap(expression -> apply(expression, input))
+        .switchIfEmpty(Mono.<JsonNode>fromCallable(() -> {
+          log.warn(AppLogMessage.message("#JSLT - no template for group={} selector={}, using pass-through",
+              group.getGroup(), selector));
+          return objectMapper.valueToTree(input);
+        }).subscribeOn(Schedulers.boundedElastic()));
   }
 
   public void evictExpression(PropertiesGroup group, String selector) {
@@ -51,15 +56,15 @@ public class JsltTransformationHelper {
     evictExpression(PropertiesGroup.CLIENT_SPEC_REQUEST, selector);
     evictExpression(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector);
 
-    Mono<String> req = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
-        .flatMap(tmpl -> compileAndCache(PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), selector, tmpl).thenReturn(tmpl))
+    Mono<String> request = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
+        .flatMap(template -> compileAndCache(PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), selector, template).thenReturn(template))
         .defaultIfEmpty("");
 
-    Mono<String> resp = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
-        .flatMap(tmpl -> compileAndCache(PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), selector, tmpl).thenReturn(tmpl))
+    Mono<String> response = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
+        .flatMap(template -> compileAndCache(PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), selector, template).thenReturn(template))
         .defaultIfEmpty("");
 
-    return Mono.zip(req, resp)
+    return Mono.zip(request, response)
         .map(t -> Map.of(
             PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), t.getT1(),
             PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), t.getT2()
@@ -77,11 +82,11 @@ public class JsltTransformationHelper {
   }
 
   public Mono<Map<String, String>> getTemplates(String selector) {
-    Mono<String> req = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
+    Mono<String> request = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, selector)
         .defaultIfEmpty("");
-    Mono<String> resp = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
+    Mono<String> response = systemPropertiesService.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, selector)
         .defaultIfEmpty("");
-    return Mono.zip(req, resp)
+    return Mono.zip(request, response)
         .map(t -> Map.of(
             PropertiesGroup.CLIENT_SPEC_REQUEST.getGroup(), t.getT1(),
             PropertiesGroup.CLIENT_SPEC_RESPONSE.getGroup(), t.getT2()
@@ -91,10 +96,10 @@ public class JsltTransformationHelper {
   private Mono<Expression> compileAndCache(String groupId, String selector, String template) {
     return Mono.fromCallable(() -> {
       try {
-        Expression expr = Parser.compileString(template);
-        expressionCache.put(groupId + ":" + selector, expr);
+        Expression expression = Parser.compileString(template);
+        expressionCache.put(groupId + ":" + selector, expression);
         log.info(AppLogMessage.message("#JSLT - compiled template for group={} selector={}", groupId, selector));
-        return expr;
+        return expression;
       } catch (JsltException e) {
         log.error(AppLogMessage.message("#JSLT - failed to compile template for group={} selector={}", groupId, selector).error(e));
         throw e;

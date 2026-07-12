@@ -14,6 +14,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 @DisplayName("SystemPropertiesServiceImpl")
 @ExtendWith(MockitoExtension.class)
@@ -122,6 +124,71 @@ class SystemPropertiesServiceImplTest {
           new SystemPropertiesServiceImpl(systemPropertiesRepository);
 
       assertThat(freshService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS)).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("getRawProperty")
+  class GetRawProperty {
+
+    @Test
+    @DisplayName("returns property value from repository when found")
+    void returnsValue_whenFound() {
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
+          .thenReturn(Mono.just(prop("client_spec_request", "10.97-E001", "{\"result\": .value}")));
+
+      StepVerifier.create(service.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
+          .expectNext("{\"result\": .value}")
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("returns empty Mono when property not found in repository")
+    void returnsEmpty_whenNotFound() {
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "unknown"))
+          .thenReturn(Mono.empty());
+
+      StepVerifier.create(service.getRawProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, "unknown"))
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("delegates to repository with correct groupId and selector")
+    void delegatesToRepository_withCorrectArguments() {
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_response", "10.97-E001"))
+          .thenReturn(Mono.just(prop("client_spec_response", "10.97-E001", "{\"mapped\": .field}")));
+
+      StepVerifier.create(service.getRawProperty(PropertiesGroup.CLIENT_SPEC_RESPONSE, "10.97-E001"))
+          .expectNext("{\"mapped\": .field}")
+          .verifyComplete();
+    }
+  }
+
+  @Nested
+  @DisplayName("getByGroupId")
+  class GetByGroupId {
+
+    @Test
+    @DisplayName("returns all properties for the group from repository")
+    void returnsAll_forGroup() {
+      SystemProperties sp1 = prop("client_spec_request", "10.97-E001", "template-a");
+      SystemProperties sp2 = prop("client_spec_request", "20.50-A001", "template-b");
+      when(systemPropertiesRepository.findByGroupId("client_spec_request"))
+          .thenReturn(Flux.just(sp1, sp2));
+
+      StepVerifier.create(service.getByGroupId(PropertiesGroup.CLIENT_SPEC_REQUEST))
+          .expectNext(sp1, sp2)
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("returns empty Flux when group has no properties")
+    void returnsEmpty_whenGroupHasNoProperties() {
+      when(systemPropertiesRepository.findByGroupId("client_spec_response"))
+          .thenReturn(Flux.empty());
+
+      StepVerifier.create(service.getByGroupId(PropertiesGroup.CLIENT_SPEC_RESPONSE))
+          .verifyComplete();
     }
   }
 
