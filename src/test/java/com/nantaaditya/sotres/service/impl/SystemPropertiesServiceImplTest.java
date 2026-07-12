@@ -240,10 +240,16 @@ class SystemPropertiesServiceImplTest {
     @Test
     @DisplayName("saves to repository and does not contaminate the flat-config cache")
     void upsert_savesToRepository_doesNotContaminateConfigCache() {
+      // Pre-populate a flat-config entry so we can detect contamination
+      when(systemPropertiesRepository.findByGroupId("currency"))
+          .thenReturn(Flux.just(prop("currency", "fractions", "360:2")));
+      service.reload(ConfigGroup.CURRENCY_FRACTIONS);
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo("360:2");
+
+      // Upsert a template-group record
       SystemProperties saved = SystemProperties.builder()
           .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
           .propertyValue("{\"result\": .value}").build();
-
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
           .thenReturn(Mono.empty());
       when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(Mono.just(saved));
@@ -255,8 +261,8 @@ class SystemPropertiesServiceImplTest {
           })
           .verifyComplete();
 
-      // Template group rows must not bleed into the flat-config cache
-      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS)).isEmpty();
+      // Flat-config cache must be unchanged after template upsert
+      assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo("360:2");
     }
   }
 

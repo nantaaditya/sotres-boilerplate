@@ -111,6 +111,40 @@ class JsltTransformationHelperTest {
           .expectError(JsltException.class)
           .verify();
     }
+
+    @Test
+    @DisplayName("evicts empty cache entry so a subsequent call can pick up a newly-added template")
+    void cacheMiss_noTemplate_subsequentCallCanPickUpNewTemplate() {
+      when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
+          .thenReturn(Mono.empty())
+          .thenReturn(Mono.just(REQ_TEMPLATE));
+
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")).block();
+
+      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")))
+          .assertNext(json -> assertThat(json.get("result").asText()).isEqualTo("hello"))
+          .verifyComplete();
+
+      verify(systemPropertiesService, times(2)).getRawProperty(any(), any());
+    }
+
+    @Test
+    @DisplayName("evicts erroring cache entry so a subsequent call retries from DB")
+    void compilationError_errorEntryEvicted_subsequentCallRetries() {
+      when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
+          .thenReturn(Mono.just("<<< invalid JSLT >>>"))
+          .thenReturn(Mono.just(REQ_TEMPLATE));
+
+      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of()))
+          .expectError(JsltException.class)
+          .verify();
+
+      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")))
+          .assertNext(json -> assertThat(json.get("result").asText()).isEqualTo("hello"))
+          .verifyComplete();
+
+      verify(systemPropertiesService, times(2)).getRawProperty(any(), any());
+    }
   }
 
   @Nested

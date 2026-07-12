@@ -7,8 +7,8 @@ public enum TemplateGroup {
   CLIENT_SPEC_REQUEST("client_spec_request", "request"),
   CLIENT_SPEC_RESPONSE("client_spec_response", "response");
 
-  private String group;
-  private String propertyId;
+  private final String group;
+  private final String propertyId;
 
   TemplateGroup(String group, String propertyId) {
     this.group = group;

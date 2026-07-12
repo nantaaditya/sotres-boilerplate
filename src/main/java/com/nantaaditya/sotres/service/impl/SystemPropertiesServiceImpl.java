@@ -37,12 +37,12 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
   @Override
   public Map<String, String> getProperty(ConfigGroup key) {
-    return PROPERTY_COLLECTION_MAP.getOrDefault(key, new ConcurrentHashMap<>());
+    return PROPERTY_COLLECTION_MAP.getOrDefault(key, Map.of());
   }
 
   @Override
   public String getProperty(ConfigGroup key, String propertyId) {
-    return PROPERTY_COLLECTION_MAP.getOrDefault(key, new ConcurrentHashMap<>()).get(propertyId);
+    return PROPERTY_COLLECTION_MAP.getOrDefault(key, Map.of()).get(propertyId);
   }
 
   @Override

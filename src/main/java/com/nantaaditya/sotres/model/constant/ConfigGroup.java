@@ -20,8 +20,8 @@ public enum ConfigGroup {
   REGISTRY_RESPONSE_SELECTOR("registry", "response_selector"),
   REGISTRY_CALLBACK_SELECTOR("registry", "callback_selector");
 
-  private String group;
-  private String propertyId;
+  private final String group;
+  private final String propertyId;
 
   ConfigGroup(String group, String propertyId) {
     this.group = group;
