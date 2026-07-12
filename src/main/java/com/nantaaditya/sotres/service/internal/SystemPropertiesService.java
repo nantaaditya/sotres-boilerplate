@@ -12,4 +12,5 @@ public interface SystemPropertiesService {
   void reload(PropertiesGroup key);
   Mono<String> getRawProperty(PropertiesGroup group, String selector);
   Flux<SystemProperties> getByGroupId(PropertiesGroup group);
+  Mono<SystemProperties> upsert(PropertiesGroup group, String selector, String value);
 }

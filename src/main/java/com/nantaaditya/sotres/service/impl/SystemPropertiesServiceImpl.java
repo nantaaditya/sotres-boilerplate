@@ -65,6 +65,20 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
     return systemPropertiesRepository.findByGroupId(group.getGroup());
   }
 
+  @Override
+  public Mono<SystemProperties> upsert(PropertiesGroup group, String selector, String value) {
+    return systemPropertiesRepository
+        .findByGroupIdAndPropertyId(group.getGroup(), selector)
+        .map(existing -> existing.toBuilder().propertyValue(value).build())
+        .switchIfEmpty(Mono.just(SystemProperties.builder()
+            .groupId(group.getGroup())
+            .propertyId(selector)
+            .propertyValue(value)
+            .build()))
+        .flatMap(entity -> systemPropertiesRepository.save(entity))
+        .doOnNext(this::loadSystemProperties);
+  }
+
   private void loadSystemProperties(SystemProperties sp) {
     for (PropertiesGroup group : PropertiesGroup.values()) {
       if (group.getGroup().equals(sp.getGroupId())) {

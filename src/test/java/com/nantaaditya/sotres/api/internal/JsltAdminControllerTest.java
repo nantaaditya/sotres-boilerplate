@@ -5,11 +5,14 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
+import com.nantaaditya.sotres.model.constant.PropertiesGroup;
 import com.nantaaditya.sotres.model.response.Response;
+import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import io.micrometer.observation.Observation;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +35,9 @@ class JsltAdminControllerTest {
   private JsltTransformationHelper jsltTransformationHelper;
 
   @Mock
+  private SystemPropertiesService systemPropertiesService;
+
+  @Mock
   private ResponseHelper responseHelper;
 
   @Mock
@@ -44,7 +50,7 @@ class JsltAdminControllerTest {
 
   @BeforeEach
   void setUp() {
-    controller = new JsltAdminController(jsltTransformationHelper);
+    controller = new JsltAdminController(jsltTransformationHelper, systemPropertiesService);
     ReflectionTestUtils.setField(controller, "responseHelper", responseHelper);
     ReflectionTestUtils.setField(controller, "observationWrapper", observationWrapper);
     lenient().when(observationWrapper.getObservation()).thenReturn(observation);
@@ -155,6 +161,42 @@ class JsltAdminControllerTest {
           .thenReturn(Mono.error(new RuntimeException("reload failed")));
 
       StepVerifier.create(controller.reloadAll())
+          .expectError(RuntimeException.class)
+          .verify();
+    }
+  }
+
+  @Nested
+  @DisplayName("PUT /template")
+  class Save {
+
+    @Test
+    @DisplayName("returns 200 with saved entity after upsert and cache eviction")
+    void save_returnsUpsertedEntity() {
+      SystemProperties saved = SystemProperties.builder()
+          .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
+          .propertyValue("{\"result\": .value}").build();
+      Response<SystemProperties> successResp = successResponse(saved);
+
+      when(systemPropertiesService.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+          .thenReturn(Mono.just(saved));
+      when(responseHelper.success(saved)).thenReturn(successResp);
+
+      StepVerifier.create(controller.save("10.97-E001", PropertiesGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
+          .assertNext(entity -> {
+            assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(entity.getBody().getData().getPropertyValue()).isEqualTo("{\"result\": .value}");
+          })
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("propagates error from helper")
+    void save_propagatesError() {
+      when(systemPropertiesService.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+          .thenReturn(Mono.error(new RuntimeException("DB write failed")));
+
+      StepVerifier.create(controller.save("10.97-E001", PropertiesGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
           .expectError(RuntimeException.class)
           .verify();
     }

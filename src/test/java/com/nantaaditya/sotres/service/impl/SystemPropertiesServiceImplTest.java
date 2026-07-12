@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
@@ -189,6 +190,67 @@ class SystemPropertiesServiceImplTest {
 
       StepVerifier.create(service.getByGroupId(PropertiesGroup.CLIENT_SPEC_RESPONSE))
           .verifyComplete();
+    }
+  }
+
+  @Nested
+  @DisplayName("upsert")
+  class Upsert {
+
+    @Test
+    @DisplayName("inserts new record when selector not found in repository")
+    void upsert_insertsNewRecord_whenNotFound() {
+      SystemProperties saved = SystemProperties.builder()
+          .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
+          .propertyValue("{\"result\": .value}").build();
+
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
+          .thenReturn(Mono.empty());
+      when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(Mono.just(saved));
+
+      StepVerifier.create(service.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+          .assertNext(sp -> {
+            assertThat(sp.getId()).isEqualTo(1L);
+            assertThat(sp.getPropertyValue()).isEqualTo("{\"result\": .value}");
+          })
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("updates existing record when selector found in repository")
+    void upsert_updatesExistingRecord_whenFound() {
+      SystemProperties existing = SystemProperties.builder()
+          .id(5L).groupId("client_spec_request").propertyId("10.97-E001")
+          .propertyValue("old_template").build();
+      SystemProperties updated = existing.toBuilder().propertyValue("{\"new\": .value}").build();
+
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
+          .thenReturn(Mono.just(existing));
+      when(systemPropertiesRepository.save(updated)).thenReturn(Mono.just(updated));
+
+      StepVerifier.create(service.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"new\": .value}"))
+          .assertNext(sp -> {
+            assertThat(sp.getId()).isEqualTo(5L);
+            assertThat(sp.getPropertyValue()).isEqualTo("{\"new\": .value}");
+          })
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("syncs in-memory cache after successful save")
+    void upsert_syncsInMemoryCache_afterSave() {
+      SystemProperties saved = SystemProperties.builder()
+          .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
+          .propertyValue("{\"result\": .value}").build();
+
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
+          .thenReturn(Mono.empty());
+      when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(Mono.just(saved));
+
+      service.upsert(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}").block();
+
+      assertThat(service.getProperty(PropertiesGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
+          .isEqualTo("{\"result\": .value}");
     }
   }
 
