@@ -8,6 +8,7 @@ import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.error.GeneralFlowException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.response.Response;
+import com.schibsted.spt.data.jslt.JsltException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
@@ -127,6 +128,17 @@ public class ApiExceptionHandler {
 
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, map);
       return Tuples.of(map, response);
+    });
+  }
+
+  @ResponseBody
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  @ExceptionHandler(JsltException.class)
+  public Response<Object> jsltException(JsltException ex) {
+    return toBaseErrorResponse(ex, error -> {
+      Map<String, List<String>> errors = Map.of("template", List.of(ex.getMessage()));
+      Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
+      return Tuples.of(errors, response);
     });
   }
 

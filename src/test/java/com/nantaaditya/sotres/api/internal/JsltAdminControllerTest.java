@@ -1,11 +1,15 @@
 package com.nantaaditya.sotres.api.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
+import com.schibsted.spt.data.jslt.JsltException;
+import org.mockito.InOrder;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
@@ -180,6 +184,8 @@ class JsltAdminControllerTest {
       TemplateResponse dto = TemplateResponse.from(saved);
       Response<TemplateResponse> successResp = successResponse(dto);
 
+      when(jsltTransformationHelper.validateTemplate("{\"result\": .value}"))
+          .thenReturn(Mono.empty());
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
       when(responseHelper.success(dto)).thenReturn(successResp);
@@ -195,14 +201,54 @@ class JsltAdminControllerTest {
     }
 
     @Test
-    @DisplayName("propagates error from helper")
+    @DisplayName("propagates error from upsert when DB write fails")
     void save_propagatesError() {
+      when(jsltTransformationHelper.validateTemplate("{\"result\": .value}"))
+          .thenReturn(Mono.empty());
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.error(new RuntimeException("DB write failed")));
 
       StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
           .expectError(RuntimeException.class)
           .verify();
+    }
+
+    @Test
+    @DisplayName("propagates JsltException and never calls upsert when template is invalid")
+    void save_invalidTemplate_rejectsBeforeUpsert() {
+      when(jsltTransformationHelper.validateTemplate("<<< bad >>>"))
+          .thenReturn(Mono.error(new JsltException("unexpected token")));
+
+      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "<<< bad >>>"))
+          .expectError(JsltException.class)
+          .verify();
+
+      verify(systemPropertiesService, never())
+          .upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "<<< bad >>>");
+    }
+
+    @Test
+    @DisplayName("validates before upserting — validateTemplate is called first")
+    void save_validTemplate_validatesBeforeUpsert() {
+      SystemProperties saved = SystemProperties.builder()
+          .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
+          .propertyValue("{\"result\": .value}").build();
+      TemplateResponse dto = TemplateResponse.from(saved);
+      Response<TemplateResponse> successResp = successResponse(dto);
+
+      when(jsltTransformationHelper.validateTemplate("{\"result\": .value}"))
+          .thenReturn(Mono.empty());
+      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+          .thenReturn(Mono.just(saved));
+      when(responseHelper.success(dto)).thenReturn(successResp);
+
+      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
+          .assertNext(entity -> assertThat(entity.getStatusCode().value()).isEqualTo(200))
+          .verifyComplete();
+
+      InOrder order = inOrder(jsltTransformationHelper, systemPropertiesService);
+      order.verify(jsltTransformationHelper).validateTemplate("{\"result\": .value}");
+      order.verify(systemPropertiesService).upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}");
     }
   }
 

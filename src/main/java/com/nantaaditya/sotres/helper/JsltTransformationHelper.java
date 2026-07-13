@@ -101,6 +101,15 @@ public class JsltTransformationHelper {
     .then();
   }
 
+  public Mono<Void> validateTemplate(String template) {
+    return Mono.fromCallable(() -> {
+      Parser.compileString(template);
+      return null;
+    })
+    .subscribeOn(Schedulers.boundedElastic())
+    .then();
+  }
+
   public Mono<Map<String, String>> getTemplates(String selector) {
     Mono<String> request = systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, selector)
         .defaultIfEmpty("");

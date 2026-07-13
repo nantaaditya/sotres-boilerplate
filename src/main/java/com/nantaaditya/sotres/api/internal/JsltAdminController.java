@@ -55,7 +55,8 @@ public class JsltAdminController extends BaseController {
       @RequestParam String selector,
       @RequestParam TemplateGroup group,
       @RequestBody String template) {
-    return systemPropertiesService.upsert(group, selector, template)
+    return jsltTransformationHelper.validateTemplate(template)
+        .then(Mono.defer(() -> systemPropertiesService.upsert(group, selector, template)))
         .doOnNext(saved -> jsltTransformationHelper.evictExpression(group, selector))
         .map(saved -> responseHelper.success(TemplateResponse.from(saved)))
         .map(this::toResponse);

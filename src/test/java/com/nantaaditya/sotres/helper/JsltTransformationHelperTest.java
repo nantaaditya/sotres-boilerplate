@@ -148,6 +148,26 @@ class JsltTransformationHelperTest {
   }
 
   @Nested
+  @DisplayName("validateTemplate")
+  class ValidateTemplate {
+
+    @Test
+    @DisplayName("completes without error for a syntactically valid template")
+    void validTemplate_completesSuccessfully() {
+      StepVerifier.create(helper.validateTemplate(REQ_TEMPLATE))
+          .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("emits JsltException for a syntactically invalid template")
+    void invalidTemplate_emitsJsltException() {
+      StepVerifier.create(helper.validateTemplate("<<< not valid jslt >>>"))
+          .expectError(JsltException.class)
+          .verify();
+    }
+  }
+
+  @Nested
   @DisplayName("evictExpression")
   class EvictExpression {
 
