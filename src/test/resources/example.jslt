@@ -1,0 +1,15 @@
+{
+  "mti": .mti,
+  "cardNo": .cardNo,
+  "processingCode": .processingCode,
+  "stan": .stan,
+  "lateResponse": .lateResponse,
+  "transaction": {
+    "originalAmount": .transaction.originalAmount,
+    "originalCurrencyCode": .transaction.originalCurrencyCode
+  },
+  "merchant": {
+    "merchantName": .merchant.merchantName,
+    "merchantCategoryCode": .merchant.merchantCategoryCode
+  }
+}
