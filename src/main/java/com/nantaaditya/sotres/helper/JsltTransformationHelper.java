@@ -3,6 +3,7 @@ package com.nantaaditya.sotres.helper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
+import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.schibsted.spt.data.jslt.Expression;
@@ -102,12 +103,12 @@ public class JsltTransformationHelper {
   }
 
   public Mono<Void> validateTemplate(String template) {
-    return Mono.fromCallable(() -> {
-      Parser.compileString(template);
-      return null;
-    })
-    .subscribeOn(Schedulers.boundedElastic())
-    .then();
+    if (template == null || template.isBlank()) {
+      return Mono.error(new InvalidTemplateException("template must not be blank"));
+    }
+    return Mono.<Void>fromRunnable(() -> Parser.compileString(template))
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorMap(JsltException.class, e -> new InvalidTemplateException("invalid JSLT syntax", e));
   }
 
   public Mono<Map<String, String>> getTemplates(String selector) {

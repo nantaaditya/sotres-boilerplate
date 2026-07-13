@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
+import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.schibsted.spt.data.jslt.JsltException;
 import java.util.Map;
@@ -159,10 +160,26 @@ class JsltTransformationHelperTest {
     }
 
     @Test
-    @DisplayName("emits JsltException for a syntactically invalid template")
-    void invalidTemplate_emitsJsltException() {
+    @DisplayName("emits InvalidTemplateException wrapping JsltException for syntactically invalid template")
+    void invalidTemplate_emitsInvalidTemplateException() {
       StepVerifier.create(helper.validateTemplate("<<< not valid jslt >>>"))
-          .expectError(JsltException.class)
+          .expectError(InvalidTemplateException.class)
+          .verify();
+    }
+
+    @Test
+    @DisplayName("emits InvalidTemplateException immediately for null template")
+    void nullTemplate_emitsInvalidTemplateException() {
+      StepVerifier.create(helper.validateTemplate(null))
+          .expectError(InvalidTemplateException.class)
+          .verify();
+    }
+
+    @Test
+    @DisplayName("emits InvalidTemplateException immediately for blank template")
+    void blankTemplate_emitsInvalidTemplateException() {
+      StepVerifier.create(helper.validateTemplate("   "))
+          .expectError(InvalidTemplateException.class)
           .verify();
     }
   }

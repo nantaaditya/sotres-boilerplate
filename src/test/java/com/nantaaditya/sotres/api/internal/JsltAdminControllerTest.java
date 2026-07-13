@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
-import com.schibsted.spt.data.jslt.JsltException;
+import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import org.mockito.InOrder;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
@@ -214,13 +214,13 @@ class JsltAdminControllerTest {
     }
 
     @Test
-    @DisplayName("propagates JsltException and never calls upsert when template is invalid")
+    @DisplayName("propagates InvalidTemplateException and never calls upsert when template is invalid")
     void save_invalidTemplate_rejectsBeforeUpsert() {
       when(jsltTransformationHelper.validateTemplate("<<< bad >>>"))
-          .thenReturn(Mono.error(new JsltException("unexpected token")));
+          .thenReturn(Mono.error(new InvalidTemplateException("invalid JSLT syntax")));
 
       StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "<<< bad >>>"))
-          .expectError(JsltException.class)
+          .expectError(InvalidTemplateException.class)
           .verify();
 
       verify(systemPropertiesService, never())

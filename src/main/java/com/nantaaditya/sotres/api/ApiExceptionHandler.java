@@ -6,9 +6,9 @@ import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.error.GeneralFlowException;
+import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.response.Response;
-import com.schibsted.spt.data.jslt.JsltException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
@@ -133,10 +133,10 @@ public class ApiExceptionHandler {
 
   @ResponseBody
   @ResponseStatus(HttpStatus.BAD_REQUEST)
-  @ExceptionHandler(JsltException.class)
-  public Response<Object> jsltException(JsltException ex) {
+  @ExceptionHandler(InvalidTemplateException.class)
+  public Response<Object> invalidTemplateException(InvalidTemplateException ex) {
     return toBaseErrorResponse(ex, error -> {
-      Map<String, List<String>> errors = Map.of("template", List.of(ex.getMessage()));
+      Map<String, List<String>> errors = Map.of("template", List.of("NotValid"));
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
       return Tuples.of(errors, response);
     });
