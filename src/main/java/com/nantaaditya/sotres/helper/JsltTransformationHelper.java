@@ -138,7 +138,7 @@ public class JsltTransformationHelper {
 
   private Mono<JsonNode> apply(Expression expression, Object input) {
     return Mono.fromCallable(() -> {
-      JsonNode inputNode = objectMapper.valueToTree(input);
+      JsonNode inputNode = (input instanceof JsonNode jn) ? jn : objectMapper.valueToTree(input);
       return expression.apply(inputNode);
     }).subscribeOn(Schedulers.boundedElastic());
   }
