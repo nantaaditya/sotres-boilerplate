@@ -276,10 +276,12 @@ public class IsoFieldHelper {
         .ifPresent(code -> isoMessage.setField(38, IsoType.ALPHA.value(IsoFieldHelper.substring(code,code.length() - 6), 6)));
   }
 
+  private static void setResponseCode(IsoMessage isoMessage, String responseCode) {
+    isoMessage.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
+  }
+
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {
-    sendResponse(context, request, response -> {
-      response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
-    });
+    sendResponse(context, request, response -> setResponseCode(response, responseCode));
   }
 
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, Consumer<IsoMessage> responseConsumer) {
@@ -292,7 +294,7 @@ public class IsoFieldHelper {
   public void sendResponseWithObservation(ParticipantContext context, String responseCode, Throwable throwable) {
     IsoMessage request = context.getIsoMessage();
     IsoMessage response = createResponse(request);
-    response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
+    setResponseCode(response, responseCode);
 
     Observation observation = context.getObservation();
     publishIsoEvent(observation, response, ISO_RESPONSE_EVENT);

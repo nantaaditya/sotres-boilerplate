@@ -20,13 +20,14 @@ public enum ExternalFeatureConstant {
     this.path = path;
   }
 
-  public static ExternalFeatureConstant get(String method, String path) {
+  public static String getFeature(String method, String path) {
     Predicate<ExternalFeatureConstant> isMatch = (ExternalFeatureConstant item)
         -> item.getMethod().equals(method) && matcher.match(item.getPath(), path);
 
     return Stream.of(values())
         .filter(isMatch)
         .findFirst()
-        .orElse(null);
+        .map(ExternalFeatureConstant::name)
+        .orElseGet(() -> method + path);
   }
 }

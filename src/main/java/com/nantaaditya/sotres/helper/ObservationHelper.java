@@ -51,12 +51,21 @@ public class ObservationHelper {
 
     Optional.ofNullable(error)
       .ifPresent(t -> {
-        String exceptionClass = t instanceof TransactionException e ?
-            e.getOriginalError().getClass().getName() : t.getCause().getClass().getName();
+        String exceptionClass = getExceptionClass(t);
         observation.lowCardinalityKeyValue(ERROR, exceptionClass);
-        publishEvent(observation, ERROR, exceptionClass);
+        publishEvent(observation, ERROR, error.getMessage());
         observation.error(t);
       });
+  }
+
+  private static String getExceptionClass(Throwable t) {
+    if (t instanceof TransactionException e) {
+      return e.getOriginalError().getClass().getName();
+    }
+
+    return Optional.ofNullable(t.getCause())
+      .map(cause -> cause.getClass().getName())
+      .orElseGet(() -> t.getClass().getName());
   }
 
   public static Context createApiContext(ContextDTO contextDTO) {
