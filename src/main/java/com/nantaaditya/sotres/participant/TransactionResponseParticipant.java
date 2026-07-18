@@ -87,14 +87,14 @@ public class TransactionResponseParticipant
   @Override
   public boolean onMessage(@NotNull ChannelHandlerContext ctx, @NotNull IsoMessage isoMessage) {
     // start observation
-    Observation observation = Observation.start(ObservationConstant.API_EXTERNAL.getName(), observationRegistry);
-    Span span = tracerHelper.startSpan(tracer, ObservationConstant.API_EXTERNAL.getName());
+    Observation observation = Observation.start(ObservationConstant.ISO_MESSAGE.getName(), observationRegistry);
+    Span span = tracerHelper.startSpan(tracer, ObservationConstant.ISO_MESSAGE.getName());
     Map<String, String> mdc = new HashMap<>();
 
     try (SpanInScope spanInScope = tracer.withSpan(span)) {
       // initiate manual span
       TraceContext traceContext = span.context();
-      initiateSpan(isoMessage, mdc);
+      tracerHelper.initiateSpan(isoMessage, mdc);
 
       RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, null);
 
@@ -126,12 +126,6 @@ public class TransactionResponseParticipant
   private boolean isResponseRegistryEnabled(RequestContext requestContext) {
     return RegistryType.RESPONSE == clientProperties.getRegistryType()
         && responseRegistrySelectors.contains(requestContext.getSelector());
-  }
-
-  private void initiateSpan(IsoMessage isoMessage, Map<String, String> mdc) {
-    tracerHelper.createTraceContext(isoMessage);
-    mdc.putAll(MDC.getCopyOfContextMap());
-    MDC.setContextMap(mdc);
   }
 
 }
