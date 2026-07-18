@@ -6,10 +6,10 @@ import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.helper.IsoResponseRegistry;
 import com.nantaaditya.sotres.helper.RequestContextHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.IsoCallbackConstant;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
-import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -29,7 +29,6 @@ import jakarta.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
@@ -50,8 +49,6 @@ public class TransactionResponseParticipant
   private final Scheduler scheduler;
   private final ClientProperties clientProperties;
   private final List<String> responseRegistrySelectors;
-
-  private static final Set<Integer> MTIs = Set.of(0x800, 0x810);
 
   public TransactionResponseParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler> transactionHandlers,
@@ -90,8 +87,8 @@ public class TransactionResponseParticipant
   @Override
   public boolean onMessage(@NotNull ChannelHandlerContext ctx, @NotNull IsoMessage isoMessage) {
     // start observation
-    Observation observation = Observation.start(ObservationConstant.API_PUBLIC.getName(), observationRegistry);
-    Span span = tracerHelper.startSpan(tracer, ObservationConstant.API_PUBLIC.getName());
+    Observation observation = Observation.start(ObservationConstant.API_EXTERNAL.getName(), observationRegistry);
+    Span span = tracerHelper.startSpan(tracer, ObservationConstant.API_EXTERNAL.getName());
     Map<String, String> mdc = new HashMap<>();
 
     try (SpanInScope spanInScope = tracer.withSpan(span)) {

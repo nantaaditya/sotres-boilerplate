@@ -2,6 +2,8 @@ package com.nantaaditya.sotres.helper;
 
 import com.github.f4b6a3.tsid.TsidCreator;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
+import com.nantaaditya.sotres.model.dto.RequestContext;
+import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
 import io.micrometer.tracing.Baggage;
@@ -18,6 +20,7 @@ import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 
 @Log4j2
 @Component
@@ -27,6 +30,9 @@ public class TracerHelper {
   private final BaggageManager baggageManager;
   @Getter
   private final Tracer tracer;
+
+  public static final String TRACE_ID = "traceId";
+  public static final String SPAN_ID = "spanId";
 
   public TraceContext getTracerContext() {
     return Optional.ofNullable(tracer)
@@ -81,5 +87,19 @@ public class TracerHelper {
 
   public void createTraceContext(IsoMessage isoMessage) {
     setBaggage(HeaderConstant.REQUEST_ID.getHeader(), IsoFieldHelper.getField(isoMessage, 37));
+  }
+
+  public void initiateSpan(IsoMessage isoMessage, Map<String, String> mdc) {
+    createTraceContext(isoMessage);
+    mdc.putAll(MDC.getCopyOfContextMap());
+    MDC.setContextMap(mdc);
+  }
+
+  public Context composeTransactionContext(Context context, RequestContext requestContext) {
+    Span currentSpan = context.get(Span.class);
+    Span nextSpan = tracer.nextSpan(currentSpan);
+    return context.put(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn())
+        .put(TRACE_ID, nextSpan.context().traceId())
+        .put(SPAN_ID, nextSpan.context().spanId());
   }
 }

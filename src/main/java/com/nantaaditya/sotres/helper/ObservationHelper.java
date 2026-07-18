@@ -21,7 +21,7 @@ public class ObservationHelper {
 
   private ObservationHelper() {}
 
-  public static void observeIsoRequest(Observation observation, String rrn, String feature) {
+  public static void createIsoContext(Observation observation, String rrn, String feature) {
     if (observation == null)
       return;
 
@@ -41,8 +41,10 @@ public class ObservationHelper {
   }
 
   public static void observeResponse(Observation observation, String responseCode, Throwable error) {
-    if (observation == null)
+    if (observation == null) {
+      log.warn(AppLogMessage.message("#Observation - no current observation"));
       return;
+    }
 
     Optional.ofNullable(responseCode)
       .ifPresent(code -> observation.lowCardinalityKeyValue(RESPONSE_CODE, code));

@@ -92,7 +92,7 @@ public class ResponseContext {
   public String getResponseCode() {
     return Optional.ofNullable(response)
         .map(Response::getCode)
-        .orElseGet(() -> IsoResponseCode.LINK_DOWN.getCode());
+        .orElseGet(() -> IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
   }
 }
 

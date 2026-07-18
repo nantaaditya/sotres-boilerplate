@@ -1,14 +1,20 @@
 package com.nantaaditya.sotres.helper;
 
+import com.fasterxml.jackson.core.JacksonException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.dto.ParticipantContext;
+import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.RequestContext.Transaction;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import com.nantaaditya.sotres.model.logger.JsonLogIsoMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
+import io.micrometer.observation.Observation;
 import io.netty.channel.ChannelHandlerContext;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -31,9 +37,12 @@ import org.springframework.stereotype.Component;
 public class IsoFieldHelper {
 
   private static final int DEFAULT_FRACTION_DIGIT = 2;
+  private static final String ISO_REQUEST_EVENT = "iso_request";
+  private static final String ISO_RESPONSE_EVENT = "iso_response";
 
   private final MessageFactoryHelper messageFactoryHelper;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
+  private final ObjectMapper objectMapper;
 
   private static final Random RANDOM = new SecureRandom();
 
@@ -262,6 +271,11 @@ public class IsoFieldHelper {
     }
   }
 
+  public static void setApprovalCode(IsoMessage isoMessage, String approvalCode) {
+    Optional.ofNullable(approvalCode)
+        .ifPresent(code -> isoMessage.setField(38, IsoType.ALPHA.value(IsoFieldHelper.substring(code,code.length() - 6), 6)));
+  }
+
   public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {
     sendResponse(context, request, response -> {
       response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
@@ -275,8 +289,45 @@ public class IsoFieldHelper {
     context.writeAndFlush(response);
   }
 
+  public void sendResponseWithObservation(ParticipantContext context, String responseCode, Throwable throwable) {
+    IsoMessage request = context.getIsoMessage();
+    IsoMessage response = createResponse(request);
+    response.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
+
+    Observation observation = context.getObservation();
+    publishIsoEvent(observation, response, ISO_RESPONSE_EVENT);
+
+    isoMessageLoggerHelper.logIsoMessage(response);
+
+    ChannelHandlerContext channelHandlerContext = context.getChannelHandlerContext();
+    channelHandlerContext.writeAndFlush(response);
+
+    ObservationHelper.observeResponse(context.getObservation(), responseCode, throwable);
+  }
 
   public IsoMessage createResponse(IsoMessage request) {
     return messageFactoryHelper.getDefaultMessageFactory().createResponse(request);
+  }
+
+  public RequestContext logAndObserve(IsoMessage isoMessage, RequestContext requestContext,
+      Observation observation) {
+
+    ObservationHelper.createIsoContext(observation, requestContext.getRrn(), requestContext.getIsoFeatureConstant());
+
+    publishIsoEvent(observation, isoMessage, ISO_REQUEST_EVENT);
+
+    isoMessageLoggerHelper.logIsoMessage(isoMessage);
+
+    return requestContext;
+  }
+
+  private void publishIsoEvent(Observation observation, IsoMessage isoMessage, String event) {
+    try {
+      JsonLogIsoMessage jsonLogIsoMessage = isoMessageLoggerHelper.toLogMessage(isoMessage);
+      String isoRequest = objectMapper.writeValueAsString(jsonLogIsoMessage);
+      ObservationHelper.publishEvent(observation, event, isoRequest);
+    } catch (JacksonException e) {
+      log.error(AppLogMessage.message("#IsoField - failed to log iso message").error(e));
+    }
   }
 }
