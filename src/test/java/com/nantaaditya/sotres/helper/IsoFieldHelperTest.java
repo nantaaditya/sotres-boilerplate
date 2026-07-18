@@ -1,22 +1,38 @@
 package com.nantaaditya.sotres.helper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.kpavlov.jreactive8583.iso.J8583MessageFactory;
+import com.nantaaditya.sotres.model.dto.ParticipantContext;
+import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
+import com.nantaaditya.sotres.model.dto.TransactionException;
+import com.nantaaditya.sotres.model.logger.JsonLogIsoMessage;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
+import io.micrometer.observation.Observation;
+import io.netty.channel.ChannelHandlerContext;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -390,6 +406,185 @@ class IsoFieldHelperTest {
       assertThat(result.getOriginalTransmissionDateTime()).isEqualTo("0615103045");
       assertThat(result.getOriginalAcquiringInstitutionId()).isEqualTo("00000000011");
       assertThat(result.getOriginalForwardingInstitutionId()).isEqualTo("00000000012");
+    }
+  }
+
+  @Nested
+  @DisplayName("logAndObserve(IsoMessage, RequestContext, Observation)")
+  class LogAndObserve {
+
+    @Mock
+    private MessageFactoryHelper messageFactoryHelper;
+    @Mock
+    private IsoMessageLoggerHelper isoMessageLoggerHelper;
+    @Mock
+    private ObjectMapper objectMapper;
+    @Mock
+    private Observation observation;
+    @Mock
+    private JsonProcessingException serializationError;
+
+    private IsoFieldHelper isoFieldHelper;
+    private RequestContext requestContext;
+
+    @BeforeEach
+    void setUp() throws Exception {
+      isoFieldHelper = new IsoFieldHelper(messageFactoryHelper, isoMessageLoggerHelper, objectMapper);
+
+      requestContext = new RequestContext();
+      requestContext.setRrn("000000000001");
+      requestContext.setIsoFeatureConstant("20.00-QR");
+
+      lenient().when(isoMessageLoggerHelper.toLogMessage(isoMessage))
+          .thenReturn(new JsonLogIsoMessage("outgoing", "0200", Map.of()));
+      lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{\"mti\":\"0200\"}");
+      // AppLogMessage.error() reads the stack trace when logging the caught exception
+      lenient().when(serializationError.getStackTrace()).thenReturn(new StackTraceElement[0]);
+    }
+
+    @Test
+    @DisplayName("sets highCardinality requestId and lowCardinality feature on the observation")
+    void logAndObserve_populatesObservationKeyValues() {
+      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+
+      verify(observation).highCardinalityKeyValue("requestId", "000000000001");
+      verify(observation).lowCardinalityKeyValue("feature", "20.00-QR");
+    }
+
+    @Test
+    @DisplayName("publishes an 'iso_request' event with the serialized ISO message")
+    void logAndObserve_publishesIsoRequestEvent() {
+      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+
+      ArgumentCaptor<Observation.Event> eventCaptor = ArgumentCaptor.forClass(Observation.Event.class);
+      verify(observation).event(eventCaptor.capture());
+      assertThat(eventCaptor.getValue().getName()).isEqualTo("iso_request");
+    }
+
+    @Test
+    @DisplayName("logs the ISO message via IsoMessageLoggerHelper")
+    void logAndObserve_logsIsoMessage() {
+      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+
+      verify(isoMessageLoggerHelper).logIsoMessage(isoMessage);
+    }
+
+    @Test
+    @DisplayName("returns the same RequestContext instance unchanged")
+    void logAndObserve_returnsSameRequestContext() {
+      RequestContext result = isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+
+      assertThat(result).isSameAs(requestContext);
+    }
+
+    @Test
+    @DisplayName("swallows serialization failure, skips the event, but still logs the message")
+    void logAndObserve_serializationFails_swallowsErrorAndSkipsEvent() throws Exception {
+      when(objectMapper.writeValueAsString(any())).thenThrow(serializationError);
+
+      RequestContext result = isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+
+      assertThat(result).isSameAs(requestContext);
+      verify(observation, never()).event(any());
+      verify(isoMessageLoggerHelper).logIsoMessage(isoMessage);
+    }
+  }
+
+  @Nested
+  @DisplayName("sendResponseWithObservation(ParticipantContext, String, Throwable)")
+  class SendResponseWithObservation {
+
+    @Mock
+    private MessageFactoryHelper messageFactoryHelper;
+    @Mock
+    private IsoMessageLoggerHelper isoMessageLoggerHelper;
+    @Mock
+    private ObjectMapper objectMapper;
+    @Mock
+    private J8583MessageFactory j8583MessageFactory;
+    @Mock
+    private Observation observation;
+    @Mock
+    private ChannelHandlerContext channelHandlerContext;
+    @Mock
+    private IsoMessage response;
+
+    private IsoFieldHelper isoFieldHelper;
+    private ParticipantContext participantContext;
+
+    @BeforeEach
+    void setUp() throws Exception {
+      isoFieldHelper = new IsoFieldHelper(messageFactoryHelper, isoMessageLoggerHelper, objectMapper);
+
+      participantContext = new ParticipantContext();
+      participantContext.onUpdate(channelHandlerContext, isoMessage, null, null, observation);
+
+      lenient().when(messageFactoryHelper.getDefaultMessageFactory()).thenReturn(j8583MessageFactory);
+      lenient().when(j8583MessageFactory.createResponse(isoMessage)).thenReturn(response);
+      lenient().when(isoMessageLoggerHelper.toLogMessage(response))
+          .thenReturn(new JsonLogIsoMessage("outgoing", "0210", Map.of()));
+      lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{\"mti\":\"0210\"}");
+    }
+
+    @Test
+    @DisplayName("sets field 39 on the response to the given response code")
+    void sendResponseWithObservation_setsResponseCodeField() {
+      isoFieldHelper.sendResponseWithObservation(participantContext, "96", null);
+
+      verify(response).setField(eq(39), any(IsoValue.class));
+    }
+
+    @Test
+    @DisplayName("logs and writes/flushes the response to the channel")
+    void sendResponseWithObservation_writesAndFlushesResponse() {
+      isoFieldHelper.sendResponseWithObservation(participantContext, "96", null);
+
+      verify(isoMessageLoggerHelper).logIsoMessage(response);
+      verify(channelHandlerContext).writeAndFlush(response);
+    }
+
+    @Test
+    @DisplayName("publishes an 'iso_response' event")
+    void sendResponseWithObservation_publishesIsoResponseEvent() {
+      isoFieldHelper.sendResponseWithObservation(participantContext, "96", null);
+
+      ArgumentCaptor<Observation.Event> eventCaptor = ArgumentCaptor.forClass(Observation.Event.class);
+      verify(observation).event(eventCaptor.capture());
+      assertThat(eventCaptor.getValue().getName()).isEqualTo("iso_response");
+    }
+
+    @Test
+    @DisplayName("sets lowCardinality responseCode and records no error when throwable is null")
+    void sendResponseWithObservation_nullThrowable_setsResponseCodeNoError() {
+      isoFieldHelper.sendResponseWithObservation(participantContext, "00", null);
+
+      verify(observation).lowCardinalityKeyValue("responseCode", "00");
+      verify(observation, never()).lowCardinalityKeyValue(eq("error"), any());
+      verify(observation, never()).error(any());
+    }
+
+    @Test
+    @DisplayName("records the original error class for a TransactionException")
+    void sendResponseWithObservation_transactionException_recordsOriginalErrorClass() {
+      IllegalArgumentException originalError = new IllegalArgumentException("root cause");
+      TransactionException txException = new TransactionException(originalError, null);
+
+      isoFieldHelper.sendResponseWithObservation(participantContext, "96", txException);
+
+      verify(observation).lowCardinalityKeyValue("error", "java.lang.IllegalArgumentException");
+      verify(observation).error(txException);
+    }
+
+    @Test
+    @DisplayName("records the cause's error class for a generic wrapped exception")
+    void sendResponseWithObservation_genericException_recordsCauseErrorClass() {
+      IllegalStateException cause = new IllegalStateException("cause");
+      RuntimeException wrapper = new RuntimeException("wrapper", cause);
+
+      isoFieldHelper.sendResponseWithObservation(participantContext, "99", wrapper);
+
+      verify(observation).lowCardinalityKeyValue("error", "java.lang.IllegalStateException");
+      verify(observation).error(wrapper);
     }
   }
 }
