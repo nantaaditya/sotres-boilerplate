@@ -81,6 +81,8 @@ class RestProtocolStrategyTest {
     lenient().when(participantCtx.getIsoMessage()).thenReturn(isoMessage);
     lenient().when(participantCtx.getObservation()).thenReturn(observation);
     lenient().when(participantCtx.getTransactionHandler()).thenReturn(transactionHandler);
+    lenient().when(tracerHelper.composeTransactionContext(any(), any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
   }
 
   @Test
@@ -137,7 +139,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), eq("96"));
+    verify(isoFieldHelper).sendResponseWithObservation(participantCtx, "96", null);
     verify(observation).stop();
   }
 
@@ -163,7 +165,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), eq("96"));
+    verify(isoFieldHelper).sendResponseWithObservation(eq(participantCtx), eq("96"), any(RuntimeException.class));
     verify(observation).stop();
   }
 
@@ -186,7 +188,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleError(participantCtx, ex);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), eq("96"));
+    verify(isoFieldHelper).sendResponseWithObservation(participantCtx, "96", ex);
   }
 
   @Test

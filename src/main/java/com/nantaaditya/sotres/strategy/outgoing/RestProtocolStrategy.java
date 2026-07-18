@@ -2,12 +2,11 @@ package com.nantaaditya.sotres.strategy.outgoing;
 
 import com.nantaaditya.sotres.client.TransactionClient;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
-import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.IsoResponseCode;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
-import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.ResponseContext;
@@ -21,7 +20,6 @@ import io.micrometer.tracing.Tracer;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.ReadTimeoutException;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
@@ -34,9 +32,6 @@ import reactor.netty.http.client.PrematureCloseException;
 @Component
 @ConditionalOnProperty(prefix = "iso8583.configuration", name = "outgoing-protocol", havingValue = "REST")
 public class RestProtocolStrategy implements SenderProtocolStrategy {
-
-  private static final String TRACE_ID = "traceId";
-  private static final String SPAN_ID = "spanId";
 
   private final SystemPropertiesService systemPropertiesService;
   private final TransactionClient transactionClient;
@@ -70,16 +65,11 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
         Span nextSpan = tracer.nextSpan(currentSpan);
         return result.doOnEach(signal -> {
           tracerHelper.setBaggage(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
-          tracerHelper.setBaggage(TRACE_ID, nextSpan.context().traceId());
-          tracerHelper.setBaggage(SPAN_ID, nextSpan.context().spanId());
+          tracerHelper.setBaggage(TracerHelper.TRACE_ID, nextSpan.context().traceId());
+          tracerHelper.setBaggage(TracerHelper.SPAN_ID, nextSpan.context().spanId());
         });
-      })).contextWrite(ctx -> {
-        Span currentSpan = ctx.get(Span.class);
-        Span nextSpan = tracer.nextSpan(currentSpan);
-        return ctx.put(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn())
-            .put(TRACE_ID, nextSpan.context().traceId())
-            .put(SPAN_ID, nextSpan.context().spanId());
-      });
+      }))
+      .contextWrite(ctx -> tracerHelper.composeTransactionContext(ctx, requestContext));
   }
 
   @Override
@@ -90,25 +80,23 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     try {
       // override response before sending ISO message when necessary
       ctx.getTransactionHandler().populateResponse(ctx);
-      String responseCode = getResponseCode(response);
 
       if (response == null) {
         log.error(AppLogMessage.message("#Transaction - no response from host"));
-        isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), responseCode);
+        isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
       } else {
+        String responseCode = response.getResponseCode();
         log.info(AppLogMessage.message("#Transaction - response code from host: {}", responseCode));
         isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), msg -> {
-          setApprovalCode(msg, response.getApprovalCode());
+          IsoFieldHelper.setApprovalCode(msg, response.getApprovalCode());
           msg.setField(39, IsoType.ALPHA.value(mappingResponseCode(responseCode), 2));
         });
       }
 
-      ObservationHelper.observeResponse(ctx.getObservation(), responseCode, null);
     } catch (Exception e) {
       log.error(AppLogMessage.message("#Transaction - failed write and flush transaction").error(e));
       String responseCode = IsoResponseCode.SYSTEM_MALFUNCTION.getCode();
-      isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), responseCode);
-      ObservationHelper.observeResponse(ctx.getObservation(), responseCode, e);
+      isoFieldHelper.sendResponseWithObservation(ctx, responseCode, e);
     } finally {
       ctx.getObservation().stop();
       MDC.clear();
@@ -120,24 +108,17 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     log.error(AppLogMessage.message("#Transaction - got exception").error(throwable));
 
     if (throwable instanceof TransactionException e) {
-      // when timeout do nothing, will be reverse from switcher
+      // when timeout does nothing, will be reverse from switcher
       if (e.getOriginalError() instanceof ReadTimeoutException || e.getOriginalError() instanceof TimeoutException) {
         log.error(AppLogMessage.message("#Transaction - timeout occurred for RRN {}, no response",
             IsoFieldHelper.getField(ctx.getIsoMessage(),37)).error(throwable));
       } else {
-
-        isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
+        isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
       }
     } else {
-      // when unknown error do nothing, will be reverse from switcher
+      // when unknown error does nothing, will be reverse from switcher
       log.error(AppLogMessage.message("#Transaction - skipping unknown exception").error(throwable));
     }
-  }
-
-  private String getResponseCode(ResponseContext response) {
-    return Optional.ofNullable(response)
-        .map(ResponseContext::getResponseCode)
-        .orElseGet(() -> IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
   }
 
   private String mappingResponseCode(String responseCode) {
@@ -146,11 +127,6 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
       return IsoResponseCode.SYSTEM_MALFUNCTION.getCode();
     }
     return responseCodeMapping.getOrDefault(responseCode, IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
-  }
-
-  private void setApprovalCode(IsoMessage isoMessage, String approvalCode) {
-    Optional.ofNullable(approvalCode)
-      .ifPresent(code -> isoMessage.setField(38, IsoType.ALPHA.value(IsoFieldHelper.substring(code,code.length() - 6), 6)));
   }
 
   private Exception translateError(RequestContext requestContext, Throwable throwable) {

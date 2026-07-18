@@ -3,6 +3,8 @@ package com.nantaaditya.sotres.participant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,6 +16,7 @@ import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.RegistryType;
+import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
@@ -114,6 +117,10 @@ class TransactionProcessorParticipantTest {
 
     // Observation.start() returns NOOP when registry.isNoop() is true
     lenient().when(observationRegistry.isNoop()).thenReturn(true);
+
+    // pass RequestContext through unchanged, mirroring production logAndObserve behavior
+    lenient().when(isoFieldHelper.logAndObserve(any(), any(), any()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
 
     // IsoMessage fields needed by RequestContextHelper.create()
     lenient().when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
@@ -221,7 +228,8 @@ class TransactionProcessorParticipantTest {
       // transactionHandlers is empty — selectTransactionHandler sends "92" asynchronously
       await()
           .atMost(Duration.ofSeconds(2))
-          .untilAsserted(() -> verify(isoFieldHelper).sendResponse(ctx, msg, "92"));
+          .untilAsserted(() -> verify(isoFieldHelper)
+              .sendResponseWithObservation(any(ParticipantContext.class), eq("92"), isNull()));
     }
 
     @Test
