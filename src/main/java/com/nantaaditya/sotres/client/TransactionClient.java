@@ -37,6 +37,7 @@ public class TransactionClient extends BaseClient {
   @Value("${spring.application.name}")
   private String applicationName;
 
+  // TODO: observation api.external
   public TransactionClient(SystemPropertiesService systemPropertiesService,
       JsltTransformationHelper jsltTransformationHelper,
       ObjectMapper objectMapper,
