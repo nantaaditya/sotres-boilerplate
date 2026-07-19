@@ -7,9 +7,9 @@ import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.helper.EventLogHelper;
-import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
+import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,8 +36,6 @@ class AppFilterTest {
   @Mock
   private TracerHelper tracerHelper;
   @Mock
-  private ObservationWrapper observationWrapper;
-  @Mock
   private WebFilterChain chain;
 
   private AppFilter filter;
@@ -49,7 +47,6 @@ class AppFilterTest {
     ReflectionTestUtils.setField(filter, "eventLogHelper", eventLogHelper);
     ReflectionTestUtils.setField(filter, "contextHelper", contextHelper);
     ReflectionTestUtils.setField(filter, "tracerHelper", tracerHelper);
-    ReflectionTestUtils.setField(filter, "observationWrapper", observationWrapper);
     ReflectionTestUtils.setField(filter, "observationRegistry", ObservationRegistry.NOOP);
   }
 
@@ -99,6 +96,23 @@ class AppFilterTest {
     StepVerifier.create(filter.filter(exchange, chain))
         .expectAccessibleContext()
         .hasKey("context")
+        .then()
+        .verifyComplete();
+  }
+
+  @Test
+  @DisplayName("filter puts the started Observation in Reactor context under Observation.class")
+  void filter_putsObservationInReactorContext() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.get("/api/health")
+            .header("x-request-id", "req-006")
+            .build()
+    );
+    when(chain.filter(any())).thenReturn(Mono.empty());
+
+    StepVerifier.create(filter.filter(exchange, chain))
+        .expectAccessibleContext()
+        .assertThat(ctx -> assertThat(ctx.get(Observation.class)).isNotNull())
         .then()
         .verifyComplete();
   }

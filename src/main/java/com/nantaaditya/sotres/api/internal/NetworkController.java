@@ -24,7 +24,7 @@ public class NetworkController extends BaseController {
   )
   public Mono<ResponseEntity<Response<Boolean>>> sendSignOn() {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .map(this::toResponse)
+        .flatMap(this::toResponse)
         .doOnSuccess(response -> networkService.sendSignOn());
   }
 
@@ -34,7 +34,7 @@ public class NetworkController extends BaseController {
   )
   public Mono<ResponseEntity<Response<Boolean>>> sendSignOff() {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .map(this::toResponse)
+        .flatMap(this::toResponse)
         .doOnNext(response -> networkService.sendSignOff());
   }
 
@@ -44,7 +44,7 @@ public class NetworkController extends BaseController {
   )
   public Mono<ResponseEntity<Response<Boolean>>> sendEcho() {
     return Mono.fromCallable(() -> responseHelper.success(networkService.sendEcho()))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 
 }

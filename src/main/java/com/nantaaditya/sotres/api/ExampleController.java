@@ -23,7 +23,7 @@ public class ExampleController extends BaseController{
   )
   public Mono<ResponseEntity<Response<String>>> greeting(@RequestParam(required = false, defaultValue = "you") String name) {
     return Mono.fromCallable(() -> responseHelper.success("Hi " + name + "!"))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 
   @GetMapping(
@@ -32,6 +32,6 @@ public class ExampleController extends BaseController{
   )
   public Mono<ResponseEntity<Response<Object>>> error() {
     return Mono.fromCallable(() -> responseHelper.failed(ApiResponseCode.BAD_REQUEST, Map.of("key", List.of("value"))))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 }

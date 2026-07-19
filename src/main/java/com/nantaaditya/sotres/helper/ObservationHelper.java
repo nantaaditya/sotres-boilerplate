@@ -53,7 +53,7 @@ public class ObservationHelper {
       .ifPresent(t -> {
         String exceptionClass = getExceptionClass(t);
         observation.lowCardinalityKeyValue(ERROR, exceptionClass);
-        publishEvent(observation, ERROR, error.getMessage());
+        publishEvent(observation, ERROR, t.getMessage());
         observation.error(t);
       });
   }

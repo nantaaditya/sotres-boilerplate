@@ -217,6 +217,16 @@ can be evicted and rewarmed per-selector or globally.
   tagging via `ApiFeatureConstant` (REST) and `IsoFeatureConstant` (ISO8583) enums.
 - **Distributed tracing** — Brave/B3 + W3C propagation via Micrometer, with configurable baggage
   fields (default: `x-request-id`).
+- **Micrometer Observation tracking** — every request lifecycle (inbound HTTP via `AppFilter`,
+  ISO8583 message handling via the participant layer, outbound REST calls via `TransactionClient`)
+  is wrapped in a Micrometer `Observation`, named via `ObservationConstant`
+  (`API_PUBLIC`/`API_EXTERNAL`/`ISO_MESSAGE`) and tagged consistently through `ObservationHelper`
+  (`requestId`, `feature`, `responseCode`, `error`). `IsoFieldHelper`/`TransactionClient` also
+  publish `iso_request`/`iso_response`/`request`/`response` events carrying the serialized
+  message payload. The `Observation` is propagated across the reactive pipeline via **Reactor
+  `Context`** (not `ThreadLocal` — a plain `ThreadLocal` cannot survive the thread hops Reactor
+  introduces around R2DBC/WebClient calls), the same mechanism used for `ContextDTO` and
+  `Span`/`TraceContext` propagation.
 
 <img src=".diagram/img_1.png"/>
 ---

@@ -31,21 +31,21 @@ public class JsltAdminController extends BaseController {
   public Mono<ResponseEntity<Response<Map<String, String>>>> reload(@RequestParam String selector) {
     return jsltTransformationHelper.evictAndReload(selector)
         .map(templates -> responseHelper.success(templates))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 
   @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Response<Map<String, String>>>> templates(@RequestParam String selector) {
     return jsltTransformationHelper.getTemplates(selector)
         .map(templates -> responseHelper.success(templates))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 
   @PostMapping(value = "/_reload-all", produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Response<Boolean>>> reloadAll() {
     return jsltTransformationHelper.evictAll()
         .then(Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE)))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 
   @PutMapping(value = "/template",
@@ -59,6 +59,6 @@ public class JsltAdminController extends BaseController {
         .then(Mono.defer(() -> systemPropertiesService.upsert(group, selector, template)))
         .doOnNext(saved -> jsltTransformationHelper.evictExpression(group, selector))
         .map(saved -> responseHelper.success(TemplateResponse.from(saved)))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 }

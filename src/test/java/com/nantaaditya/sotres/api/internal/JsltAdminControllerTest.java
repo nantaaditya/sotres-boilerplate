@@ -2,7 +2,6 @@ package com.nantaaditya.sotres.api.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,14 +10,12 @@ import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import org.mockito.InOrder;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
-import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.model.response.TemplateResponse;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
-import io.micrometer.observation.Observation;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,20 +42,12 @@ class JsltAdminControllerTest {
   @Mock
   private ResponseHelper responseHelper;
 
-  @Mock
-  private ObservationWrapper observationWrapper;
-
-  @Mock
-  private Observation observation;
-
   private JsltAdminController controller;
 
   @BeforeEach
   void setUp() {
     controller = new JsltAdminController(jsltTransformationHelper, systemPropertiesService);
     ReflectionTestUtils.setField(controller, "responseHelper", responseHelper);
-    ReflectionTestUtils.setField(controller, "observationWrapper", observationWrapper);
-    lenient().when(observationWrapper.getObservation()).thenReturn(observation);
   }
 
   @Nested
