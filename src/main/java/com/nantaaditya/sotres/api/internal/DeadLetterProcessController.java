@@ -28,7 +28,7 @@ public class DeadLetterProcessController extends BaseController{
   )
   public Mono<ResponseEntity<Response<Boolean>>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .map(this::toResponse)
+        .flatMap(this::toResponse)
         .doOnSuccess(result ->
           deadLetterProcessService.remove(days).subscribe()
         );
@@ -41,7 +41,7 @@ public class DeadLetterProcessController extends BaseController{
   )
   public Mono<ResponseEntity<Response<Boolean>>> retry(@RequestBody @Valid RetryDeadLetterProcessRequest request) {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .map(this::toResponse)
+        .flatMap(this::toResponse)
         .doOnSuccess(result ->
             deadLetterProcessService.retry(request).subscribe()
         );

@@ -4,7 +4,6 @@ import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.EventLogHelper;
 import com.nantaaditya.sotres.helper.ObservationHelper;
-import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
@@ -48,8 +47,6 @@ public class AppFilter implements WebFilter {
   @Autowired
   private TracerHelper tracerHelper;
   @Autowired
-  private ObservationWrapper observationWrapper;
-  @Autowired
   private ObservationRegistry observationRegistry;
 
   @Override
@@ -68,7 +65,6 @@ public class AppFilter implements WebFilter {
         () -> observationContext,
         observationRegistry
     );
-    observationWrapper.setObservation(observation);
 
     return Mono.usingWhen(
       Mono.fromCallable(() -> observation.openScope()),
@@ -90,14 +86,14 @@ public class AppFilter implements WebFilter {
                 .doFinally(signal -> {
                   eventLogHelper.save(mutatedExchange, contextDTO);
                   observation.stop();
-                  observationWrapper.clear();
                 });
           }),
 
       scope -> Mono.fromRunnable(scope::close)
     )
-    .contextWrite(ctx ->
-      ctx.put("context", contextDTO)
+    .contextWrite(ctx -> ctx
+        .put("context", contextDTO)
+        .put(Observation.class, observation)
     );
   }
 

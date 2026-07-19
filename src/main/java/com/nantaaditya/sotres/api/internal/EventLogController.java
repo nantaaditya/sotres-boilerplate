@@ -24,7 +24,7 @@ public class EventLogController extends BaseController {
   )
   public Mono<ResponseEntity<Response<Boolean>>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .map(this::toResponse)
+        .flatMap(this::toResponse)
         .doOnSuccess(response -> eventLogService.remove(days).subscribe());
   }
 }

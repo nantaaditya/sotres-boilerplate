@@ -28,7 +28,7 @@ public class SystemPropertiesController extends BaseController {
   )
   public Mono<ResponseEntity<Response<Boolean>>> reload(@RequestParam ConfigGroup group) {
     return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .map(this::toResponse)
+        .flatMap(this::toResponse)
         .doOnSuccess(response -> systemPropertiesService.reload(group));
   }
 
@@ -38,6 +38,6 @@ public class SystemPropertiesController extends BaseController {
   public Mono<ResponseEntity<Response<Map<String, String>>>> find(@RequestParam ConfigGroup key) {
     return Mono.fromCallable(() -> systemPropertiesService.getProperty(key))
         .map(result -> responseHelper.success(result))
-        .map(this::toResponse);
+        .flatMap(this::toResponse);
   }
 }
