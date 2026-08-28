@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping("/internal-api/jslt")
@@ -29,22 +30,28 @@ public class JsltAdminController extends BaseController {
 
   @PostMapping(value = "/_reload", produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Response<Map<String, String>>>> reload(@RequestParam String selector) {
-    return jsltTransformationHelper.evictAndReload(selector)
-        .map(templates -> responseHelper.success(templates))
+    // TODO(refactor): blocking JSLT helper wrapped for the still-reactive controller (Phase 3)
+    return Mono.fromCallable(() -> jsltTransformationHelper.evictAndReload(selector))
+        .subscribeOn(Schedulers.boundedElastic())
+        .map(responseHelper::success)
         .flatMap(this::toResponse);
   }
 
   @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Response<Map<String, String>>>> templates(@RequestParam String selector) {
-    return jsltTransformationHelper.getTemplates(selector)
-        .map(templates -> responseHelper.success(templates))
+    return Mono.fromCallable(() -> jsltTransformationHelper.getTemplates(selector))
+        .subscribeOn(Schedulers.boundedElastic())
+        .map(responseHelper::success)
         .flatMap(this::toResponse);
   }
 
   @PostMapping(value = "/_reload-all", produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Response<Boolean>>> reloadAll() {
-    return jsltTransformationHelper.evictAll()
-        .then(Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE)))
+    return Mono.fromCallable(() -> {
+          jsltTransformationHelper.evictAll();
+          return responseHelper.success(Boolean.TRUE);
+        })
+        .subscribeOn(Schedulers.boundedElastic())
         .flatMap(this::toResponse);
   }
 
@@ -55,7 +62,8 @@ public class JsltAdminController extends BaseController {
       @RequestParam String selector,
       @RequestParam TemplateGroup group,
       @RequestBody String template) {
-    return jsltTransformationHelper.validateTemplate(template)
+    return Mono.<Void>fromRunnable(() -> jsltTransformationHelper.validateTemplate(template))
+        .subscribeOn(Schedulers.boundedElastic())
         .then(Mono.defer(() -> systemPropertiesService.upsert(group, selector, template)))
         .doOnNext(saved -> jsltTransformationHelper.evictExpression(group, selector))
         .map(saved -> responseHelper.success(TemplateResponse.from(saved)))

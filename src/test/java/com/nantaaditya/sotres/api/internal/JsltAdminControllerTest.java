@@ -1,18 +1,18 @@
 package com.nantaaditya.sotres.api.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
-import com.nantaaditya.sotres.model.error.InvalidTemplateException;
-import org.mockito.InOrder;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
+import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.model.response.TemplateResponse;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -22,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -63,7 +64,7 @@ class JsltAdminControllerTest {
       );
       Response<Map<String, String>> successResp = successResponse(templates);
 
-      when(jsltTransformationHelper.evictAndReload("10.97-E001")).thenReturn(Mono.just(templates));
+      when(jsltTransformationHelper.evictAndReload("10.97-E001")).thenReturn(templates);
       when(responseHelper.success(templates)).thenReturn(successResp);
 
       StepVerifier.create(controller.reload("10.97-E001"))
@@ -80,7 +81,7 @@ class JsltAdminControllerTest {
     @DisplayName("propagates error from helper")
     void reload_propagatesError() {
       when(jsltTransformationHelper.evictAndReload("10.97-E001"))
-          .thenReturn(Mono.error(new RuntimeException("DB error")));
+          .thenThrow(new RuntimeException("DB error"));
 
       StepVerifier.create(controller.reload("10.97-E001"))
           .expectError(RuntimeException.class)
@@ -101,7 +102,7 @@ class JsltAdminControllerTest {
       );
       Response<Map<String, String>> successResp = successResponse(templates);
 
-      when(jsltTransformationHelper.getTemplates("10.97-E001")).thenReturn(Mono.just(templates));
+      when(jsltTransformationHelper.getTemplates("10.97-E001")).thenReturn(templates);
       when(responseHelper.success(templates)).thenReturn(successResp);
 
       StepVerifier.create(controller.templates("10.97-E001"))
@@ -118,7 +119,7 @@ class JsltAdminControllerTest {
     @DisplayName("propagates error from helper")
     void templates_propagatesError() {
       when(jsltTransformationHelper.getTemplates("10.97-E001"))
-          .thenReturn(Mono.error(new RuntimeException("service error")));
+          .thenThrow(new RuntimeException("service error"));
 
       StepVerifier.create(controller.templates("10.97-E001"))
           .expectError(RuntimeException.class)
@@ -135,7 +136,6 @@ class JsltAdminControllerTest {
     void reloadAll_returnsTrue() {
       Response<Boolean> successResp = successResponse(Boolean.TRUE);
 
-      when(jsltTransformationHelper.evictAll()).thenReturn(Mono.empty());
       when(responseHelper.success(Boolean.TRUE)).thenReturn(successResp);
 
       StepVerifier.create(controller.reloadAll())
@@ -151,8 +151,7 @@ class JsltAdminControllerTest {
     @Test
     @DisplayName("propagates error from helper")
     void reloadAll_propagatesError() {
-      when(jsltTransformationHelper.evictAll())
-          .thenReturn(Mono.error(new RuntimeException("reload failed")));
+      doThrow(new RuntimeException("reload failed")).when(jsltTransformationHelper).evictAll();
 
       StepVerifier.create(controller.reloadAll())
           .expectError(RuntimeException.class)
@@ -173,8 +172,6 @@ class JsltAdminControllerTest {
       TemplateResponse dto = TemplateResponse.from(saved);
       Response<TemplateResponse> successResp = successResponse(dto);
 
-      when(jsltTransformationHelper.validateTemplate("{\"result\": .value}"))
-          .thenReturn(Mono.empty());
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
       when(responseHelper.success(dto)).thenReturn(successResp);
@@ -192,8 +189,6 @@ class JsltAdminControllerTest {
     @Test
     @DisplayName("propagates error from upsert when DB write fails")
     void save_propagatesError() {
-      when(jsltTransformationHelper.validateTemplate("{\"result\": .value}"))
-          .thenReturn(Mono.empty());
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.error(new RuntimeException("DB write failed")));
 
@@ -205,8 +200,8 @@ class JsltAdminControllerTest {
     @Test
     @DisplayName("propagates InvalidTemplateException and never calls upsert when template is invalid")
     void save_invalidTemplate_rejectsBeforeUpsert() {
-      when(jsltTransformationHelper.validateTemplate("<<< bad >>>"))
-          .thenReturn(Mono.error(new InvalidTemplateException("invalid JSLT syntax")));
+      doThrow(new InvalidTemplateException("invalid JSLT syntax"))
+          .when(jsltTransformationHelper).validateTemplate("<<< bad >>>");
 
       StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "<<< bad >>>"))
           .expectError(InvalidTemplateException.class)
@@ -225,8 +220,6 @@ class JsltAdminControllerTest {
       TemplateResponse dto = TemplateResponse.from(saved);
       Response<TemplateResponse> successResp = successResponse(dto);
 
-      when(jsltTransformationHelper.validateTemplate("{\"result\": .value}"))
-          .thenReturn(Mono.empty());
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
       when(responseHelper.success(dto)).thenReturn(successResp);

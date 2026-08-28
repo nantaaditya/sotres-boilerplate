@@ -1,6 +1,8 @@
 package com.nantaaditya.sotres.helper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -8,6 +10,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
@@ -24,7 +27,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 @DisplayName("JsltTransformationHelper")
 @ExtendWith(MockitoExtension.class)
@@ -64,9 +66,9 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
           .thenReturn(Mono.just(REQ_TEMPLATE));
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")))
-          .assertNext(json -> assertThat(json.get("result").asText()).isEqualTo("hello"))
-          .verifyComplete();
+      JsonNode json = helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello"));
+
+      assertThat(json.get("result").asText()).isEqualTo("hello");
     }
 
     @Test
@@ -76,12 +78,11 @@ class JsltTransformationHelperTest {
           .thenReturn(Mono.just(REQ_TEMPLATE));
 
       Map<String, String> input = Map.of("input", "hello");
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input))
-          .assertNext(json -> assertThat(json.get("result").asText()).isEqualTo("hello"))
-          .verifyComplete();
+      JsonNode json = helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
 
+      assertThat(json.get("result").asText()).isEqualTo("hello");
       verify(systemPropertiesService, times(1))
           .getRawProperty(eq(TemplateGroup.CLIENT_SPEC_REQUEST), eq(SELECTOR));
     }
@@ -94,12 +95,10 @@ class JsltTransformationHelperTest {
 
       Map<String, String> input = Map.of("cardNo", "4111111111111111", "amount", "10000");
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input))
-          .assertNext(json -> {
-            assertThat(json.get("cardNo").asText()).isEqualTo("4111111111111111");
-            assertThat(json.get("amount").asText()).isEqualTo("10000");
-          })
-          .verifyComplete();
+      JsonNode json = helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
+
+      assertThat(json.get("cardNo").asText()).isEqualTo("4111111111111111");
+      assertThat(json.get("amount").asText()).isEqualTo("10000");
     }
 
     @Test
@@ -108,42 +107,35 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
           .thenReturn(Mono.just("<<< this is not valid JSLT >>>"));
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of()))
-          .expectError(JsltException.class)
-          .verify();
+      assertThatThrownBy(() -> helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of()))
+          .isInstanceOf(JsltException.class);
     }
 
     @Test
-    @DisplayName("evicts empty cache entry so a subsequent call can pick up a newly-added template")
-    void cacheMiss_noTemplate_subsequentCallCanPickUpNewTemplate() {
+    @DisplayName("negative-caches the pass-through: a missing template is not re-fetched on the next call")
+    void cacheMiss_noTemplate_isNegativeCached() {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
-          .thenReturn(Mono.empty())
-          .thenReturn(Mono.just(REQ_TEMPLATE));
+          .thenReturn(Mono.empty());
 
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello"));
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello"));
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")))
-          .assertNext(json -> assertThat(json.get("result").asText()).isEqualTo("hello"))
-          .verifyComplete();
-
-      verify(systemPropertiesService, times(2)).getRawProperty(any(), any());
+      verify(systemPropertiesService, times(1)).getRawProperty(any(), any());
     }
 
     @Test
-    @DisplayName("evicts erroring cache entry so a subsequent call retries from DB")
-    void compilationError_errorEntryEvicted_subsequentCallRetries() {
+    @DisplayName("does not cache a compilation error — a subsequent call retries from DB")
+    void compilationError_notCached_subsequentCallRetries() {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
           .thenReturn(Mono.just("<<< invalid JSLT >>>"))
           .thenReturn(Mono.just(REQ_TEMPLATE));
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of()))
-          .expectError(JsltException.class)
-          .verify();
+      assertThatThrownBy(() -> helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of()))
+          .isInstanceOf(JsltException.class);
 
-      StepVerifier.create(helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello")))
-          .assertNext(json -> assertThat(json.get("result").asText()).isEqualTo("hello"))
-          .verifyComplete();
+      JsonNode json = helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hello"));
 
+      assertThat(json.get("result").asText()).isEqualTo("hello");
       verify(systemPropertiesService, times(2)).getRawProperty(any(), any());
     }
   }
@@ -153,34 +145,30 @@ class JsltTransformationHelperTest {
   class ValidateTemplate {
 
     @Test
-    @DisplayName("completes without error for a syntactically valid template")
-    void validTemplate_completesSuccessfully() {
-      StepVerifier.create(helper.validateTemplate(REQ_TEMPLATE))
-          .verifyComplete();
+    @DisplayName("does not throw for a syntactically valid template")
+    void validTemplate_doesNotThrow() {
+      assertThatCode(() -> helper.validateTemplate(REQ_TEMPLATE)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("emits InvalidTemplateException wrapping JsltException for syntactically invalid template")
-    void invalidTemplate_emitsInvalidTemplateException() {
-      StepVerifier.create(helper.validateTemplate("<<< not valid jslt >>>"))
-          .expectError(InvalidTemplateException.class)
-          .verify();
+    @DisplayName("throws InvalidTemplateException wrapping JsltException for invalid template")
+    void invalidTemplate_throwsInvalidTemplateException() {
+      assertThatThrownBy(() -> helper.validateTemplate("<<< not valid jslt >>>"))
+          .isInstanceOf(InvalidTemplateException.class);
     }
 
     @Test
-    @DisplayName("emits InvalidTemplateException immediately for null template")
-    void nullTemplate_emitsInvalidTemplateException() {
-      StepVerifier.create(helper.validateTemplate(null))
-          .expectError(InvalidTemplateException.class)
-          .verify();
+    @DisplayName("throws InvalidTemplateException for null template")
+    void nullTemplate_throwsInvalidTemplateException() {
+      assertThatThrownBy(() -> helper.validateTemplate(null))
+          .isInstanceOf(InvalidTemplateException.class);
     }
 
     @Test
-    @DisplayName("emits InvalidTemplateException immediately for blank template")
-    void blankTemplate_emitsInvalidTemplateException() {
-      StepVerifier.create(helper.validateTemplate("   "))
-          .expectError(InvalidTemplateException.class)
-          .verify();
+    @DisplayName("throws InvalidTemplateException for blank template")
+    void blankTemplate_throwsInvalidTemplateException() {
+      assertThatThrownBy(() -> helper.validateTemplate("   "))
+          .isInstanceOf(InvalidTemplateException.class);
     }
   }
 
@@ -195,11 +183,11 @@ class JsltTransformationHelperTest {
           .thenReturn(Mono.just(REQ_TEMPLATE));
 
       Map<String, String> input = Map.of("input", "hello");
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
 
       helper.evictExpression(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR);
 
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
 
       verify(systemPropertiesService, times(2))
           .getRawProperty(eq(TemplateGroup.CLIENT_SPEC_REQUEST), eq(SELECTOR));
@@ -214,13 +202,13 @@ class JsltTransformationHelperTest {
           .thenReturn(Mono.just(RESP_TEMPLATE));
 
       Map<String, Object> input = Map.of("input", "x", "output", "y");
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input).block();
-      helper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR, input).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
+      helper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR, input);
 
       helper.evictExpression(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR);
 
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input).block();
-      helper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR, input).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
+      helper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR, input);
 
       verify(systemPropertiesService, times(2))
           .getRawProperty(eq(TemplateGroup.CLIENT_SPEC_REQUEST), eq(SELECTOR));
@@ -241,12 +229,10 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
           .thenReturn(Mono.just(RESP_TEMPLATE));
 
-      StepVerifier.create(helper.evictAndReload(SELECTOR))
-          .assertNext(map -> {
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), REQ_TEMPLATE);
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), RESP_TEMPLATE);
-          })
-          .verifyComplete();
+      Map<String, String> map = helper.evictAndReload(SELECTOR);
+
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), REQ_TEMPLATE);
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), RESP_TEMPLATE);
     }
 
     @Test
@@ -257,12 +243,24 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
           .thenReturn(Mono.just(RESP_TEMPLATE));
 
-      StepVerifier.create(helper.evictAndReload(SELECTOR))
-          .assertNext(map -> {
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), "");
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), RESP_TEMPLATE);
-          })
-          .verifyComplete();
+      Map<String, String> map = helper.evictAndReload(SELECTOR);
+
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), "");
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), RESP_TEMPLATE);
+    }
+
+    @Test
+    @DisplayName("swallows a compilation failure during reload and still returns the template text")
+    void reload_invalidTemplate_swallowed_returnsText() {
+      when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR))
+          .thenReturn(Mono.just("<<< bad jslt >>>"));
+      when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
+          .thenReturn(Mono.empty());
+
+      Map<String, String> map = helper.evictAndReload(SELECTOR);
+
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), "<<< bad jslt >>>");
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), "");
     }
 
     @Test
@@ -273,11 +271,10 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
           .thenReturn(Mono.empty());
 
-      helper.evictAndReload(SELECTOR).block();
+      helper.evictAndReload(SELECTOR);
 
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "x")).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "x"));
 
-      // getRawProperty called once during evictAndReload, not again for the transform cache hit
       verify(systemPropertiesService, times(1))
           .getRawProperty(eq(TemplateGroup.CLIENT_SPEC_REQUEST), eq(SELECTOR));
     }
@@ -295,11 +292,9 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE))
           .thenReturn(Flux.empty());
 
-      StepVerifier.create(helper.evictAll())
-          .verifyComplete();
+      helper.evictAll();
 
-      // After rewarm, transform uses the pre-compiled cache entry without calling getRawProperty
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hi")).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "hi"));
 
       verify(systemPropertiesService, never()).getRawProperty(any(), any());
     }
@@ -312,8 +307,23 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE))
           .thenReturn(Flux.empty());
 
-      StepVerifier.create(helper.evictAll())
-          .verifyComplete();
+      assertThatCode(() -> helper.evictAll()).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("swallows a compilation failure during rewarm and negative-caches that selector")
+    void rewarm_invalidTemplate_swallowedAndNegativeCached() {
+      when(systemPropertiesService.getByGroupId(TemplateGroup.CLIENT_SPEC_REQUEST))
+          .thenReturn(Flux.just(sp("client_spec_request", SELECTOR, "<<< bad jslt >>>")));
+      when(systemPropertiesService.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE))
+          .thenReturn(Flux.empty());
+
+      assertThatCode(() -> helper.evictAll()).doesNotThrowAnyException();
+
+      // the bad entry is cached as a pass-through; transform does not re-fetch or throw
+      JsonNode json = helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "x"));
+      assertThat(json.get("input").asText()).isEqualTo("x");
+      verify(systemPropertiesService, never()).getRawProperty(any(), any());
     }
   }
 
@@ -329,12 +339,10 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
           .thenReturn(Mono.just(RESP_TEMPLATE));
 
-      StepVerifier.create(helper.getTemplates(SELECTOR))
-          .assertNext(map -> {
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), REQ_TEMPLATE);
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), RESP_TEMPLATE);
-          })
-          .verifyComplete();
+      Map<String, String> map = helper.getTemplates(SELECTOR);
+
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), REQ_TEMPLATE);
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), RESP_TEMPLATE);
     }
 
     @Test
@@ -345,12 +353,10 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
           .thenReturn(Mono.empty());
 
-      StepVerifier.create(helper.getTemplates(SELECTOR))
-          .assertNext(map -> {
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), "");
-            assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), "");
-          })
-          .verifyComplete();
+      Map<String, String> map = helper.getTemplates(SELECTOR);
+
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), "");
+      assertThat(map).containsEntry(TemplateGroup.CLIENT_SPEC_RESPONSE.getGroup(), "");
     }
 
     @Test
@@ -361,10 +367,9 @@ class JsltTransformationHelperTest {
       when(systemPropertiesService.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, SELECTOR))
           .thenReturn(Mono.just(RESP_TEMPLATE));
 
-      helper.getTemplates(SELECTOR).block();
+      helper.getTemplates(SELECTOR);
 
-      // Cache not populated by getTemplates, so transform fetches from service again
-      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "x")).block();
+      helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, Map.of("input", "x"));
 
       verify(systemPropertiesService, times(2))
           .getRawProperty(eq(TemplateGroup.CLIENT_SPEC_REQUEST), eq(SELECTOR));

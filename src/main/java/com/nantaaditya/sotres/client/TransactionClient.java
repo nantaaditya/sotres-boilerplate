@@ -83,11 +83,12 @@ public class TransactionClient extends BaseClient {
     String featureConstant = ExternalFeatureConstant.getFeature(HttpMethod.POST.name(), apiPath);
     ObservationHelper.createIsoContext(observation, requestContext.getRrn(), featureConstant);
 
-    Mono<ResponseContext> response = jsltTransformationHelper
-        .transform(TemplateGroup.CLIENT_SPEC_REQUEST, selector, requestContext)
+    // TODO(refactor): blocking JSLT + RestSender wrapped for the still-reactive chain (Phase 2C removes this)
+    Mono<ResponseContext> response = Mono
+        .fromCallable(() -> jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, selector, requestContext))
+        .subscribeOn(Schedulers.boundedElastic())
         .flatMap(requestBody -> {
           ObservationHelper.publishEvent(observation, REQUEST, toJson(requestBody));
-          // TODO(refactor): blocking RestSender wrapped for the still-reactive chain (Phase 2C removes this)
           return Mono.fromCallable(() ->
                   restSender.executeWithRetry(HttpMethod.POST, apiPath, buildHeaders(requestContext),
                       requestBody, JSON_NODE).getBody())
@@ -95,7 +96,9 @@ public class TransactionClient extends BaseClient {
         })
         .flatMap(rawResponse -> {
           ObservationHelper.publishEvent(observation, RESPONSE, toJson(rawResponse));
-          return jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse);
+          return Mono.fromCallable(() ->
+                  jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse))
+              .subscribeOn(Schedulers.boundedElastic());
         })
         .flatMap(normalized -> Mono.fromCallable(
             () -> objectMapper.treeToValue(normalized, ResponseContext.class)));
