@@ -1,58 +1,38 @@
 package com.nantaaditya.sotres.client;
 
+import com.nantaaditya.sotres.helper.RestSender;
 import com.nantaaditya.sotres.properties.embedded.ClientConfiguration;
-import com.nantaaditya.sotres.properties.embedded.RetryConfiguration;
-import io.netty.channel.ChannelOption;
-import io.netty.handler.timeout.ReadTimeoutHandler;
-import io.netty.handler.timeout.WriteTimeoutHandler;
+import java.net.http.HttpClient;
 import java.time.Duration;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 import org.zalando.logbook.Logbook;
-import org.zalando.logbook.netty.LogbookClientHandler;
-import reactor.netty.http.client.HttpClient;
-import reactor.netty.resources.ConnectionProvider;
-import reactor.util.retry.Retry;
-import reactor.util.retry.RetryBackoffSpec;
+import org.zalando.logbook.spring.LogbookClientHttpRequestInterceptor;
 
 public class BaseClient {
 
-  protected WebClient createWebClient(Logbook logbook, ClientConfiguration clientConfiguration) {
-    ConnectionProvider provider = ConnectionProvider.builder("custom-webclient")
-        .maxConnections(clientConfiguration.maxConnections())
-        .maxIdleTime(Duration.ofMillis(clientConfiguration.maxIdleTime()))
-        .maxLifeTime(Duration.ofMillis(clientConfiguration.maxLifeTime()))
-        .evictInBackground(Duration.ofMillis(clientConfiguration.evictInBackground()))
-        .pendingAcquireTimeout(Duration.ofMillis(clientConfiguration.pendingAcquireTimeOut()))
-        .build();
-
-    HttpClient httpClient = HttpClient.create(provider)
-        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, clientConfiguration.clientConnectTimeOut())
-        .responseTimeout(Duration.ofMillis(clientConfiguration.clientReadTimeOut()))
-        .doOnConnected(connection -> connection
-            .addHandlerFirst(new ReadTimeoutHandler(
-                clientConfiguration.clientReadTimeOut(),
-                clientConfiguration.timeUnit())
-            )
-            .addHandlerFirst(new WriteTimeoutHandler(
-                clientConfiguration.clientWriteTimeOut(),
-                clientConfiguration.timeUnit())
-            )
-            .addHandlerLast(new LogbookClientHandler(logbook))
-        );
-
-    return WebClient.builder()
-        .baseUrl(clientConfiguration.hostname())
-        .clientConnector(new ReactorClientHttpConnector(httpClient))
+  protected RestSender createRestSender(String name, Logbook logbook,
+      ClientConfiguration clientConfiguration) {
+    return new RestSender.Builder(name, createRestClient(logbook, clientConfiguration))
+        .retryConfiguration(clientConfiguration.retryConfiguration())
         .build();
   }
 
-  protected static RetryBackoffSpec getRetryCondition(ClientConfiguration clientConfiguration) {
-    RetryConfiguration retryConfiguration = clientConfiguration.retryConfiguration();
-    if (retryConfiguration == null) {
-      return null;
-    }
-    return Retry.backoff(retryConfiguration.maxAttempt(), Duration.ofSeconds(retryConfiguration.minBackOff()))
-        .filter(throwable -> retryConfiguration.isRetryable(throwable.getClass()));
+  protected RestClient createRestClient(Logbook logbook, ClientConfiguration clientConfiguration) {
+    ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.defaults()
+        .withConnectTimeout(Duration.ofMillis(clientConfiguration.clientConnectTimeOut()))
+        .withReadTimeout(Duration.ofMillis(clientConfiguration.clientReadTimeOut()));
+
+    ClientHttpRequestFactory requestFactory = ClientHttpRequestFactoryBuilder.jdk()
+        .withHttpClientCustomizer(builder -> builder.version(HttpClient.Version.HTTP_1_1))
+        .build(settings);
+
+    return RestClient.builder()
+        .baseUrl(clientConfiguration.hostname())
+        .requestFactory(requestFactory)
+        .requestInterceptor(new LogbookClientHttpRequestInterceptor(logbook))
+        .build();
   }
 }

@@ -81,7 +81,7 @@ client:
       retry-configuration:
         max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
         min-back-off: ${TRANSACTION_RETRY_MIN_BACK_OFF:500}
-        retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:reactor.netty.http.client.PrematureCloseException:true}
+        retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:org.springframework.web.client.ResourceAccessException:true}
 
 # Actuator Configurations
 management:

@@ -29,7 +29,6 @@ import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import io.micrometer.observation.tck.TestObservationRegistryAssert;
-import io.netty.handler.timeout.ReadTimeoutException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,8 +43,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClientRequestException;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.zalando.logbook.Logbook;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -84,13 +83,12 @@ class TransactionClientTest {
     configs.put("transaction", clientConfig);
     clientProperties.setConfigurations(configs);
 
-    Logbook logbook = Logbook.builder().build();
     objectMapper = new ObjectMapper();
     observationRegistry = TestObservationRegistry.create();
 
     transactionClient = new TransactionClient(
-        systemPropertiesService, jsltTransformationHelper, objectMapper, logbook, clientProperties,
-        observationRegistry);
+        systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
+        clientProperties, observationRegistry);
     ReflectionTestUtils.setField(transactionClient, "applicationName", "test-app");
   }
 
@@ -425,8 +423,8 @@ class TransactionClientTest {
       shortReadTimeoutProperties.setConfigurations(configs);
 
       TransactionClient shortTimeoutClient = new TransactionClient(
-          systemPropertiesService, jsltTransformationHelper, objectMapper,
-          Logbook.builder().build(), shortReadTimeoutProperties, observationRegistry);
+          systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
+          shortReadTimeoutProperties, observationRegistry);
       ReflectionTestUtils.setField(shortTimeoutClient, "applicationName", "test-app");
 
       StepVerifier.create(shortTimeoutClient.send(buildRequest()))
@@ -437,13 +435,12 @@ class TransactionClientTest {
           .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
           .that()
           .thenError()
-          .isInstanceOf(WebClientRequestException.class)
-          .hasCauseInstanceOf(ReadTimeoutException.class);
+          .isInstanceOf(ResourceAccessException.class);
     }
 
     @Test
-    @DisplayName("http 5xx error records the real WebClientResponseException as the observation error")
-    void send_http5xxError_recordsWebClientResponseException() throws Exception {
+    @DisplayName("http 5xx error records the real HttpServerErrorException as the observation error")
+    void send_http5xxError_recordsHttpServerErrorException() throws Exception {
       wireMockServer.stubFor(
           post(urlPathEqualTo("/api/payment"))
               .willReturn(aResponse().withStatus(500))
@@ -461,7 +458,7 @@ class TransactionClientTest {
           .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
           .that()
           .thenError()
-          .isInstanceOf(WebClientResponseException.class);
+          .isInstanceOf(HttpServerErrorException.class);
     }
 
     @Test
