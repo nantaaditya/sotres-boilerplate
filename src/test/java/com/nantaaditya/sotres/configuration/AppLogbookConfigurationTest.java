@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.web.embedded.netty.NettyServerCustomizer;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.zalando.logbook.Logbook;
 
@@ -26,8 +25,6 @@ class AppLogbookConfigurationTest {
   private TracerHelper tracerHelper;
   @Mock
   private LogProperties logProperties;
-  @Mock
-  private Logbook logbook;
 
   private AppLogbookConfiguration config;
   private Gson gson;
@@ -49,25 +46,5 @@ class AppLogbookConfigurationTest {
     Logbook result = config.logbook(gson);
 
     assertThat(result).isNotNull();
-  }
-
-  @Test
-  @DisplayName("nettyServerCustomizer returns non-null when api log is disabled")
-  void nettyServerCustomizer_whenApiLogDisabled_returnsNoOpCustomizer() {
-    when(logProperties.enableApiLog()).thenReturn(false);
-
-    NettyServerCustomizer customizer = config.nettyServerCustomizer(logbook);
-
-    assertThat(customizer).isNotNull();
-  }
-
-  @Test
-  @DisplayName("nettyServerCustomizer returns non-null when api log is enabled")
-  void nettyServerCustomizer_whenApiLogEnabled_returnsCustomizer() {
-    when(logProperties.enableApiLog()).thenReturn(true);
-
-    NettyServerCustomizer customizer = config.nettyServerCustomizer(logbook);
-
-    assertThat(customizer).isNotNull();
   }
 }

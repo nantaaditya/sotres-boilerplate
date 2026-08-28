@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/internal-api/configurations")
@@ -26,18 +25,16 @@ public class SystemPropertiesController extends BaseController {
       value = "/_reload",
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Boolean>>> reload(@RequestParam ConfigGroup group) {
-    return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .flatMap(this::toResponse)
-        .doOnSuccess(response -> systemPropertiesService.reload(group));
+  public ResponseEntity<Response<Boolean>> reload(@RequestParam ConfigGroup group) {
+    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
+    systemPropertiesService.reload(group);
+    return response;
   }
 
   @GetMapping(
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Map<String, String>>>> find(@RequestParam ConfigGroup key) {
-    return Mono.fromCallable(() -> systemPropertiesService.getProperty(key))
-        .map(result -> responseHelper.success(result))
-        .flatMap(this::toResponse);
+  public ResponseEntity<Response<Map<String, String>>> find(@RequestParam ConfigGroup key) {
+    return toResponse(responseHelper.success(systemPropertiesService.getProperty(key)));
   }
 }

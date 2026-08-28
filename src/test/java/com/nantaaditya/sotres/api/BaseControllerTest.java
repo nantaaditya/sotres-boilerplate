@@ -1,99 +1,85 @@
 package com.nantaaditya.sotres.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
+import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.response.Response;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import io.micrometer.observation.tck.TestObservationRegistryAssert;
-import java.util.concurrent.atomic.AtomicReference;
+import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-import reactor.test.StepVerifier;
+import org.springframework.test.util.ReflectionTestUtils;
 
-/**
- * Verifies the Observation set into Reactor Context by AppFilter (see
- * AppFilter#filter) is correctly readable inside toResponse() even after a
- * real thread hop — the exact scenario the old ThreadLocal-based
- * ObservationWrapper could not guarantee.
- */
 @DisplayName("BaseController")
+@ExtendWith(MockitoExtension.class)
 class BaseControllerTest {
+
+  @Mock
+  private ObservationWrapper observationWrapper;
+  @Mock
+  private HttpServletRequest request;
 
   private final BaseController controller = new BaseController();
 
-  @Test
-  @DisplayName("observation set upstream via contextWrite survives a real thread hop and gets tagged with the responseCode")
-  void toResponse_successAfterThreadHop_tagsObservationWithResponseCode() {
-    TestObservationRegistry observationRegistry = TestObservationRegistry.create();
-    Observation observation = Observation.start("test.observation", observationRegistry);
+  @BeforeEach
+  void setUp() {
+    ReflectionTestUtils.setField(controller, "observationWrapper", observationWrapper);
+    ReflectionTestUtils.setField(controller, "request", request);
+  }
 
-    String callingThread = Thread.currentThread().getName();
-    AtomicReference<String> executionThread = new AtomicReference<>();
-
-    Response<String> successResponse = Response.<String>builder()
+  private <T> Response<T> response(String code, T data) {
+    return Response.<T>builder()
         .response(Response.ResponseMetadata.builder()
-            .code(ApiResponseCode.SUCCESS.getCode())
-            .description(ApiResponseCode.SUCCESS.getMessage())
+            .code(code)
+            .description(code)
             .build())
-        .data("hello")
+        .data(data)
         .build();
+  }
 
-    Mono<ResponseEntity<Response<String>>> result = Mono.just(successResponse)
-        // force a real thread hop, mirroring what an R2DBC/WebClient async boundary does in production
-        .publishOn(Schedulers.boundedElastic())
-        .flatMap(response -> {
-          executionThread.set(Thread.currentThread().getName());
-          return controller.toResponse(response);
-        })
-        .contextWrite(ctx -> ctx.put(Observation.class, observation));
+  @Test
+  @DisplayName("success response returns 200 and tags the request observation with the responseCode")
+  void toResponse_success_tagsObservationWithResponseCode() {
+    TestObservationRegistry registry = TestObservationRegistry.create();
+    Observation observation = Observation.start("test.observation", registry);
+    when(observationWrapper.getObservation(request)).thenReturn(observation);
 
-    StepVerifier.create(result)
-        .assertNext(entity -> assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK))
-        .verifyComplete();
+    ResponseEntity<Response<String>> entity =
+        controller.toResponse(response(ApiResponseCode.SUCCESS.getCode(), "hello"));
 
     observation.stop();
 
-    assertThat(executionThread.get())
-        .as("toResponse must actually execute on a different thread than the caller for this test to be meaningful")
-        .isNotEqualTo(callingThread);
-
-    TestObservationRegistryAssert.assertThat(observationRegistry)
+    assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+    TestObservationRegistryAssert.assertThat(registry)
         .hasObservationWithNameEqualTo("test.observation")
         .that()
         .hasLowCardinalityKeyValue("responseCode", ApiResponseCode.SUCCESS.getCode());
   }
 
   @Test
-  @DisplayName("observation set upstream via contextWrite survives a real thread hop and records the error for a non-success response")
-  void toResponse_errorAfterThreadHop_tagsObservationWithError() {
-    TestObservationRegistry observationRegistry = TestObservationRegistry.create();
-    Observation observation = Observation.start("test.observation", observationRegistry);
+  @DisplayName("non-success response returns 400 and records the error on the observation")
+  void toResponse_error_recordsError() {
+    TestObservationRegistry registry = TestObservationRegistry.create();
+    Observation observation = Observation.start("test.observation", registry);
+    when(observationWrapper.getObservation(request)).thenReturn(observation);
 
-    Response<String> failedResponse = Response.<String>builder()
-        .response(Response.ResponseMetadata.builder()
-            .code(ApiResponseCode.BAD_REQUEST.getCode())
-            .description(ApiResponseCode.BAD_REQUEST.getMessage())
-            .build())
-        .build();
-
-    Mono<ResponseEntity<Response<String>>> result = Mono.just(failedResponse)
-        .publishOn(Schedulers.boundedElastic())
-        .flatMap(controller::toResponse)
-        .contextWrite(ctx -> ctx.put(Observation.class, observation));
-
-    StepVerifier.create(result)
-        .assertNext(entity -> assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST))
-        .verifyComplete();
+    ResponseEntity<Response<String>> entity =
+        controller.toResponse(response(ApiResponseCode.BAD_REQUEST.getCode(), null));
 
     observation.stop();
 
-    TestObservationRegistryAssert.assertThat(observationRegistry)
+    assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    TestObservationRegistryAssert.assertThat(registry)
         .hasObservationWithNameEqualTo("test.observation")
         .that()
         .hasLowCardinalityKeyValueWithKey("error")
@@ -101,18 +87,13 @@ class BaseControllerTest {
   }
 
   @Test
-  @DisplayName("does not throw when no observation was written into the Reactor context")
-  void toResponse_noObservationInContext_doesNotThrow() {
-    Response<String> successResponse = Response.<String>builder()
-        .response(Response.ResponseMetadata.builder()
-            .code(ApiResponseCode.SUCCESS.getCode())
-            .description(ApiResponseCode.SUCCESS.getMessage())
-            .build())
-        .data("hello")
-        .build();
+  @DisplayName("does not throw when no observation is present for the request")
+  void toResponse_noObservation_doesNotThrow() {
+    when(observationWrapper.getObservation(request)).thenReturn(null);
 
-    StepVerifier.create(controller.toResponse(successResponse))
-        .assertNext(entity -> assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK))
-        .verifyComplete();
+    ResponseEntity<Response<String>> entity =
+        controller.toResponse(response(ApiResponseCode.SUCCESS.getCode(), "hello"));
+
+    assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 }

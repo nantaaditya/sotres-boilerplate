@@ -4,6 +4,7 @@ import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.TsidHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.response.Response.ResponseMetadata;
+import jakarta.servlet.http.HttpServletRequest;
 import java.beans.Transient;
 import java.time.ZonedDateTime;
 import java.util.Optional;
@@ -27,6 +28,15 @@ public class ContextDTO {
     this.method = request.getMethod().name();
     this.path = request.getURI().getPath().replace(contextPath, "");
     this.requestTime = request.getHeaders().getFirst(HeaderConstant.REQUEST_TIME.getHeader());
+    this.receivedTime = DateTimeHelper.getDateInFormat(ZonedDateTime.now(), DateTimeHelper.ISO_8601_GMT7_FORMAT);
+  }
+
+  public void decorateContext(HttpServletRequest request, String contextPath) {
+    this.clientId = request.getHeader(HeaderConstant.CLIENT_ID.getHeader());
+    this.requestId = request.getHeader(HeaderConstant.REQUEST_ID.getHeader());
+    this.method = request.getMethod();
+    this.path = request.getRequestURI().replace(contextPath, "");
+    this.requestTime = request.getHeader(HeaderConstant.REQUEST_TIME.getHeader());
     this.receivedTime = DateTimeHelper.getDateInFormat(ZonedDateTime.now(), DateTimeHelper.ISO_8601_GMT7_FORMAT);
   }
 

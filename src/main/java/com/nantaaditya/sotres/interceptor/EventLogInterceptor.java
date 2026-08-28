@@ -1,59 +1,68 @@
-package com.nantaaditya.sotres.helper;
+package com.nantaaditya.sotres.interceptor;
 
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.entity.EventLog;
+import com.nantaaditya.sotres.helper.ContextHelper;
+import com.nantaaditya.sotres.helper.GsonHelper;
+import com.nantaaditya.sotres.helper.TsidHelper;
+import com.nantaaditya.sotres.model.dto.CacheBodyRequest;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.LogProperties;
 import com.nantaaditya.sotres.repository.EventLogRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
+import org.springframework.util.StreamUtils;
+import org.springframework.web.servlet.HandlerInterceptor;
 
 @Log4j2
 @Component
 @RequiredArgsConstructor
-public class EventLogHelper {
+public class EventLogInterceptor implements HandlerInterceptor {
 
   private final EventLogRepository eventLogRepository;
   private final LogProperties logProperties;
   private final Gson gson;
   private final ContextHelper contextHelper;
 
-  public void save(ServerWebExchange exchange, ContextDTO context) {
+  @Override
+  public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
+      Object handler, Exception ex) {
+    ContextDTO context = (ContextDTO) request.getAttribute(HeaderFilter.CONTEXT_ATTRIBUTE);
+    if (context == null) {
+      log.warn(AppLogMessage.message("#EventLog - context is null"));
+      return;
+    }
+
     try {
-      if (context == null) {
-        log.warn(AppLogMessage.message("#EventLog - context is null"));
+      if (logProperties.isIgnoredPath(context.getPath())) {
+        log.debug(AppLogMessage.message("#EventLog - ignored trace log path"));
         return;
       }
 
       byte[] additionalData = contextHelper.getAdditionalData(context.getRequestId());
+      String cleanedPayload = GsonHelper.cleanJson(readBody(request), gson);
 
-      if (logProperties.isIgnoredPath(context.getPath())) {
-        log.debug(AppLogMessage.message("#EventLog - ignored trace log path"));
-        contextHelper.cleanUp(context.getRequestId());
-        return;
-      }
-
-      byte[] cachedBody = (byte[]) exchange.getAttribute("cachedRequestBody");
-      String payload = new String(cachedBody, StandardCharsets.UTF_8);
-      String cleanedPayload = GsonHelper.cleanJson(payload, gson);
-
-      Mono.fromSupplier(() -> createEventLog(context, additionalData, cleanedPayload))
-          .doOnNext(eventLogRepository::save) // TODO(refactor): blocking JDBC save on boundedElastic
-          .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
-          .subscribe(
-              success -> log.debug(AppLogMessage.message("#EventLog - success save event log")),
-              error -> log.error(AppLogMessage.message("#EventLog - error save event log").error(error)),
-              () -> contextHelper.cleanUp(context.getRequestId())
-          );
+      EventLog eventLog = createEventLog(context, additionalData, cleanedPayload);
+      log.debug(AppLogMessage.message("#EventLog - save event log"));
+      eventLogRepository.save(eventLog);
     } catch (Exception e) {
       log.error(AppLogMessage.message("#EventLog - failed save event log").error(e));
+    } finally {
+      contextHelper.cleanUp(context.getRequestId());
     }
+  }
+
+  private String readBody(HttpServletRequest request) throws IOException {
+    InputStream inputStream = new CacheBodyRequest(request).getInputStream();
+    return new String(StreamUtils.copyToByteArray(inputStream), StandardCharsets.UTF_8);
   }
 
   private EventLog createEventLog(ContextDTO context, byte[] additionalData, String payload) {

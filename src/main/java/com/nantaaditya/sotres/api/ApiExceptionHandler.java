@@ -30,10 +30,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
-import org.springframework.web.reactive.resource.NoResourceFoundException;
-import reactor.core.publisher.Sinks.EmissionException;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Log4j2
 @RestControllerAdvice
@@ -48,6 +45,8 @@ public class ApiExceptionHandler {
   private static final String EXCEPTION_DETAIL = "exception_detail";
   private static final int START_INDEX = 0;
 
+  private record ErrorResult(Map<String, List<String>> errors, Response<Object> response) {}
+
   @ResponseBody
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   @ExceptionHandler(NoResourceFoundException.class)
@@ -55,18 +54,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of("endpoint", List.of("not available"));
       Response<Object> response = responseHelper.failed(ApiResponseCode.BAD_REQUEST, errors);
-      return Tuples.of(errors, response);
-    });
-  }
-
-  @ResponseBody
-  @ResponseStatus(HttpStatus.BAD_REQUEST)
-  @ExceptionHandler(EmissionException.class)
-  public Response<Object> emissionException(EmissionException ex) {
-    return toBaseErrorResponse(ex, error -> {
-      Map<String, List<String>> errors = Map.of("publisher", List.of(ex.getReason().name()));
-      Response<Object> response = responseHelper.failed(ApiResponseCode.BAD_REQUEST, errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -77,7 +65,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of(EXCEPTION_KEY, List.of(ex.getMessage()));
       Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, Collections.emptyMap());
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -88,7 +76,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = ex.getViolations();
       Response<Object> response = responseHelper.failed(ex.getResponse(), errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -108,7 +96,7 @@ public class ApiExceptionHandler {
         errors.put(errorKey, List.of("NotValid"));
       }
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -127,7 +115,7 @@ public class ApiExceptionHandler {
         });
 
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, map);
-      return Tuples.of(map, response);
+      return new ErrorResult(map, response);
     });
   }
 
@@ -138,7 +126,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of("template", List.of("NotValid"));
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -149,22 +137,21 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of(EXCEPTION_KEY, List.of(ex.getMessage()));
       Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
-  private <T extends Throwable> Response<Object> toBaseErrorResponse(T ex, Function<T,
-      Tuple2<Map<String, List<String>>, Response<Object>>> function) {
+  private <T extends Throwable> Response<Object> toBaseErrorResponse(T ex, Function<T, ErrorResult> function) {
     log.error(AppLogMessage.message(ERROR_LOG).error(ex));
 
-    Tuple2<Map<String, List<String>>, Response<Object>> tuples = function.apply(ex);
+    ErrorResult result = function.apply(ex);
 
-    if (!tuples.getT1().isEmpty()) {
-      String exceptionDetail = getErrors(tuples.getT1());
+    if (!result.errors().isEmpty()) {
+      String exceptionDetail = getErrors(result.errors());
       responseHelper.getContextHelper().put(getRequestId(), exceptionDetail);
     }
 
-    return tuples.getT2();
+    return result.response();
   }
 
   private String getRequestId() {

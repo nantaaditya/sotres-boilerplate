@@ -69,8 +69,7 @@ class DeadLetterProcessServiceImplTest {
     @Test
     @DisplayName("deletes exhausted records older than the given days threshold")
     void deletesExhaustedRecordsBeforeDateThreshold() {
-      StepVerifier.create(service.remove(7))
-          .verifyComplete();
+      service.remove(7);
 
       verify(deadLetterProcessRepository).deleteByCreatedDateBeforeAndStatus(
           argThat(date -> date.isBefore(LocalDateTime.now())),
@@ -86,13 +85,14 @@ class DeadLetterProcessServiceImplTest {
     @Test
     @DisplayName("filters records that reached maxRetry and completes without executing")
     void filtersRecordsAtMaxRetry_completesEmpty() {
-      DeadLetterProcess dlp = buildDlp(3, 3); // 3 >= 3 → filtered
+      DeadLetterProcess dlp = buildDlp(3, 3); // 3 >= 3 -> filtered
       when(deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
           eq("ORDER"), eq("PAYMENT"), anySet(), any()))
           .thenReturn(List.of(dlp));
 
-      StepVerifier.create(service.retry(request))
-          .verifyComplete();
+      service.retry(request);
+
+      verify(retryProcessorHelper).getProcessor("ORDER", "PAYMENT");
     }
   }
 

@@ -1,10 +1,10 @@
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: ${CONTEXT_PATH:/sotres}
 
 spring:
   application.name: ${APPLICATION_NAME:sotres-api}
-  webflux:
-    base-path: ${CONTEXT_PATH:/sotres}
   threads:
     virtual.enabled: ${VIRTUAL_THREAD_ENABLED:true}
   datasource:

@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/internal-api/event_log")
@@ -22,9 +21,9 @@ public class EventLogController extends BaseController {
   @DeleteMapping(
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Boolean>>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
-    return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .flatMap(this::toResponse)
-        .doOnSuccess(response -> eventLogService.remove(days).subscribe());
+  public ResponseEntity<Response<Boolean>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
+    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
+    eventLogService.remove(days);
+    return response;
   }
 }

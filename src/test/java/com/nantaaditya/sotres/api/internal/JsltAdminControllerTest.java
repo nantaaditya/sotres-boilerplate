@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.api.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
+import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
@@ -26,9 +28,9 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 @DisplayName("JsltAdminController")
 @ExtendWith(MockitoExtension.class)
@@ -43,12 +45,16 @@ class JsltAdminControllerTest {
   @Mock
   private ResponseHelper responseHelper;
 
+  @Mock
+  private ObservationWrapper observationWrapper;
+
   private JsltAdminController controller;
 
   @BeforeEach
   void setUp() {
     controller = new JsltAdminController(jsltTransformationHelper, systemPropertiesService);
     ReflectionTestUtils.setField(controller, "responseHelper", responseHelper);
+    ReflectionTestUtils.setField(controller, "observationWrapper", observationWrapper);
   }
 
   @Nested
@@ -62,18 +68,13 @@ class JsltAdminControllerTest {
           "client_spec_request", "{\"result\": .value}",
           "client_spec_response", "{\"mapped\": .data}"
       );
-      Response<Map<String, String>> successResp = successResponse(templates);
-
       when(jsltTransformationHelper.evictAndReload("10.97-E001")).thenReturn(templates);
-      when(responseHelper.success(templates)).thenReturn(successResp);
+      when(responseHelper.success(templates)).thenReturn(successResponse(templates));
 
-      StepVerifier.create(controller.reload("10.97-E001"))
-          .assertNext(entity -> {
-            assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-            assertThat(entity.getBody().getData()).isEqualTo(templates);
-          })
-          .verifyComplete();
+      ResponseEntity<Response<Map<String, String>>> entity = controller.reload("10.97-E001");
 
+      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(entity.getBody().getData()).isEqualTo(templates);
       verify(jsltTransformationHelper).evictAndReload("10.97-E001");
     }
 
@@ -83,9 +84,8 @@ class JsltAdminControllerTest {
       when(jsltTransformationHelper.evictAndReload("10.97-E001"))
           .thenThrow(new RuntimeException("DB error"));
 
-      StepVerifier.create(controller.reload("10.97-E001"))
-          .expectError(RuntimeException.class)
-          .verify();
+      assertThatThrownBy(() -> controller.reload("10.97-E001"))
+          .isInstanceOf(RuntimeException.class);
     }
   }
 
@@ -100,18 +100,13 @@ class JsltAdminControllerTest {
           "client_spec_request", "{\"result\": .value}",
           "client_spec_response", ""
       );
-      Response<Map<String, String>> successResp = successResponse(templates);
-
       when(jsltTransformationHelper.getTemplates("10.97-E001")).thenReturn(templates);
-      when(responseHelper.success(templates)).thenReturn(successResp);
+      when(responseHelper.success(templates)).thenReturn(successResponse(templates));
 
-      StepVerifier.create(controller.templates("10.97-E001"))
-          .assertNext(entity -> {
-            assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-            assertThat(entity.getBody().getData()).containsKey("client_spec_request");
-          })
-          .verifyComplete();
+      ResponseEntity<Response<Map<String, String>>> entity = controller.templates("10.97-E001");
 
+      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(entity.getBody().getData()).containsKey("client_spec_request");
       verify(jsltTransformationHelper).getTemplates("10.97-E001");
     }
 
@@ -121,9 +116,8 @@ class JsltAdminControllerTest {
       when(jsltTransformationHelper.getTemplates("10.97-E001"))
           .thenThrow(new RuntimeException("service error"));
 
-      StepVerifier.create(controller.templates("10.97-E001"))
-          .expectError(RuntimeException.class)
-          .verify();
+      assertThatThrownBy(() -> controller.templates("10.97-E001"))
+          .isInstanceOf(RuntimeException.class);
     }
   }
 
@@ -134,17 +128,12 @@ class JsltAdminControllerTest {
     @Test
     @DisplayName("returns 200 with true after evicting and rewarming all templates")
     void reloadAll_returnsTrue() {
-      Response<Boolean> successResp = successResponse(Boolean.TRUE);
+      when(responseHelper.success(Boolean.TRUE)).thenReturn(successResponse(Boolean.TRUE));
 
-      when(responseHelper.success(Boolean.TRUE)).thenReturn(successResp);
+      ResponseEntity<Response<Boolean>> entity = controller.reloadAll();
 
-      StepVerifier.create(controller.reloadAll())
-          .assertNext(entity -> {
-            assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-            assertThat(entity.getBody().getData()).isTrue();
-          })
-          .verifyComplete();
-
+      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(entity.getBody().getData()).isTrue();
       verify(jsltTransformationHelper).evictAll();
     }
 
@@ -153,9 +142,8 @@ class JsltAdminControllerTest {
     void reloadAll_propagatesError() {
       doThrow(new RuntimeException("reload failed")).when(jsltTransformationHelper).evictAll();
 
-      StepVerifier.create(controller.reloadAll())
-          .expectError(RuntimeException.class)
-          .verify();
+      assertThatThrownBy(() -> controller.reloadAll())
+          .isInstanceOf(RuntimeException.class);
     }
   }
 
@@ -170,20 +158,18 @@ class JsltAdminControllerTest {
           .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
           .propertyValue("{\"result\": .value}").build();
       TemplateResponse dto = TemplateResponse.from(saved);
-      Response<TemplateResponse> successResp = successResponse(dto);
 
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
-      when(responseHelper.success(dto)).thenReturn(successResp);
+      when(responseHelper.success(dto)).thenReturn(successResponse(dto));
 
-      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
-          .assertNext(entity -> {
-            assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-            assertThat(entity.getBody().getData().template()).isEqualTo("{\"result\": .value}");
-            assertThat(entity.getBody().getData().selector()).isEqualTo("10.97-E001");
-            assertThat(entity.getBody().getData().group()).isEqualTo("client_spec_request");
-          })
-          .verifyComplete();
+      ResponseEntity<Response<TemplateResponse>> entity =
+          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}");
+
+      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(entity.getBody().getData().template()).isEqualTo("{\"result\": .value}");
+      assertThat(entity.getBody().getData().selector()).isEqualTo("10.97-E001");
+      assertThat(entity.getBody().getData().group()).isEqualTo("client_spec_request");
     }
 
     @Test
@@ -192,9 +178,9 @@ class JsltAdminControllerTest {
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.error(new RuntimeException("DB write failed")));
 
-      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
-          .expectError(RuntimeException.class)
-          .verify();
+      assertThatThrownBy(() ->
+          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
+          .isInstanceOf(RuntimeException.class);
     }
 
     @Test
@@ -203,31 +189,30 @@ class JsltAdminControllerTest {
       doThrow(new InvalidTemplateException("invalid JSLT syntax"))
           .when(jsltTransformationHelper).validateTemplate("<<< bad >>>");
 
-      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "<<< bad >>>"))
-          .expectError(InvalidTemplateException.class)
-          .verify();
+      assertThatThrownBy(() ->
+          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "<<< bad >>>"))
+          .isInstanceOf(InvalidTemplateException.class);
 
       verify(systemPropertiesService, never())
           .upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "<<< bad >>>");
     }
 
     @Test
-    @DisplayName("validates before upserting — validateTemplate is called first")
+    @DisplayName("validates before upserting - validateTemplate is called first")
     void save_validTemplate_validatesBeforeUpsert() {
       SystemProperties saved = SystemProperties.builder()
           .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
           .propertyValue("{\"result\": .value}").build();
       TemplateResponse dto = TemplateResponse.from(saved);
-      Response<TemplateResponse> successResp = successResponse(dto);
 
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
           .thenReturn(Mono.just(saved));
-      when(responseHelper.success(dto)).thenReturn(successResp);
+      when(responseHelper.success(dto)).thenReturn(successResponse(dto));
 
-      StepVerifier.create(controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
-          .assertNext(entity -> assertThat(entity.getStatusCode().value()).isEqualTo(200))
-          .verifyComplete();
+      ResponseEntity<Response<TemplateResponse>> entity =
+          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}");
 
+      assertThat(entity.getStatusCode().value()).isEqualTo(200);
       InOrder order = inOrder(jsltTransformationHelper, systemPropertiesService);
       order.verify(jsltTransformationHelper).validateTemplate("{\"result\": .value}");
       order.verify(systemPropertiesService).upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}");

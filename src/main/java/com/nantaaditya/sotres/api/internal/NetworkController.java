@@ -9,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/internal-api/network")
@@ -22,29 +21,27 @@ public class NetworkController extends BaseController {
       value = "/sign-on",
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Boolean>>> sendSignOn() {
-    return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .flatMap(this::toResponse)
-        .doOnSuccess(response -> networkService.sendSignOn());
+  public ResponseEntity<Response<Boolean>> sendSignOn() {
+    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
+    networkService.sendSignOn();
+    return response;
   }
 
   @GetMapping(
       value = "/sign-off",
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Boolean>>> sendSignOff() {
-    return Mono.fromCallable(() -> responseHelper.success(Boolean.TRUE))
-        .flatMap(this::toResponse)
-        .doOnNext(response -> networkService.sendSignOff());
+  public ResponseEntity<Response<Boolean>> sendSignOff() {
+    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
+    networkService.sendSignOff();
+    return response;
   }
 
   @GetMapping(
       value = "/echo",
       produces = MediaType.APPLICATION_JSON_VALUE
   )
-  public Mono<ResponseEntity<Response<Boolean>>> sendEcho() {
-    return Mono.fromCallable(() -> responseHelper.success(networkService.sendEcho()))
-        .flatMap(this::toResponse);
+  public ResponseEntity<Response<Boolean>> sendEcho() {
+    return toResponse(responseHelper.success(networkService.sendEcho()));
   }
-
 }
