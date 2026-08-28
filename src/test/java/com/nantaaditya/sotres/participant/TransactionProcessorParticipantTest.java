@@ -3,9 +3,12 @@ package com.nantaaditya.sotres.participant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,12 +20,15 @@ import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
+import com.nantaaditya.sotres.model.dto.RequestContext;
+import com.nantaaditya.sotres.model.dto.TransactionException;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.embedded.ParticipantPoolConfiguration;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.nantaaditya.sotres.strategy.outgoing.SenderProtocolStrategy;
+import com.nantaaditya.sotres.strategy.transaction.AbstractTransactionHandler;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
@@ -35,6 +41,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.Attribute;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Semaphore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -84,6 +92,8 @@ class TransactionProcessorParticipantTest {
   @SuppressWarnings("rawtypes")
   @Mock
   private Attribute attr;
+  @Mock
+  private AbstractTransactionHandler routableHandler;
 
   private final ParticipantPoolConfiguration config =
       new ParticipantPoolConfiguration(1, 100, 100, 100, 100, 2000, "test");
@@ -107,8 +117,6 @@ class TransactionProcessorParticipantTest {
     lenient().when(tracerHelper.startSpan(any(), any())).thenReturn(span);
     lenient().when(tracer.withSpan(span)).thenReturn(spanInScope);
     lenient().when(span.context()).thenReturn(traceContext);
-    lenient().when(tracerHelper.withSpanScopeAndMDC(any(), any(), any()))
-        .thenAnswer(inv -> inv.getArgument(0));
 
     // channel attribute chain for isoCategory lookup
     lenient().when(ctx.channel()).thenReturn(channel);
@@ -139,9 +147,14 @@ class TransactionProcessorParticipantTest {
             ConfigGroup.CURRENCY_FRACTIONS.getPropertyId()))
         .thenReturn("360:2");
 
-    participant = new TransactionProcessorParticipant(
+    participant = buildParticipant(List.of(), new Semaphore(100));
+  }
+
+  private TransactionProcessorParticipant buildParticipant(
+      List<AbstractTransactionHandler> handlers, Semaphore bulkhead) {
+    return new TransactionProcessorParticipant(
         systemPropertiesService,
-        List.of(),
+        handlers,
         isoMessageLoggerHelper,
         isoFieldHelper,
         observationRegistry,
@@ -150,7 +163,9 @@ class TransactionProcessorParticipantTest {
         List.of(senderProtocolStrategy),
         participantConfigurationProperties,
         isoMessageProperties,
-        clientProperties
+        clientProperties,
+        Runnable::run,
+        bulkhead
     );
   }
 
@@ -242,6 +257,68 @@ class TransactionProcessorParticipantTest {
       boolean result = participant.onMessage(ctx, msg);
 
       assertThat(result).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("onMessage — routed transaction")
+  class Routed {
+
+    @Test
+    @DisplayName("sheds with SYSTEM_MALFUNCTION (96) when the in-flight bulkhead is saturated")
+    @SuppressWarnings("unchecked")
+    void onMessage_bulkheadSaturated_shedsSystemMalfunction() {
+      when(msg.getType()).thenReturn(512);
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
+      when(routableHandler.getSelectors()).thenReturn(Set.of("20.00-QR"));
+      TransactionProcessorParticipant p =
+          buildParticipant(List.of(routableHandler), new Semaphore(0));
+
+      p.onMessage(ctx, msg);
+
+      verify(isoFieldHelper)
+          .sendResponseWithObservation(any(ParticipantContext.class), eq("96"), isNull());
+      verify(senderProtocolStrategy, never()).send(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("routes to handleError when the downstream send throws")
+    @SuppressWarnings("unchecked")
+    void onMessage_downstreamThrows_handledByHandleError() {
+      when(msg.getType()).thenReturn(512);
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
+      when(routableHandler.getSelectors()).thenReturn(Set.of("20.00-QR"));
+      when(routableHandler.execute(any())).thenAnswer(inv -> inv.getArgument(0));
+      when(senderProtocolStrategy.send(any(), any(), any()))
+          .thenThrow(new TransactionException(new RuntimeException("boom"), new RequestContext()));
+      TransactionProcessorParticipant p =
+          buildParticipant(List.of(routableHandler), new Semaphore(1));
+
+      p.onMessage(ctx, msg);
+
+      verify(senderProtocolStrategy)
+          .handleError(any(ParticipantContext.class), any(TransactionException.class));
+    }
+
+    @Test
+    @DisplayName("routes to handleError when the bulkhead acquire is interrupted")
+    @SuppressWarnings("unchecked")
+    void onMessage_bulkheadInterrupted_handledByHandleError() throws InterruptedException {
+      when(msg.getType()).thenReturn(512);
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
+      when(routableHandler.getSelectors()).thenReturn(Set.of("20.00-QR"));
+      Semaphore interrupting = mock(Semaphore.class);
+      when(interrupting.tryAcquire(anyLong(), any())).thenThrow(new InterruptedException());
+      TransactionProcessorParticipant p = buildParticipant(List.of(routableHandler), interrupting);
+
+      try {
+        p.onMessage(ctx, msg);
+
+        verify(senderProtocolStrategy)
+            .handleError(any(ParticipantContext.class), any(InterruptedException.class));
+      } finally {
+        Thread.interrupted(); // clear the flag set by handleTransaction so it doesn't leak
+      }
     }
   }
 }

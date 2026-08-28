@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres;
 
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
+import com.nantaaditya.sotres.properties.BulkheadProperties;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.LogProperties;
@@ -16,6 +17,7 @@ import reactor.core.publisher.Hooks;
 @SpringBootApplication
 @EnableConfigurationProperties(value = {
     AsyncTaskProperties.class,
+    BulkheadProperties.class,
     ClientProperties.class,
     IsoMessageProperties.class,
     LogProperties.class,

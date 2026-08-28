@@ -26,7 +26,6 @@ import com.solab.iso8583.IsoMessage;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Span;
-import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.Tracer.SpanInScope;
 import io.netty.channel.ChannelHandlerContext;
@@ -35,19 +34,25 @@ import jakarta.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Component
 public class TransactionProcessorParticipant
     implements IsoMessageListener<IsoMessage>, IsoCallbackConstant {
+
+  // registered by AsyncTaskConfiguration from apps.async.configurations.isoTransaction
+  static final String ISO_TRANSACTION_EXECUTOR = "isoTransactionAsyncTaskExecutor";
+  // registered by BulkheadConfiguration from apps.bulkhead.configurations.isoTransaction
+  static final String ISO_TRANSACTION_BULKHEAD = "isoTransactionBulkhead";
 
   private final SystemPropertiesService systemPropertiesService;
   private final SenderProtocolStrategy senderProtocolStrategy;
@@ -57,18 +62,24 @@ public class TransactionProcessorParticipant
   private final IsoFieldHelper isoFieldHelper;
   private final TracerHelper tracerHelper;
   private final Tracer tracer;
-  private final Scheduler scheduler;
+  private final Executor isoTransactionExecutor;
+  private final Semaphore inFlightBulkhead;
+  private final long inFlightAcquireTimeoutMs;
   private final IsoMessageProperties isoMessageProperties;
   private final ClientProperties clientProperties;
   private final List<String> responseRegistrySelectors;
 
+  // Spring resolves the executor/bulkhead via the @Qualifier + @Lazy proxies
+  // (both registered on ApplicationReadyEvent); tests pass them positionally.
   public TransactionProcessorParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler> transactionHandlers,
       IsoMessageLoggerHelper isoMessageLoggerHelper, IsoFieldHelper isoFieldHelper,
       ObservationRegistry observationRegistry, TracerHelper tracerHelper, Tracer tracer,
       List<SenderProtocolStrategy> senderProtocolStrategies,
       ParticipantConfigurationProperties participantConfigurationProperties,
-      IsoMessageProperties isoMessageProperties, ClientProperties clientProperties) {
+      IsoMessageProperties isoMessageProperties, ClientProperties clientProperties,
+      @Lazy @Qualifier(ISO_TRANSACTION_EXECUTOR) Executor isoTransactionExecutor,
+      @Qualifier(ISO_TRANSACTION_BULKHEAD) Semaphore inFlightBulkhead) {
 
     this.systemPropertiesService = systemPropertiesService;
     this.transactionHandlers = transactionHandlers;
@@ -79,8 +90,11 @@ public class TransactionProcessorParticipant
     this.tracer = tracer;
     this.isoMessageProperties = isoMessageProperties;
     this.clientProperties = clientProperties;
+    this.isoTransactionExecutor = isoTransactionExecutor;
+    this.inFlightBulkhead = inFlightBulkhead;
+    this.inFlightAcquireTimeoutMs =
+        participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).flightQueueTimeOut();
 
-    this.scheduler = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).createScheduler();
     this.responseRegistrySelectors = ConfigGroup.getList(
         this.systemPropertiesService,
         ConfigGroup.REGISTRY_RESPONSE_SELECTOR
@@ -98,100 +112,82 @@ public class TransactionProcessorParticipant
 
   @Override
   public boolean onMessage(@NotNull ChannelHandlerContext ctx, @NotNull IsoMessage isoMessage) {
-    // start observation
+    // start observation + manual span on the event loop; do NOT block here
     Observation observation = Observation.start(ObservationConstant.ISO_MESSAGE.getName(), observationRegistry);
     Span span = tracerHelper.startSpan(tracer, ObservationConstant.ISO_MESSAGE.getName());
     Map<String, String> mdc = new HashMap<>();
 
     try (SpanInScope spanInScope = tracer.withSpan(span)) {
-      // initiate manual span
-      TraceContext traceContext = span.context();
       tracerHelper.initiateSpan(isoMessage, mdc);
       IsoCategory isoCategory = (IsoCategory) ctx.channel()
           .attr(AttributeKey.valueOf(CALLBACK_ATTRIBUTE))
           .get();
 
-      ParticipantContext participantContext = new ParticipantContext();
-      RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory);  // convert to internal DTO
+      RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory);
 
       // propagate to the next response participant (API -> ISO -> wait for response -> ISO -> API)
       if (isResponseRegistryEnabled(requestContext)) {
         return true;
       }
 
-      Mono.fromCallable(() -> requestContext)
-          .transformDeferred(contextMono -> tracerHelper.withSpanScopeAndMDC(contextMono, span, mdc))
-          .filter(Objects::nonNull)
-          // log & observe iso message
-          .map(request -> isoFieldHelper.logAndObserve(isoMessage, request, observation))
-          // get transaction handler by selector
-          .flatMap(request -> selectTransactionHandler(participantContext, ctx, isoMessage, request, observation))
-          // execute transaction handler
-          .flatMap(this::executeHandler)
-          // process & send message using specific protocol
-          .flatMap(this::sendMessage)
-          // set up span and context
-          .contextWrite(context -> context
-              .put(Span.class, span)
-              .put(TraceContext.class, traceContext)
-          )
-          .subscribeOn(scheduler)
-          .subscribe(
-              senderProtocolStrategy::handleResponse, // handle response
-              throwable -> senderProtocolStrategy.handleError(participantContext, throwable), // handle error
-              () -> {
-                span.end();
-                MDC.clear();
-              }
-          );
-
-      MDC.setContextMap(mdc);
+      // hand the transaction off the Netty event loop onto a (virtual) worker thread
+      isoTransactionExecutor.execute(
+          () -> handleTransaction(ctx, isoMessage, requestContext, observation, span, mdc));
     }
 
     log.info(AppLogMessage.message("#Transaction - message with RRN {} processed", IsoFieldHelper.getField(isoMessage, 37)));
     return false;
   }
 
-  private Mono<ParticipantContext> executeHandler(ParticipantContext participantContext) {
-    // TODO(refactor): sync handler.execute wrapped for the still-reactive onMessage chain (Phase 2C-3 removes this)
-    return Mono.fromCallable(() -> participantContext.getTransactionHandler().execute(participantContext))
-        .subscribeOn(Schedulers.boundedElastic());
-  }
+  private void handleTransaction(ChannelHandlerContext ctx, IsoMessage isoMessage,
+      RequestContext requestContext, Observation observation, Span span, Map<String, String> mdc) {
 
-  private Mono<ParticipantContext> sendMessage(ParticipantContext ctx) {
+    ParticipantContext participantContext = new ParticipantContext();
+    boolean acquired = false;
 
-    if (senderProtocolStrategy == null) {
-      log.error(AppLogMessage.message("#Transaction - sender protocol not found: {}", isoMessageProperties.outgoingProtocol()));
-      isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
-      return Mono.empty();
+    try (SpanInScope spanInScope = tracer.withSpan(span);
+        Observation.Scope scope = observation.openScope()) {
+      MDC.setContextMap(mdc);
+
+      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+
+      Optional<AbstractTransactionHandler> maybeHandler = findTransactionHandler(requestContext);
+      participantContext.onUpdate(ctx, isoMessage, maybeHandler.orElse(null), requestContext, observation);
+
+      if (maybeHandler.isEmpty()) {
+        log.warn(AppLogMessage.message("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector()));
+        isoFieldHelper.sendResponseWithObservation(participantContext, IsoResponseCode.UNABLE_TO_ROUTE_TRANSACTION.getCode(), null);
+        return;
+      }
+
+      acquired = inFlightBulkhead.tryAcquire(inFlightAcquireTimeoutMs, TimeUnit.MILLISECONDS);
+      if (!acquired) {
+        log.error(AppLogMessage.message("#Transaction - in-flight bulkhead saturated, shedding RRN {}",
+            requestContext.getRrn()));
+        isoFieldHelper.sendResponseWithObservation(participantContext, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
+        return;
+      }
+
+      participantContext.getTransactionHandler().execute(participantContext);            // blocking validate + process
+      ResponseContext responseContext = senderProtocolStrategy.send(                     // blocking downstream call
+          participantContext.getChannelHandlerContext(),
+          participantContext.getIsoMessage(),
+          participantContext.getRequestContext());
+      participantContext.onResponse(responseContext);
+      senderProtocolStrategy.handleResponse(participantContext);                         // writes the 0210
+
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      senderProtocolStrategy.handleError(participantContext, e);
+    } catch (Throwable throwable) {
+      senderProtocolStrategy.handleError(participantContext, throwable);
+    } finally {
+      if (acquired) {
+        inFlightBulkhead.release();
+      }
+      span.end();
+      MDC.clear();
     }
-
-    log.debug(AppLogMessage.message("#Transaction - DTO").additionalData(ctx.getRequestContext()));
-    // TODO(refactor): sync strategy.send wrapped for the still-reactive onMessage chain (Phase 2C-3 removes this)
-    return Mono.fromCallable(() -> {
-          ResponseContext responseContext = senderProtocolStrategy.send(
-              ctx.getChannelHandlerContext(), ctx.getIsoMessage(), ctx.getRequestContext());
-          ctx.onResponse(responseContext);
-          return ctx;
-        })
-        .subscribeOn(Schedulers.boundedElastic());
-  }
-
-  private Mono<ParticipantContext> selectTransactionHandler(ParticipantContext participantContext,
-      ChannelHandlerContext context, IsoMessage isoMessage, RequestContext requestContext,
-      Observation observation) {
-
-    Optional<AbstractTransactionHandler> maybeHandler = findTransactionHandler(requestContext);
-
-    if (!maybeHandler.isPresent()) {
-      log.warn(AppLogMessage.message("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector()));
-      isoFieldHelper.sendResponseWithObservation(participantContext, IsoResponseCode.UNABLE_TO_ROUTE_TRANSACTION.getCode(), null);
-      return Mono.empty();
-    }
-
-    AbstractTransactionHandler handler = maybeHandler.get();
-    participantContext.onUpdate(context, isoMessage, handler, requestContext, observation);
-    return Mono.fromSupplier(() -> participantContext);
   }
 
   private Optional<AbstractTransactionHandler> findTransactionHandler(RequestContext requestContext) {

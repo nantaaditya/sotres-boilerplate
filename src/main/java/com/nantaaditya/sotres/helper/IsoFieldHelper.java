@@ -119,8 +119,15 @@ public class IsoFieldHelper {
 
     double originalAmount = parse(de4);
     int fractionDigit = currencyFractions.getOrDefault(de49, DEFAULT_FRACTION_DIGIT);
-    double transactionFee = parse(substring(de28,1, de28.length() - 1));
-    String feeType = substring(de28, 0, 1);
+
+    // DE28 (transaction fee) is optional in ISO8583 — absent means no fee
+    double transactionFee = 0d;
+    String feeType = null;
+    if (StringUtils.isNotBlank(de28)) {
+      transactionFee = parse(substring(de28, 1, de28.length() - 1));
+      feeType = substring(de28, 0, 1);
+    }
+
     double transactionAmount = getCalculateTransactionAmount(feeType, originalAmount, transactionFee);
 
     return Transaction.builder()

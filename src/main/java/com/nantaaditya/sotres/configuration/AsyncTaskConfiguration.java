@@ -6,7 +6,6 @@ import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
@@ -21,8 +20,6 @@ public class AsyncTaskConfiguration {
   private AsyncTaskProperties asyncProperties;
   @Autowired
   private GenericApplicationContext applicationContext;
-  @Value("${spring.threads.virtual.enabled:false}")
-  private boolean virtualThreadEnabled;
 
   private static final String POSTFIX_BEAN_NAME = "AsyncTaskExecutor";
 
@@ -38,7 +35,7 @@ public class AsyncTaskConfiguration {
       .forEach((key, value) -> applicationContext.registerBean(
           key + POSTFIX_BEAN_NAME,
           ThreadPoolTaskExecutor.class,
-          () -> createAsyncExecutor(asyncProperties.getConfiguration(key), asyncMDCTaskDecorator, virtualThreadEnabled),
+          () -> createAsyncExecutor(asyncProperties.getConfiguration(key), asyncMDCTaskDecorator),
           definition -> definition.setLazyInit(true)
           )
       );
@@ -47,7 +44,7 @@ public class AsyncTaskConfiguration {
   }
 
   private ThreadPoolTaskExecutor createAsyncExecutor(AsyncConfiguration configuration,
-      AsyncMDCTaskDecorator asyncMDCTaskDecorator, boolean virtualThreadEnabled) {
+      AsyncMDCTaskDecorator asyncMDCTaskDecorator) {
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
     executor.setCorePoolSize(configuration.corePoolSize());
     executor.setMaxPoolSize(configuration.maxPoolSize());
@@ -55,7 +52,7 @@ public class AsyncTaskConfiguration {
     executor.setThreadNamePrefix(configuration.threadNamePrefix());
     executor.setKeepAliveSeconds(configuration.keepAliveSeconds());
     executor.setTaskDecorator(asyncMDCTaskDecorator);
-    executor.setVirtualThreads(virtualThreadEnabled);
+    executor.setVirtualThreads(configuration.virtualThreadEnabled());
     executor.initialize();
     return executor;
   }

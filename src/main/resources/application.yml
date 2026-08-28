@@ -128,6 +128,18 @@ apps:
       queue-capacity: ${ASYNC_QUEUE_CAPACITY:50}
       keep-alive-seconds: ${ASYNC_KEEP_ALIVE_SECONDS:30}
       thread-name-prefix: ${ASYNC_THREAD_NAME_PREFIX:default-async-}
+      virtual-thread-enabled: ${ASYNC_VIRTUAL_THREAD_ENABLED:true}
+    isoTransaction:
+      core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
+      max-pool-size: ${TRANSACTION_MESSAGE_POOL:200}
+      queue-capacity: ${TRANSACTION_QUEUE_SIZE:50}
+      keep-alive-seconds: ${TRANSACTION_KEEP_ALIVE_SECONDS:60}
+      thread-name-prefix: ${TRANSACTION_PREFIX:iso-transaction-}
+      virtual-thread-enabled: ${ISO_TRANSACTION_VIRTUAL_THREAD_ENABLED:true}
+  bulkhead.configurations:
+    isoTransaction:
+      permits: ${ISO_TRANSACTION_INFLIGHT_PERMITS:100}
+      fair: ${ISO_TRANSACTION_INFLIGHT_FAIR:false}
   scheduler.configurations:
     retry-processor:
       scheduler-type: ${RETRY_PROCESSOR_TYPE:BOUNDED_ELASTIC}

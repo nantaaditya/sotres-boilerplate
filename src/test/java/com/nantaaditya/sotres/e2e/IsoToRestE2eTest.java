@@ -152,7 +152,7 @@ class IsoToRestE2eTest {
     String rrn = "RRN000000003";
     ISO_HOST.send(IsoMessages.authRequest("4111111111111111", "970000", 150000, nextStan(), rrn, "E001"));
 
-    // The read timeout surfaces as WebClientRequestException (not a raw
+    // The RestClient read timeout surfaces as ResourceAccessException (not a raw
     // ReadTimeoutException), so RestProtocolStrategy.handleError takes the
     // non-timeout branch and answers with SYSTEM_MALFUNCTION rather than
     // staying silent for a switch-driven reversal.
@@ -184,20 +184,18 @@ class IsoToRestE2eTest {
   }
 
   @Test
-  @DisplayName("0200 with an unmapped selector (no handler): current behaviour is no 0210")
+  @DisplayName("0200 with an unmapped selector (no handler): 0210 carries DE39=92 (unable to route)")
   void unableToRoute() throws InterruptedException {
-    // The code intends DE39=92 (UNABLE_TO_ROUTE), but selectTransactionHandler()
-    // calls sendResponseWithObservation() with a ParticipantContext that was never
-    // populated (onUpdate is only called on the success branch), so
-    // J8583MessageFactory.createResponse(null) NPEs and nothing is written back.
-    // Phase 0 freezes the actual behaviour; the fix lands with the Phase 2 rewrite.
+    // Phase 2C-3 populates the ParticipantContext before the no-handler branch,
+    // so createResponse() no longer NPEs and the intended DE39=92 is written back.
     String rrn = "RRN000000007";
     ISO_HOST.send(IsoMessages.authRequest("4111111111111111", "990000", 1000, nextStan(), rrn, "E999"));
 
-    boolean silent = ISO_HOST.noMessage(
-        m -> m.getType() == 0x210 && rrn.equals(str(m, 37)), Duration.ofSeconds(5));
+    IsoMessage reply = ISO_HOST.awaitMessage(
+        m -> m.getType() == 0x210 && rrn.equals(str(m, 37)), Duration.ofSeconds(10));
 
-    assertThat(silent).as("no 0210 for an unroutable selector (latent NPE)").isTrue();
+    assertThat(reply).as("0210 reply").isNotNull();
+    assertThat(str(reply, 39)).as("DE39 response code").isEqualTo("92");
   }
 
   private static String str(IsoMessage message, int field) {

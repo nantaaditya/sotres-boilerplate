@@ -5,7 +5,8 @@ public record AsyncConfiguration(
     int maxPoolSize,
     int queueCapacity,
     int keepAliveSeconds,
-    String threadNamePrefix
+    String threadNamePrefix,
+    boolean virtualThreadEnabled
 ) {
 
 }
