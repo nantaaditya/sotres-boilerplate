@@ -7,26 +7,23 @@ spring:
     base-path: ${CONTEXT_PATH:/sotres}
   threads:
     virtual.enabled: ${VIRTUAL_THREAD_ENABLED:true}
-  r2dbc:
-    url: ${DB_URL:r2dbc:postgresql://localhost:5432/boilerplate}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/boilerplate}
     username: ${DB_USER:postgres}
     password: ${DB_PASS:changeme}
-    pool:
-      enabled: ${R2DBC_POOL_ENABLED:true}
-      initial-size: ${R2DBC_INITIAL_SIZE:5}
-      max-size: ${R2DBC_MAX_SIZE:10}
-      max-idle-time: ${R2DBC_IDLE_TIME:PT1M}
-      max-life-time: ${R2DBC_MAX_LIFE_TIME:PT5M}
-      max-acquire-time: ${R2DBC_MAX_ACQUIRE_TIME:PT5S}
-      validation-query: SELECT 1
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT:5000}
+      idle-timeout: ${DB_POOL_IDLE_TIMEOUT:60000}
+      max-lifetime: ${DB_POOL_MAX_LIFETIME:300000}
+      connection-test-query: SELECT 1
 
 logging:
   level:
     root: ${ROOT_LOG_LEVEL:INFO}
     org.zalando.logbook: ${ZALANDO_LOG_LEVEL:TRACE}
-    org.springframework.r2dbc.core: ${R2DBC_LOG_LEVEL:DEBUG}
-    io.r2dbc.postgresql.QUERY: ${POSTGRESQL_LOG_LEVEL:DEBUG}
-    io.r2dbc.postgresql.PARAM: ${POSTGRESQL_LOG_LEVEL:DEBUG}
+    org.springframework.jdbc.core: ${JDBC_LOG_LEVEL:INFO}
   file:
     path: ${LOG_PATH:logs/}
   config: classpath:log4j2-spring-${apps.log.log-format}.xml

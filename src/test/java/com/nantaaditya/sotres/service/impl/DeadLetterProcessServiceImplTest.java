@@ -3,9 +3,9 @@ package com.nantaaditya.sotres.service.impl;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -70,10 +69,6 @@ class DeadLetterProcessServiceImplTest {
     @Test
     @DisplayName("deletes exhausted records older than the given days threshold")
     void deletesExhaustedRecordsBeforeDateThreshold() {
-      when(deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(
-          any(LocalDateTime.class), eq(RetryStatus.EXHAUSTED.name())))
-          .thenReturn(Mono.empty());
-
       StepVerifier.create(service.remove(7))
           .verifyComplete();
 
@@ -94,7 +89,7 @@ class DeadLetterProcessServiceImplTest {
       DeadLetterProcess dlp = buildDlp(3, 3); // 3 >= 3 → filtered
       when(deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
           eq("ORDER"), eq("PAYMENT"), anySet(), any()))
-          .thenReturn(Flux.just(dlp));
+          .thenReturn(List.of(dlp));
 
       StepVerifier.create(service.retry(request))
           .verifyComplete();
@@ -123,10 +118,10 @@ class DeadLetterProcessServiceImplTest {
           deadLetterProcessRepository);
 
       when(retryProcessorHelper.getProcessor("ORDER", "PAYMENT")).thenReturn(processor);
-      when(deadLetterProcessRepository.saveAll(anyList())).thenReturn(Flux.just(dlp));
+      when(deadLetterProcessRepository.saveAll(anyList())).thenReturn(List.of(dlp));
       when(deadLetterProcessRepository.save(dlp)).thenAnswer(inv -> {
         saveCalled.set(true);
-        return Mono.just(inv.getArgument(0));
+        return inv.getArgument(0);
       });
 
       StepVerifier.create(service.executeRetryProcess(request, List.of(dlp)))
@@ -146,10 +141,10 @@ class DeadLetterProcessServiceImplTest {
           deadLetterProcessRepository);
 
       when(retryProcessorHelper.getProcessor("ORDER", "PAYMENT")).thenReturn(processor);
-      when(deadLetterProcessRepository.saveAll(anyList())).thenReturn(Flux.just(dlp));
+      when(deadLetterProcessRepository.saveAll(anyList())).thenReturn(List.of(dlp));
       when(deadLetterProcessRepository.save(dlp)).thenAnswer(inv -> {
         saveCalled.set(true);
-        return Mono.just(inv.getArgument(0));
+        return inv.getArgument(0);
       });
 
       StepVerifier.create(service.executeRetryProcess(request, List.of(dlp)))

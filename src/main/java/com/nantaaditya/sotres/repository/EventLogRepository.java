@@ -2,13 +2,12 @@ package com.nantaaditya.sotres.repository;
 
 import com.nantaaditya.sotres.entity.EventLog;
 import java.time.LocalDateTime;
-import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import org.springframework.data.repository.ListCrudRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.publisher.Mono;
 
 @Repository
-public interface EventLogRepository extends ReactiveCrudRepository<EventLog, String> {
+public interface EventLogRepository extends ListCrudRepository<EventLog, String> {
   @Transactional
-  Mono<Void> deleteByCreatedDateBefore(LocalDateTime date);
+  void deleteByCreatedDateBefore(LocalDateTime date);
 }

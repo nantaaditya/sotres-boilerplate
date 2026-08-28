@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Getter
@@ -67,7 +68,9 @@ public abstract class AbstractRetryProcessorService {
     deadLetterProcess.setRetryCount(deadLetterProcess.getRetryCount() + 1);
     deadLetterProcess.setUpdatedBy("internal-retry-process");
     deadLetterProcess.setUpdatedDate(LocalDateTime.now());
-    return deadLetterProcessRepository.save(deadLetterProcess);
+    // TODO(refactor): blocking JDBC save wrapped for the still-reactive chain
+    return Mono.fromCallable(() -> deadLetterProcessRepository.save(deadLetterProcess))
+        .subscribeOn(Schedulers.boundedElastic());
   }
 
   private <T> void updateRetryHistories(DeadLetterProcess deadLetterProcess, String response,

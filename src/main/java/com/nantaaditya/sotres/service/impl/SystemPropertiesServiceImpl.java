@@ -12,6 +12,7 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Service
@@ -28,11 +29,13 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   }
 
   public void onStart() {
-    systemPropertiesRepository.findAll()
-      .subscribe(
-        this::loadSystemProperties,
-        error -> log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties").error(error))
-      );
+    // TODO(refactor): direct blocking load; the Reactor bridges below go away when
+    // the web + ISO layers are blocking (Phases 2-3) and this interface can too.
+    try {
+      systemPropertiesRepository.findAll().forEach(this::loadSystemProperties);
+    } catch (Exception e) {
+      log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties").error(e));
+    }
   }
 
   @Override
@@ -47,36 +50,42 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
   @Override
   public void reload(ConfigGroup key) {
-    systemPropertiesRepository.findByGroupId(key.getGroup())
-      .subscribe(
-        this::loadSystemProperties,
-        error -> log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties key {}", key.getGroup()).error(error))
-      );
+    try {
+      systemPropertiesRepository.findByGroupId(key.getGroup()).forEach(this::loadSystemProperties);
+    } catch (Exception e) {
+      log.error(AppLogMessage.message("#CONFIGURATION - error while loading properties key {}", key.getGroup()).error(e));
+    }
   }
 
   @Override
   public Mono<String> getRawProperty(TemplateGroup group, String selector) {
-    return systemPropertiesRepository
-        .findByGroupIdAndPropertyId(group.getGroup(), selector)
-        .map(SystemProperties::getPropertyValue);
+    return Mono.fromCallable(() -> systemPropertiesRepository
+            .findByGroupIdAndPropertyId(group.getGroup(), selector)
+            .map(SystemProperties::getPropertyValue)
+            .orElse(null))
+        .subscribeOn(Schedulers.boundedElastic());
   }
 
   @Override
   public Flux<SystemProperties> getByGroupId(TemplateGroup group) {
-    return systemPropertiesRepository.findByGroupId(group.getGroup());
+    return Mono.fromCallable(() -> systemPropertiesRepository.findByGroupId(group.getGroup()))
+        .subscribeOn(Schedulers.boundedElastic())
+        .flatMapMany(Flux::fromIterable);
   }
 
   @Override
   public Mono<SystemProperties> upsert(TemplateGroup group, String selector, String value) {
-    return systemPropertiesRepository
-        .findByGroupIdAndPropertyId(group.getGroup(), selector)
-        .map(existing -> existing.toBuilder().propertyValue(value).build())
-        .switchIfEmpty(Mono.just(SystemProperties.builder()
-            .groupId(group.getGroup())
-            .propertyId(selector)
-            .propertyValue(value)
-            .build()))
-        .flatMap(entity -> systemPropertiesRepository.save(entity));
+    return Mono.fromCallable(() -> {
+      SystemProperties entity = systemPropertiesRepository
+          .findByGroupIdAndPropertyId(group.getGroup(), selector)
+          .map(existing -> existing.toBuilder().propertyValue(value).build())
+          .orElseGet(() -> SystemProperties.builder()
+              .groupId(group.getGroup())
+              .propertyId(selector)
+              .propertyValue(value)
+              .build());
+      return systemPropertiesRepository.save(entity);
+    }).subscribeOn(Schedulers.boundedElastic());
   }
 
   private void loadSystemProperties(SystemProperties sp) {

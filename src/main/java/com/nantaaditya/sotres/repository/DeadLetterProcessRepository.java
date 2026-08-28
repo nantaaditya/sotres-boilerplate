@@ -2,19 +2,22 @@ package com.nantaaditya.sotres.repository;
 
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import org.springframework.data.repository.ListCrudRepository;
+import org.springframework.data.repository.PagingAndSortingRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 @Repository
-public interface DeadLetterProcessRepository extends R2dbcRepository<DeadLetterProcess, Long> {
-  @Transactional
-  Mono<Void> deleteByCreatedDateBeforeAndStatus(LocalDateTime dateTime, String status);
+public interface DeadLetterProcessRepository
+    extends ListCrudRepository<DeadLetterProcess, Long>,
+        PagingAndSortingRepository<DeadLetterProcess, Long> {
 
-  Flux<DeadLetterProcess> findByProcessTypeAndProcessNameAndStatusIn(String processType,
+  @Transactional
+  void deleteByCreatedDateBeforeAndStatus(LocalDateTime dateTime, String status);
+
+  List<DeadLetterProcess> findByProcessTypeAndProcessNameAndStatusIn(String processType,
       String processName, Set<String> statuses, Pageable pageable);
 }

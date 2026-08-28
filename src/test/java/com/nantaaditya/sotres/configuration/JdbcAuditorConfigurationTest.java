@@ -1,5 +1,6 @@
 package com.nantaaditya.sotres.configuration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.helper.TracerHelper;
@@ -11,20 +12,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-import reactor.test.StepVerifier;
 
-@DisplayName("R2DBCAuditorConfiguration")
+@DisplayName("JdbcAuditorConfiguration")
 @ExtendWith(MockitoExtension.class)
-class R2DBCAuditorConfigurationTest {
+class JdbcAuditorConfigurationTest {
 
   @Mock
   private TracerHelper tracerHelper;
 
-  private R2DBCAuditorConfiguration config;
+  private JdbcAuditorConfiguration config;
 
   @BeforeEach
   void setUp() {
-    config = new R2DBCAuditorConfiguration();
+    config = new JdbcAuditorConfiguration();
     ReflectionTestUtils.setField(config, "applicationName", "test-app");
     ReflectionTestUtils.setField(config, "tracerHelper", tracerHelper);
   }
@@ -34,9 +34,7 @@ class R2DBCAuditorConfigurationTest {
   void getCurrentAuditor_withClientIdBaggage_returnsClientId() {
     when(tracerHelper.getBaggage(HeaderConstant.CLIENT_ID)).thenReturn("client-123");
 
-    StepVerifier.create(config.getCurrentAuditor())
-        .expectNext("client-123")
-        .verifyComplete();
+    assertThat(config.getCurrentAuditor()).contains("client-123");
   }
 
   @Test
@@ -44,8 +42,6 @@ class R2DBCAuditorConfigurationTest {
   void getCurrentAuditor_withoutClientIdBaggage_returnsApplicationName() {
     when(tracerHelper.getBaggage(HeaderConstant.CLIENT_ID)).thenReturn(null);
 
-    StepVerifier.create(config.getCurrentAuditor())
-        .expectNext("test-app")
-        .verifyComplete();
+    assertThat(config.getCurrentAuditor()).contains("test-app");
   }
 }

@@ -44,7 +44,8 @@ public class EventLogHelper {
       String cleanedPayload = GsonHelper.cleanJson(payload, gson);
 
       Mono.fromSupplier(() -> createEventLog(context, additionalData, cleanedPayload))
-          .flatMap(eventLogRepository::save)
+          .doOnNext(eventLogRepository::save) // TODO(refactor): blocking JDBC save on boundedElastic
+          .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
           .subscribe(
               success -> log.debug(AppLogMessage.message("#EventLog - success save event log")),
               error -> log.error(AppLogMessage.message("#EventLog - error save event log").error(error)),

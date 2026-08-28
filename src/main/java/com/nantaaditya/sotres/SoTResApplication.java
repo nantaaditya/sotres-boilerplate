@@ -9,7 +9,6 @@ import com.nantaaditya.sotres.properties.SchedulerProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.data.r2dbc.config.EnableR2dbcAuditing;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import reactor.core.publisher.Hooks;
@@ -25,7 +24,6 @@ import reactor.core.publisher.Hooks;
 })
 @EnableScheduling
 @EnableAsync
-@EnableR2dbcAuditing
 public class SoTResApplication {
 
   public static void main(String[] args) {

@@ -33,7 +33,10 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
   @Override
   public Mono<Void> remove(int days) {
     LocalDateTime now = LocalDateTime.now(DateTimeHelper.ZONE_ID);
-    return deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(now.minusDays(days), RetryStatus.EXHAUSTED.name());
+    // TODO(refactor): blocking JDBC delete wrapped for the still-reactive interface
+    return Mono.<Void>fromRunnable(() -> deadLetterProcessRepository
+            .deleteByCreatedDateBeforeAndStatus(now.minusDays(days), RetryStatus.EXHAUSTED.name()))
+        .subscribeOn(Schedulers.boundedElastic());
   }
 
   @Override
@@ -67,11 +70,13 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
 
   private Flux<DeadLetterProcess> getDeadLetterProcesses(RetryDeadLetterProcessRequest request,
       PageRequest pageRequest) {
-    return deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
-        request.processType(), request.processName(),
-        Set.of(RetryStatus.NEW.name(), RetryStatus.FAILED.name()),
-        pageRequest
-    );
+    // TODO(refactor): blocking JDBC query wrapped for the still-reactive chain
+    return Mono.fromCallable(() -> deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
+            request.processType(), request.processName(),
+            Set.of(RetryStatus.NEW.name(), RetryStatus.FAILED.name()),
+            pageRequest))
+        .subscribeOn(Schedulers.boundedElastic())
+        .flatMapMany(Flux::fromIterable);
   }
 
   public Mono<Void> executeRetryProcess(RetryDeadLetterProcessRequest request, List<DeadLetterProcess> deadLetterProcesses) {
@@ -107,7 +112,7 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
     deadLetterProcess.setStatus(RetryStatus.SUCCESS.name());
     deadLetterProcess.setUpdatedBy("internal-retry-process");
     deadLetterProcess.setUpdatedDate(LocalDateTime.now());
-    deadLetterProcessRepository.save(deadLetterProcess).subscribe();
+    deadLetterProcessRepository.save(deadLetterProcess); // TODO(refactor): blocking JDBC save
     processor.getNotEligibleCounter().incrementAndGet();
     log.warn(AppLogMessage.message("#DeadLetterProccess - {} is not eligible to be retried", deadLetterProcess.getId()));
   }
@@ -115,6 +120,9 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
   private Flux<DeadLetterProcess> updateInProgress(List<DeadLetterProcess> deadLetterProcesses) {
     deadLetterProcesses
         .forEach(d -> d.setStatus(RetryStatus.RETRYING.name()));
-    return deadLetterProcessRepository.saveAll(deadLetterProcesses);
+    // TODO(refactor): blocking JDBC saveAll wrapped for the still-reactive chain
+    return Mono.fromCallable(() -> deadLetterProcessRepository.saveAll(deadLetterProcesses))
+        .subscribeOn(Schedulers.boundedElastic())
+        .flatMapMany(Flux::fromIterable);
   }
 }

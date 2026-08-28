@@ -24,7 +24,9 @@ public class EventLogServiceImpl implements EventLogService {
     return Mono.just(Boolean.TRUE)
         .doOnNext(result -> reactorHelper.runBackgroundTask(
             "remove_obsolete_event_log",
-            () -> eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days)),
+            // TODO(refactor): blocking JDBC delete wrapped for the reactive background task
+            () -> Mono.fromRunnable(() ->
+                eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days))),
             schedulerHelper.from("default-async")
             )
         );
