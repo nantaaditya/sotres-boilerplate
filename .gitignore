@@ -39,3 +39,7 @@ graphify-out/*
 .claude/*
 architecture.json
 architecture-map.html
+.understand-anything
+
+# local-only working docs (not committed; review manually)
+docs/REFACTOR_PLAN.md
