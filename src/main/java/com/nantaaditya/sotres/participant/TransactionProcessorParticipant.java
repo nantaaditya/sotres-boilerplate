@@ -153,9 +153,9 @@ public class TransactionProcessorParticipant
   }
 
   private Mono<ParticipantContext> executeHandler(ParticipantContext participantContext) {
-    return participantContext
-        .getTransactionHandler()
-        .execute(participantContext);
+    // TODO(refactor): sync handler.execute wrapped for the still-reactive onMessage chain (Phase 2C-3 removes this)
+    return Mono.fromCallable(() -> participantContext.getTransactionHandler().execute(participantContext))
+        .subscribeOn(Schedulers.boundedElastic());
   }
 
   private Mono<ParticipantContext> sendMessage(ParticipantContext ctx) {

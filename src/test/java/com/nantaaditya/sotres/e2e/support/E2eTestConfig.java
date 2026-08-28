@@ -5,7 +5,6 @@ import com.nantaaditya.sotres.strategy.transaction.AbstractTransactionHandler;
 import java.util.Set;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import reactor.core.publisher.Mono;
 
 /**
  * Supplies a concrete {@link AbstractTransactionHandler} for the E2E harness.
@@ -32,13 +31,13 @@ public class E2eTestConfig {
     }
 
     @Override
-    protected Mono<ParticipantContext> validate(ParticipantContext participantContext) {
-      return Mono.just(participantContext);
+    protected ParticipantContext validate(ParticipantContext participantContext) {
+      return participantContext;
     }
 
     @Override
-    protected Mono<ParticipantContext> process(ParticipantContext participantContext) {
-      return Mono.just(participantContext);
+    protected ParticipantContext process(ParticipantContext participantContext) {
+      return participantContext;
     }
   }
 }
