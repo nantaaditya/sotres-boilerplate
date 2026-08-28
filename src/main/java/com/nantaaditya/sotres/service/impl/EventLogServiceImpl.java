@@ -1,7 +1,6 @@
 package com.nantaaditya.sotres.service.impl;
 
 import com.nantaaditya.sotres.helper.ReactorHelper;
-import com.nantaaditya.sotres.helper.SchedulerHelper;
 import com.nantaaditya.sotres.repository.EventLogRepository;
 import com.nantaaditya.sotres.service.internal.EventLogService;
 import java.time.LocalDateTime;
@@ -9,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Service
@@ -16,7 +16,6 @@ import reactor.core.publisher.Mono;
 public class EventLogServiceImpl implements EventLogService {
 
   private final EventLogRepository eventLogRepository;
-  private final SchedulerHelper schedulerHelper;
   private final ReactorHelper reactorHelper;
 
   @Override
@@ -27,7 +26,7 @@ public class EventLogServiceImpl implements EventLogService {
             // TODO(refactor): blocking JDBC delete wrapped for the reactive background task
             () -> Mono.fromRunnable(() ->
                 eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days))),
-            schedulerHelper.from("default-async")
+            Schedulers.boundedElastic()
             )
         );
   }

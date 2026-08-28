@@ -140,13 +140,4 @@ apps:
     isoTransaction:
       permits: ${ISO_TRANSACTION_INFLIGHT_PERMITS:100}
       fair: ${ISO_TRANSACTION_INFLIGHT_FAIR:false}
-  scheduler.configurations:
-    retry-processor:
-      scheduler-type: ${RETRY_PROCESSOR_TYPE:BOUNDED_ELASTIC}
-      bounded-elastic:
-        name: ${RETRY_PROCESSOR_SCHEDULER_NAME:retry-processor}
-        daemon: ${RETRY_PROCESSOR_DAEMON:true}
-        core-pool-size: ${RETRY_PROCESSOR_POOL:10}
-        queue-size: ${RETRY_PROCESSOR_QUEUE:10}
-        ttl-in-seconds: ${RETRY_PROCESSOR_TTL:60}
 

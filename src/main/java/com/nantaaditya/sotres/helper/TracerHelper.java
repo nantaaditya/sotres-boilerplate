@@ -18,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 
 @Log4j2
 @Component
@@ -71,16 +70,6 @@ public class TracerHelper {
       .setNoParent()
       .name(spanName)
       .start();
-  }
-
-  public <T> Mono<T> withSpanScopeAndMDC(Mono<T> mono, Span span, Map<String, String> mdc) {
-    return Mono.deferContextual(ctxView ->
-        mono.doOnEach(signal -> {
-          MDC.setContextMap(mdc);
-          MDC.put("traceId", span.context().traceId());
-          MDC.put("spanId", span.context().spanId());
-        })
-    );
   }
 
   public void createTraceContext(IsoMessage isoMessage) {
