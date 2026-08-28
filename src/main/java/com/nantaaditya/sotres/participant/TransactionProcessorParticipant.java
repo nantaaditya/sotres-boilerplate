@@ -125,7 +125,8 @@ public class TransactionProcessorParticipant
 
       RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory);
 
-      // propagate to the next response participant (API -> ISO -> wait for response -> ISO -> API)
+      // in response-registry mode this inbound message is the response to one of our own
+      // requests — leave it for TransactionResponseParticipant, do not process it as a new txn
       if (isResponseRegistryEnabled(requestContext)) {
         return true;
       }

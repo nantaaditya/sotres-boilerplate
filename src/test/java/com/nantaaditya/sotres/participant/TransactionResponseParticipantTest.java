@@ -1,33 +1,25 @@
 package com.nantaaditya.sotres.participant;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
-import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
-import com.nantaaditya.sotres.helper.IsoResponseRegistry;
+import com.nantaaditya.sotres.helper.CorrelationRegistry;
 import com.nantaaditya.sotres.helper.TracerHelper;
-import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.properties.ClientProperties;
-import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
-import com.nantaaditya.sotres.properties.embedded.ParticipantPoolConfiguration;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Span;
-import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import io.netty.channel.ChannelHandlerContext;
-import java.time.Duration;
-import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,11 +37,7 @@ class TransactionResponseParticipantTest {
   @Mock
   private SystemPropertiesService systemPropertiesService;
   @Mock
-  private IsoResponseRegistry isoResponseRegistry;
-  @Mock
-  private IsoMessageLoggerHelper isoMessageLoggerHelper;
-  @Mock
-  private IsoFieldHelper isoFieldHelper;
+  private CorrelationRegistry correlationRegistry;
   @Mock
   private ObservationRegistry observationRegistry;
   @Mock
@@ -59,45 +47,27 @@ class TransactionResponseParticipantTest {
   @Mock
   private Span span;
   @Mock
-  private TraceContext traceContext;
-  @Mock
   private Tracer.SpanInScope spanInScope;
   @Mock
   private ClientProperties clientProperties;
   @Mock
-  private ParticipantConfigurationProperties participantConfigurationProperties;
+  private ChannelHandlerContext ctx;
   @Mock
   private IsoMessage msg;
-  @Mock
-  private ChannelHandlerContext ctx;
-
-  private final ParticipantPoolConfiguration config =
-      new ParticipantPoolConfiguration(1, 100, 100, 100, 100, 2000, "test");
 
   private TransactionResponseParticipant participant;
 
   @BeforeEach
   void setUp() {
-    MDC.put("traceId", "test-trace");
-
-    when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(
-        config);
-    when(systemPropertiesService.getProperty(
+    lenient().when(systemPropertiesService.getProperty(
         ConfigGroup.REGISTRY_RESPONSE_SELECTOR,
         ConfigGroup.REGISTRY_RESPONSE_SELECTOR.getPropertyId()))
         .thenReturn("21.00-QR");
 
-    // tracer chain
     lenient().when(tracerHelper.startSpan(any(), any())).thenReturn(span);
     lenient().when(tracer.withSpan(span)).thenReturn(spanInScope);
-    lenient().when(span.context()).thenReturn(traceContext);
-    lenient().when(tracerHelper.withSpanScopeAndMDC(any(), any(), any()))
-        .thenAnswer(inv -> inv.getArgument(0));
-
-    // Observation.start() returns NOOP when registry.isNoop() is true
     lenient().when(observationRegistry.isNoop()).thenReturn(true);
 
-    // IsoMessage fields needed by RequestContextHelper.create()
     lenient().when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
     lenient().when(msg.getField(3)).thenReturn(isoValue("000000"));
     lenient().when(msg.getField(4)).thenReturn(isoValue("100000"));
@@ -107,25 +77,14 @@ class TransactionResponseParticipantTest {
     lenient().when(msg.getField(11)).thenReturn(isoValue("123456"));
     lenient().when(msg.getField(37)).thenReturn(isoValue("000000000001"));
     lenient().when(msg.hasField(90)).thenReturn(false);
-
-    // currency fraction map used inside createTransaction
     lenient().when(systemPropertiesService.getProperty(
             ConfigGroup.CURRENCY_FRACTIONS,
             ConfigGroup.CURRENCY_FRACTIONS.getPropertyId()))
         .thenReturn("360:2");
 
-    participant = new TransactionResponseParticipant(
-        systemPropertiesService,
-        List.of(),
-        isoResponseRegistry,
-        isoMessageLoggerHelper,
-        isoFieldHelper,
-        observationRegistry,
-        tracerHelper,
-        tracer,
-        participantConfigurationProperties,
-        clientProperties
-    );
+    // executor runs the completion inline
+    participant = new TransactionResponseParticipant(systemPropertiesService, correlationRegistry,
+        observationRegistry, tracerHelper, tracer, clientProperties, Runnable::run);
   }
 
   @AfterEach
@@ -139,34 +98,21 @@ class TransactionResponseParticipantTest {
   }
 
   @Nested
-  @DisplayName("applies(IsoMessage) — network MTI excluded")
-  class AppliesNetworkMti {
+  @DisplayName("applies(IsoMessage)")
+  class Applies {
 
     @Test
-    @DisplayName("returns false for MTI 0x800 (network request)")
-    void applies_networkRequest_returnsFalse() {
-      when(msg.getType()).thenReturn(0x800);
+    @DisplayName("returns true when registry=RESPONSE and selector matches")
+    void applies_responseRegistryAndMatchingSelector_returnsTrue() {
+      when(msg.getType()).thenReturn(528); // 0x0210 → selector "21.00-QR"
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
 
-      assertThat(participant.applies(msg)).isFalse();
+      assertThat(participant.applies(msg)).isTrue();
     }
 
     @Test
-    @DisplayName("returns false for MTI 0x810 (network response)")
-    void applies_networkResponse_returnsFalse() {
-      when(msg.getType()).thenReturn(0x810);
-
-      assertThat(participant.applies(msg)).isFalse();
-    }
-  }
-
-  @Nested
-  @DisplayName("applies(IsoMessage) — registry type check")
-  class AppliesRegistryType {
-
-    @Test
-    @DisplayName("returns false when registryType=CALLBACK regardless of selector")
+    @DisplayName("returns false when registry=CALLBACK regardless of selector")
     void applies_callbackRegistry_returnsFalse() {
-      // type=528 → selector="21.00-QR" which is in responseRegistrySelectors
       when(msg.getType()).thenReturn(528);
       when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
 
@@ -174,50 +120,47 @@ class TransactionResponseParticipantTest {
     }
 
     @Test
-    @DisplayName("returns false when registryType=RESPONSE but selector not in list")
-    void applies_responseRegistryNonMatchingSelector_returnsFalse() {
-      // type=512 (0x0200) → getMTI="0200" → substring(1,3)="20" → selector="20.00-QR" not in list
-      when(msg.getType()).thenReturn(512);
+    @DisplayName("returns false when registry=RESPONSE but selector is not eligible")
+    void applies_responseRegistryButUnlistedSelector_returnsFalse() {
+      when(msg.getType()).thenReturn(512); // 0x0200 → selector "20.00-QR", not in list
       when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
 
       assertThat(participant.applies(msg)).isFalse();
     }
 
     @Test
-    @DisplayName("returns true when registryType=RESPONSE and selector matches")
-    void applies_responseRegistryMatchingSelector_returnsTrue() {
-      // type=528 (0x0210) → getMTI="0210" → substring(1,3)="21" → selector="21.00-QR" matches
-      when(msg.getType()).thenReturn(528);
-      when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
+    @DisplayName("returns false for network MTI 0x810")
+    void applies_networkMessage_returnsFalse() {
+      when(msg.getType()).thenReturn(0x810);
 
-      assertThat(participant.applies(msg)).isTrue();
+      assertThat(participant.applies(msg)).isFalse();
     }
   }
 
   @Nested
-  @DisplayName("onMessage — delegates to isoResponseRegistry")
+  @DisplayName("onMessage(ChannelHandlerContext, IsoMessage)")
   class OnMessage {
 
     @Test
-    @DisplayName("calls isoResponseRegistry.onResponse(isoMessage) asynchronously")
-    void onMessage_registryEnabled_callsOnResponse() {
-      when(msg.getType()).thenReturn(528);
-
-      participant.onMessage(ctx, msg);
-
-      await()
-          .atMost(Duration.ofSeconds(2))
-          .untilAsserted(() -> verify(isoResponseRegistry).onResponse(msg));
-    }
-
-    @Test
-    @DisplayName("returns false after starting the async pipeline")
-    void onMessage_always_returnsFalse() {
-      when(msg.getType()).thenReturn(528);
+    @DisplayName("completes the correlation future and returns false")
+    void onMessage_completesCorrelationAndReturnsFalse() {
+      when(correlationRegistry.complete(msg)).thenReturn(IsoCategory.SUCCESS);
 
       boolean result = participant.onMessage(ctx, msg);
 
       assertThat(result).isFalse();
+      verify(correlationRegistry).complete(msg);
+    }
+
+    @Test
+    @DisplayName("swallows a completion error and still returns false")
+    void onMessage_completionThrows_returnsFalse() {
+      when(correlationRegistry.complete(msg)).thenThrow(new RuntimeException("boom"));
+
+      boolean result = participant.onMessage(ctx, msg);
+
+      assertThat(result).isFalse();
+      verify(correlationRegistry).complete(msg);
     }
   }
 }

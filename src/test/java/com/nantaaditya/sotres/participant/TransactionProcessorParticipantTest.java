@@ -108,7 +108,7 @@ class TransactionProcessorParticipantTest {
     when(senderProtocolStrategy.getProtocol()).thenReturn(OutgoingProtocol.REST);
     when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(
         config);
-    when(systemPropertiesService.getProperty(
+    lenient().when(systemPropertiesService.getProperty(
         ConfigGroup.REGISTRY_RESPONSE_SELECTOR,
         ConfigGroup.REGISTRY_RESPONSE_SELECTOR.getPropertyId()))
         .thenReturn("21.00-QR");
@@ -234,9 +234,8 @@ class TransactionProcessorParticipantTest {
     @DisplayName("sends UNABLE_TO_ROUTE (92) when no handler matches the selector")
     @SuppressWarnings("unchecked")
     void onMessage_noMatchingHandler_sendsUnableToRoute() {
-      // type=512 (0x0200) → selector="20.00-QR", not in responseRegistrySelectors → pipeline runs
+      // type=512 (0x0200) → selector="20.00-QR", no handler → pipeline runs
       when(msg.getType()).thenReturn(512);
-      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
 
       participant.onMessage(ctx, msg);
 
@@ -252,7 +251,6 @@ class TransactionProcessorParticipantTest {
     @SuppressWarnings("unchecked")
     void onMessage_pipelineStarted_returnsFalse() {
       when(msg.getType()).thenReturn(512);
-      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
 
       boolean result = participant.onMessage(ctx, msg);
 
@@ -269,7 +267,6 @@ class TransactionProcessorParticipantTest {
     @SuppressWarnings("unchecked")
     void onMessage_bulkheadSaturated_shedsSystemMalfunction() {
       when(msg.getType()).thenReturn(512);
-      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
       when(routableHandler.getSelectors()).thenReturn(Set.of("20.00-QR"));
       TransactionProcessorParticipant p =
           buildParticipant(List.of(routableHandler), new Semaphore(0));
@@ -286,7 +283,6 @@ class TransactionProcessorParticipantTest {
     @SuppressWarnings("unchecked")
     void onMessage_downstreamThrows_handledByHandleError() {
       when(msg.getType()).thenReturn(512);
-      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
       when(routableHandler.getSelectors()).thenReturn(Set.of("20.00-QR"));
       when(routableHandler.execute(any())).thenAnswer(inv -> inv.getArgument(0));
       when(senderProtocolStrategy.send(any(), any(), any()))
@@ -305,7 +301,6 @@ class TransactionProcessorParticipantTest {
     @SuppressWarnings("unchecked")
     void onMessage_bulkheadInterrupted_handledByHandleError() throws InterruptedException {
       when(msg.getType()).thenReturn(512);
-      when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
       when(routableHandler.getSelectors()).thenReturn(Set.of("20.00-QR"));
       Semaphore interrupting = mock(Semaphore.class);
       when(interrupting.tryAcquire(anyLong(), any())).thenThrow(new InterruptedException());

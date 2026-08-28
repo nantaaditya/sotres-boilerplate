@@ -1,11 +1,10 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
+import com.nantaaditya.sotres.helper.CorrelationRegistry;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
-import com.nantaaditya.sotres.helper.IsoCallbackRegistry;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
-import com.nantaaditya.sotres.helper.IsoResponseRegistry;
 import com.nantaaditya.sotres.helper.MessageFactoryHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.dto.IsoClientConfigurationRequest;
@@ -36,8 +35,7 @@ public class CoreConfiguration {
   private final IsoMessageProperties isoMessageProperties;
   private final MessageFactoryHelper messageFactoryHelper;
   private final SystemPropertiesService systemPropertiesService;
-  private final IsoCallbackRegistry isoCallbackRegistry;
-  private final IsoResponseRegistry isoResponseRegistry;
+  private final CorrelationRegistry correlationRegistry;
   private final TracerHelper tracerHelper;
   private final IsoFieldHelper isoFieldHelper;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
@@ -92,8 +90,7 @@ public class CoreConfiguration {
             .addLoggingHandler(isoMessageProperties.log().defaultLogHandlerEnabled())
             .build(),
         messageFactoryHelper.getDefaultMessageFactory(),
-        isoCallbackRegistry,
-        isoResponseRegistry,
+        correlationRegistry,
         isoFieldHelper,
         isoMessageLoggerHelper,
         systemPropertiesService,

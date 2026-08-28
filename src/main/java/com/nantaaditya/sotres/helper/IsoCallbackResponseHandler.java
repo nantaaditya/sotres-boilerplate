@@ -3,7 +3,6 @@ package com.nantaaditya.sotres.helper;
 import com.nantaaditya.sotres.model.constant.IsoCallbackConstant;
 import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
-import com.nantaaditya.sotres.model.dto.RegistryContext;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import io.micrometer.tracing.Span;
@@ -20,16 +19,16 @@ public class IsoCallbackResponseHandler
     implements IsoCallbackConstant {
 
   private final TracerHelper tracerHelper;
-  private final IsoCallbackRegistry isoCallbackRegistry;
+  private final CorrelationRegistry correlationRegistry;
   private final List<String> registryCallbackSelectors;
 
   private static final AttributeKey<IsoCategory> CALLBACK_KEY = AttributeKey.valueOf(CALLBACK_ATTRIBUTE);
 
-  public IsoCallbackResponseHandler(IsoCallbackRegistry isoCallbackRegistry,
+  public IsoCallbackResponseHandler(CorrelationRegistry correlationRegistry,
       SystemPropertiesService systemPropertiesService,
       TracerHelper tracerHelper) {
 
-    this.isoCallbackRegistry = isoCallbackRegistry;
+    this.correlationRegistry = correlationRegistry;
     this.tracerHelper = tracerHelper;
     this.registryCallbackSelectors = ConfigGroup.getList(
         systemPropertiesService,
@@ -48,16 +47,9 @@ public class IsoCallbackResponseHandler
     try (Tracer.SpanInScope ws = tracerHelper.getTracer().withSpan(span)) {
       tracerHelper.createTraceContext(msg);
 
-      // match is response callback
+      // match is response callback — deliver to the waiting future and classify
       if (this.registryCallbackSelectors != null && this.registryCallbackSelectors.contains(selector)) {
-        RegistryContext registryContext = isoCallbackRegistry.onResponse(msg);
-        if (registryContext.lateResponse()) {
-          isoCategory = IsoCategory.LATE_RESPONSE;
-        } else if (registryContext.unknownMatchResponse()) {
-          isoCategory = IsoCategory.ORPHAN;
-        } else {
-          isoCategory = IsoCategory.SUCCESS;
-        }
+        isoCategory = correlationRegistry.complete(msg);
       } else {
         isoCategory = IsoCategory.EXTERNAL_REQUEST;
       }
