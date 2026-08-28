@@ -30,8 +30,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.zalando.logbook.Logbook;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Component
@@ -75,7 +73,7 @@ public class TransactionClient extends BaseClient {
     );
   }
 
-  public <R extends RequestContext> Mono<ResponseContext> send(R requestContext) {
+  public <R extends RequestContext> ResponseContext send(R requestContext) {
     String selector = requestContext.getSelector();
     String apiPath = getPath(requestContext);
 
@@ -83,30 +81,30 @@ public class TransactionClient extends BaseClient {
     String featureConstant = ExternalFeatureConstant.getFeature(HttpMethod.POST.name(), apiPath);
     ObservationHelper.createIsoContext(observation, requestContext.getRrn(), featureConstant);
 
-    // TODO(refactor): blocking JSLT + RestSender wrapped for the still-reactive chain (Phase 2C removes this)
-    Mono<ResponseContext> response = Mono
-        .fromCallable(() -> jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, selector, requestContext))
-        .subscribeOn(Schedulers.boundedElastic())
-        .flatMap(requestBody -> {
-          ObservationHelper.publishEvent(observation, REQUEST, toJson(requestBody));
-          return Mono.fromCallable(() ->
-                  restSender.executeWithRetry(HttpMethod.POST, apiPath, buildHeaders(requestContext),
-                      requestBody, JSON_NODE).getBody())
-              .subscribeOn(Schedulers.boundedElastic());
-        })
-        .flatMap(rawResponse -> {
-          ObservationHelper.publishEvent(observation, RESPONSE, toJson(rawResponse));
-          return Mono.fromCallable(() ->
-                  jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse))
-              .subscribeOn(Schedulers.boundedElastic());
-        })
-        .flatMap(normalized -> Mono.fromCallable(
-            () -> objectMapper.treeToValue(normalized, ResponseContext.class)));
+    try {
+      JsonNode requestBody =
+          jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, selector, requestContext);
+      ObservationHelper.publishEvent(observation, REQUEST, toJson(requestBody));
 
-    return response
-        .doOnNext(responseContext -> ObservationHelper.observeResponse(observation, responseContext.getResponseCode(), null))
-        .doOnError(throwable -> ObservationHelper.observeResponse(observation, null, throwable))
-        .doFinally(signal -> observation.stop());
+      JsonNode rawResponse = restSender.executeWithRetry(HttpMethod.POST, apiPath,
+          buildHeaders(requestContext), requestBody, JSON_NODE).getBody();
+      ObservationHelper.publishEvent(observation, RESPONSE, toJson(rawResponse));
+
+      JsonNode normalized =
+          jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse);
+      ResponseContext responseContext = objectMapper.treeToValue(normalized, ResponseContext.class);
+
+      ObservationHelper.observeResponse(observation, responseContext.getResponseCode(), null);
+      return responseContext;
+    } catch (Exception e) {
+      ObservationHelper.observeResponse(observation, null, e);
+      if (e instanceof RuntimeException runtimeException) {
+        throw runtimeException;
+      }
+      throw new IllegalStateException(e);
+    } finally {
+      observation.stop();
+    }
   }
 
   private HttpHeaders buildHeaders(RequestContext requestContext) {

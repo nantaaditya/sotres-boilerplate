@@ -15,8 +15,6 @@ import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
-import io.micrometer.tracing.Span;
-import io.micrometer.tracing.Tracer;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.ReadTimeoutException;
 import java.util.Map;
@@ -25,8 +23,6 @@ import lombok.extern.log4j.Log4j2;
 import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
-import reactor.netty.http.client.PrematureCloseException;
 
 @Log4j2
 @Component
@@ -37,17 +33,15 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
   private final TransactionClient transactionClient;
   private final IsoFieldHelper isoFieldHelper;
   private final TracerHelper tracerHelper;
-  private final Tracer tracer;
 
   public RestProtocolStrategy(
       SystemPropertiesService systemPropertiesService,
       TransactionClient transactionClient, IsoFieldHelper isoFieldHelper,
-      TracerHelper tracerHelper, Tracer tracer) {
+      TracerHelper tracerHelper) {
     this.systemPropertiesService = systemPropertiesService;
     this.transactionClient = transactionClient;
     this.isoFieldHelper = isoFieldHelper;
     this.tracerHelper = tracerHelper;
-    this.tracer = tracer;
   }
 
   @Override
@@ -56,20 +50,15 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
   }
 
   @Override
-  public Mono<ResponseContext> send(ChannelHandlerContext context, IsoMessage incomingMessage,
+  public ResponseContext send(ChannelHandlerContext context, IsoMessage incomingMessage,
       RequestContext requestContext) {
-    return transactionClient.send(requestContext) // send message
-      .onErrorMap(throwable -> translateError(requestContext, throwable))
-      .transformDeferred(result -> Mono.deferContextual(contextView -> {
-        Span currentSpan = contextView.get(Span.class);
-        Span nextSpan = tracer.nextSpan(currentSpan);
-        return result.doOnEach(signal -> {
-          tracerHelper.setBaggage(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
-          tracerHelper.setBaggage(TracerHelper.TRACE_ID, nextSpan.context().traceId());
-          tracerHelper.setBaggage(TracerHelper.SPAN_ID, nextSpan.context().spanId());
-        });
-      }))
-      .contextWrite(ctx -> tracerHelper.composeTransactionContext(ctx, requestContext));
+    try {
+      ResponseContext responseContext = transactionClient.send(requestContext);
+      tracerHelper.setBaggage(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
+      return responseContext;
+    } catch (Throwable throwable) {
+      throw translateError(requestContext, throwable);
+    }
   }
 
   @Override
@@ -129,10 +118,9 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     return responseCodeMapping.getOrDefault(responseCode, IsoResponseCode.SYSTEM_MALFUNCTION.getCode());
   }
 
-  private Exception translateError(RequestContext requestContext, Throwable throwable) {
-    // handle retry PrematureCloseException
-    if (throwable instanceof PrematureCloseException p) {
-      return p;
+  private TransactionException translateError(RequestContext requestContext, Throwable throwable) {
+    if (throwable instanceof TransactionException te) {
+      return te;
     }
     return new TransactionException(throwable, requestContext);
   }

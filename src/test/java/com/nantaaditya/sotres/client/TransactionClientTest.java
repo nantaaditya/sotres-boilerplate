@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -22,6 +23,7 @@ import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
+import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.embedded.ClientConfiguration;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -46,8 +48,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.zalando.logbook.Logbook;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 @DisplayName("TransactionClient")
 @ExtendWith(MockitoExtension.class)
@@ -118,9 +118,9 @@ class TransactionClientTest {
     when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
         .thenReturn(normalizedResp);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .assertNext(ctx -> assertThat(ctx.getResponseCode()).isEqualTo("00"))
-        .verifyComplete();
+    ResponseContext ctx = transactionClient.send(buildRequest());
+
+    assertThat(ctx.getResponseCode()).isEqualTo("00");
   }
 
   @Test
@@ -144,9 +144,9 @@ class TransactionClientTest {
     when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
         .thenReturn(normalizedResp);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .assertNext(ctx -> assertThat(ctx.getResponseCode()).isEqualTo("96"))
-        .verifyComplete();
+    ResponseContext ctx = transactionClient.send(buildRequest());
+
+    assertThat(ctx.getResponseCode()).isEqualTo("96");
   }
 
   @Test
@@ -163,9 +163,8 @@ class TransactionClientTest {
     when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
         .thenReturn(reqBody);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .expectError()
-        .verify();
+    assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+        .isInstanceOf(HttpServerErrorException.class);
   }
 
   @Test
@@ -189,9 +188,7 @@ class TransactionClientTest {
     when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
         .thenReturn(normalizedResp);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .expectNextCount(1)
-        .verifyComplete();
+    assertThat(transactionClient.send(buildRequest())).isNotNull();
 
     wireMockServer.verify(
         postRequestedFor(urlPathEqualTo("/api/payment"))
@@ -225,9 +222,7 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(normalizedResp);
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectNextCount(1)
-          .verifyComplete();
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
 
       verify(jsltTransformationHelper)
           .transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any(RequestContext.class));
@@ -254,9 +249,7 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(normalizedResp);
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectNextCount(1)
-          .verifyComplete();
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
 
       verify(jsltTransformationHelper)
           .transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any(JsonNode.class));
@@ -270,9 +263,9 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenThrow(transformError);
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectErrorMatches(e -> e.getMessage().equals("JSLT compile error"))
-          .verify();
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessage("JSLT compile error");
     }
 
     @Test
@@ -296,9 +289,9 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenThrow(transformError);
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectErrorMatches(e -> e.getMessage().equals("JSLT apply error"))
-          .verify();
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessage("JSLT apply error");
     }
   }
 
@@ -330,9 +323,7 @@ class TransactionClientTest {
       RequestContext request = buildRequest();
       request.setIsoFeatureConstant("20.00-QR");
 
-      StepVerifier.create(transactionClient.send(request))
-          .expectNextCount(1)
-          .verifyComplete();
+      assertThat(transactionClient.send(request)).isNotNull();
 
       TestObservationRegistryAssert.assertThat(observationRegistry)
           .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
@@ -354,9 +345,8 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenReturn(objectMapper.createObjectNode());
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectError()
-          .verify();
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(HttpServerErrorException.class);
 
       TestObservationRegistryAssert.assertThat(observationRegistry)
           .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
@@ -385,9 +375,7 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(normalizedResp);
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectNextCount(1)
-          .verifyComplete();
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
 
       TestObservationRegistryAssert.assertThat(observationRegistry)
           .hasNumberOfObservationsWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName(), 1);
@@ -427,9 +415,8 @@ class TransactionClientTest {
           shortReadTimeoutProperties, observationRegistry);
       ReflectionTestUtils.setField(shortTimeoutClient, "applicationName", "test-app");
 
-      StepVerifier.create(shortTimeoutClient.send(buildRequest()))
-          .expectError()
-          .verify();
+      assertThatThrownBy(() -> shortTimeoutClient.send(buildRequest()))
+          .isInstanceOf(ResourceAccessException.class);
 
       TestObservationRegistryAssert.assertThat(observationRegistry)
           .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
@@ -450,9 +437,8 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
           .thenReturn(objectMapper.createObjectNode());
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectError()
-          .verify();
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(HttpServerErrorException.class);
 
       TestObservationRegistryAssert.assertThat(observationRegistry)
           .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
@@ -495,9 +481,7 @@ class TransactionClientTest {
       when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
           .thenReturn(normalizedResp);
 
-      StepVerifier.create(transactionClient.send(buildRequest()))
-          .expectNextCount(1)
-          .verifyComplete();
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
 
       assertThat(capturedEvents).hasSize(2);
       assertThat(capturedEvents).anySatisfy(event -> {

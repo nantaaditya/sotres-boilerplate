@@ -1,12 +1,12 @@
 package com.nantaaditya.sotres.strategy.outgoing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.nantaaditya.sotres.client.TransactionClient;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
+import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
@@ -23,9 +24,6 @@ import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.nantaaditya.sotres.strategy.transaction.AbstractTransactionHandler;
 import com.solab.iso8583.IsoMessage;
 import io.micrometer.observation.Observation;
-import io.micrometer.tracing.Span;
-import io.micrometer.tracing.TraceContext;
-import io.micrometer.tracing.Tracer;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.ReadTimeoutException;
 import java.util.function.Consumer;
@@ -35,9 +33,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
-import reactor.util.context.Context;
 
 @DisplayName("RestProtocolStrategy")
 @ExtendWith(MockitoExtension.class)
@@ -51,8 +46,6 @@ class RestProtocolStrategyTest {
   private IsoFieldHelper isoFieldHelper;
   @Mock
   private TracerHelper tracerHelper;
-  @Mock
-  private Tracer tracer;
   @Mock
   private ParticipantContext participantCtx;
   @Mock
@@ -72,7 +65,7 @@ class RestProtocolStrategyTest {
   @BeforeEach
   void setUp() {
     strategy = new RestProtocolStrategy(
-        systemPropertiesService, transactionClient, isoFieldHelper, tracerHelper, tracer);
+        systemPropertiesService, transactionClient, isoFieldHelper, tracerHelper);
 
     requestContext = new RequestContext();
     requestContext.setRrn("rrn-001");
@@ -81,8 +74,6 @@ class RestProtocolStrategyTest {
     lenient().when(participantCtx.getIsoMessage()).thenReturn(isoMessage);
     lenient().when(participantCtx.getObservation()).thenReturn(observation);
     lenient().when(participantCtx.getTransactionHandler()).thenReturn(transactionHandler);
-    lenient().when(tracerHelper.composeTransactionContext(any(), any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
   }
 
   @Test
@@ -92,44 +83,24 @@ class RestProtocolStrategyTest {
   }
 
   @Test
-  @DisplayName("send delegates to TransactionClient and emits ResponseContext")
-  void send_delegatesToTransactionClient_emitsResponseContext() {
-    Span mockSpan = mock(Span.class);
-    Span nextSpan = mock(Span.class);
-    TraceContext traceCtx = mock(TraceContext.class);
-    when(tracer.nextSpan(mockSpan)).thenReturn(nextSpan);
-    when(nextSpan.context()).thenReturn(traceCtx);
-    when(traceCtx.traceId()).thenReturn("trace-001");
-    when(traceCtx.spanId()).thenReturn("span-001");
-    when(transactionClient.send(requestContext)).thenReturn(Mono.just(responseContext));
+  @DisplayName("send delegates to TransactionClient and returns ResponseContext")
+  void send_delegatesToTransactionClient_returnsResponseContext() {
+    when(transactionClient.send(requestContext)).thenReturn(responseContext);
 
-    StepVerifier.create(
-            strategy.send(channelHandlerContext, isoMessage, requestContext)
-                .contextWrite(Context.of(Span.class, mockSpan))
-        )
-        .expectNext(responseContext)
-        .verifyComplete();
+    ResponseContext result = strategy.send(channelHandlerContext, isoMessage, requestContext);
+
+    assertThat(result).isSameAs(responseContext);
+    verify(tracerHelper).setBaggage(HeaderConstant.REQUEST_ID.getHeader(), "rrn-001");
   }
 
   @Test
   @DisplayName("send wraps TransactionClient error in TransactionException")
   void send_whenTransactionClientErrors_wrapsInTransactionException() {
-    Span mockSpan = mock(Span.class);
-    Span nextSpan = mock(Span.class);
-    TraceContext traceCtx = mock(TraceContext.class);
-    when(tracer.nextSpan(mockSpan)).thenReturn(nextSpan);
-    when(nextSpan.context()).thenReturn(traceCtx);
-    when(traceCtx.traceId()).thenReturn("trace-001");
-    when(traceCtx.spanId()).thenReturn("span-001");
     when(transactionClient.send(requestContext))
-        .thenReturn(Mono.error(new RuntimeException("network error")));
+        .thenThrow(new RuntimeException("network error"));
 
-    StepVerifier.create(
-            strategy.send(channelHandlerContext, isoMessage, requestContext)
-                .contextWrite(Context.of(Span.class, mockSpan))
-        )
-        .expectError(TransactionException.class)
-        .verify();
+    assertThatThrownBy(() -> strategy.send(channelHandlerContext, isoMessage, requestContext))
+        .isInstanceOf(TransactionException.class);
   }
 
   @Test

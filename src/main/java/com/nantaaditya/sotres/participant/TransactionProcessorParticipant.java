@@ -14,6 +14,7 @@ import com.nantaaditya.sotres.model.constant.ObservationConstant;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
+import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
@@ -41,6 +42,7 @@ import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Component
@@ -165,11 +167,14 @@ public class TransactionProcessorParticipant
     }
 
     log.debug(AppLogMessage.message("#Transaction - DTO").additionalData(ctx.getRequestContext()));
-    return senderProtocolStrategy.send(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), ctx.getRequestContext())
-        .map(responseContext -> {
+    // TODO(refactor): sync strategy.send wrapped for the still-reactive onMessage chain (Phase 2C-3 removes this)
+    return Mono.fromCallable(() -> {
+          ResponseContext responseContext = senderProtocolStrategy.send(
+              ctx.getChannelHandlerContext(), ctx.getIsoMessage(), ctx.getRequestContext());
           ctx.onResponse(responseContext);
           return ctx;
-        });
+        })
+        .subscribeOn(Schedulers.boundedElastic());
   }
 
   private Mono<ParticipantContext> selectTransactionHandler(ParticipantContext participantContext,
