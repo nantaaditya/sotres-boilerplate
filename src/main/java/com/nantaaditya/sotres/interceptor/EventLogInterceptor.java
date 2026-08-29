@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.nantaaditya.sotres.entity.EventLog;
 import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.helper.GsonHelper;
-import com.nantaaditya.sotres.helper.TsidHelper;
 import com.nantaaditya.sotres.model.dto.CacheBodyRequest;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -67,7 +66,6 @@ public class EventLogInterceptor implements HandlerInterceptor {
 
   private EventLog createEventLog(ContextDTO context, byte[] additionalData, String payload) {
     return EventLog.builder()
-        .id(TsidHelper.generateStringId())
         .clientId(context.getClientId())
         .requestId(context.getRequestId())
         .method(context.getMethod())

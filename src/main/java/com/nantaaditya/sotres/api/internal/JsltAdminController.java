@@ -51,7 +51,7 @@ public class JsltAdminController extends BaseController {
       @RequestParam TemplateGroup group,
       @RequestBody String template) {
     jsltTransformationHelper.validateTemplate(template);
-    SystemProperties saved = systemPropertiesService.upsert(group, selector, template).block();
+    SystemProperties saved = systemPropertiesService.upsert(group, selector, template);
     jsltTransformationHelper.evictExpression(group, selector);
     return toResponse(responseHelper.success(TemplateResponse.from(saved)));
   }

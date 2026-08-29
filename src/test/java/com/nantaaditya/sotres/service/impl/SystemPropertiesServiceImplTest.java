@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.test.StepVerifier;
 
 @DisplayName("SystemPropertiesServiceImpl")
 @ExtendWith(MockitoExtension.class)
@@ -139,19 +138,17 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "10.97-E001"))
           .thenReturn(Optional.of(prop("client_spec_request", "10.97-E001", "{\"result\": .value}")));
 
-      StepVerifier.create(service.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
-          .expectNext("{\"result\": .value}")
-          .verifyComplete();
+      assertThat(service.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001"))
+          .isEqualTo("{\"result\": .value}");
     }
 
     @Test
-    @DisplayName("returns empty Mono when property not found in repository")
-    void returnsEmpty_whenNotFound() {
+    @DisplayName("returns null when property not found in repository")
+    void returnsNull_whenNotFound() {
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_request", "unknown"))
           .thenReturn(Optional.empty());
 
-      StepVerifier.create(service.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, "unknown"))
-          .verifyComplete();
+      assertThat(service.getRawProperty(TemplateGroup.CLIENT_SPEC_REQUEST, "unknown")).isNull();
     }
 
     @Test
@@ -160,9 +157,8 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupIdAndPropertyId("client_spec_response", "10.97-E001"))
           .thenReturn(Optional.of(prop("client_spec_response", "10.97-E001", "{\"mapped\": .field}")));
 
-      StepVerifier.create(service.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, "10.97-E001"))
-          .expectNext("{\"mapped\": .field}")
-          .verifyComplete();
+      assertThat(service.getRawProperty(TemplateGroup.CLIENT_SPEC_RESPONSE, "10.97-E001"))
+          .isEqualTo("{\"mapped\": .field}");
     }
   }
 
@@ -178,19 +174,17 @@ class SystemPropertiesServiceImplTest {
       when(systemPropertiesRepository.findByGroupId("client_spec_request"))
           .thenReturn(List.of(sp1, sp2));
 
-      StepVerifier.create(service.getByGroupId(TemplateGroup.CLIENT_SPEC_REQUEST))
-          .expectNext(sp1, sp2)
-          .verifyComplete();
+      assertThat(service.getByGroupId(TemplateGroup.CLIENT_SPEC_REQUEST))
+          .containsExactly(sp1, sp2);
     }
 
     @Test
-    @DisplayName("returns empty Flux when group has no properties")
+    @DisplayName("returns empty list when group has no properties")
     void returnsEmpty_whenGroupHasNoProperties() {
       when(systemPropertiesRepository.findByGroupId("client_spec_response"))
           .thenReturn(List.of());
 
-      StepVerifier.create(service.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE))
-          .verifyComplete();
+      assertThat(service.getByGroupId(TemplateGroup.CLIENT_SPEC_RESPONSE)).isEmpty();
     }
   }
 
@@ -209,12 +203,10 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Optional.empty());
       when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(saved);
 
-      StepVerifier.create(service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
-          .assertNext(sp -> {
-            assertThat(sp.getId()).isEqualTo(1L);
-            assertThat(sp.getPropertyValue()).isEqualTo("{\"result\": .value}");
-          })
-          .verifyComplete();
+      SystemProperties sp = service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}");
+
+      assertThat(sp.getId()).isEqualTo(1L);
+      assertThat(sp.getPropertyValue()).isEqualTo("{\"result\": .value}");
     }
 
     @Test
@@ -229,12 +221,10 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Optional.of(existing));
       when(systemPropertiesRepository.save(updated)).thenReturn(updated);
 
-      StepVerifier.create(service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"new\": .value}"))
-          .assertNext(sp -> {
-            assertThat(sp.getId()).isEqualTo(5L);
-            assertThat(sp.getPropertyValue()).isEqualTo("{\"new\": .value}");
-          })
-          .verifyComplete();
+      SystemProperties sp = service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"new\": .value}");
+
+      assertThat(sp.getId()).isEqualTo(5L);
+      assertThat(sp.getPropertyValue()).isEqualTo("{\"new\": .value}");
     }
 
     @Test
@@ -254,12 +244,9 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(Optional.empty());
       when(systemPropertiesRepository.save(any(SystemProperties.class))).thenReturn(saved);
 
-      StepVerifier.create(service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
-          .assertNext(sp -> {
-            assertThat(sp.getId()).isEqualTo(1L);
-            assertThat(sp.getGroupId()).isEqualTo("client_spec_request");
-          })
-          .verifyComplete();
+      SystemProperties sp = service.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}");
+      assertThat(sp.getId()).isEqualTo(1L);
+      assertThat(sp.getGroupId()).isEqualTo("client_spec_request");
 
       // Flat-config cache must be unchanged after template upsert
       assertThat(service.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions")).isEqualTo("360:2");

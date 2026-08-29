@@ -25,10 +25,6 @@ import org.springframework.stereotype.Component;
  * the "no template configured, pass through" sentinel — it is cached like any
  * other entry (bounded by {@code expireAfterWrite}) so a mis-configured selector
  * no longer hits the DB on every message.
- *
- * <p>TODO(refactor): {@code SystemPropertiesService.getRawProperty/getByGroupId}
- * still return reactive types (Phase 1 facade); this class blocks on them until
- * Phase 3 flips those interfaces.
  */
 @Log4j2
 @Component
@@ -83,7 +79,7 @@ public class JsltTransformationHelper {
 
     for (TemplateGroup group : new TemplateGroup[]{
         TemplateGroup.CLIENT_SPEC_REQUEST, TemplateGroup.CLIENT_SPEC_RESPONSE}) {
-      systemPropertiesService.getByGroupId(group).toIterable().forEach(sp ->
+      systemPropertiesService.getByGroupId(group).forEach(sp ->
           expressionCache.put(cacheKey(sp.getGroupId(), sp.getPropertyId()),
               compileQuietly(sp.getGroupId(), sp.getPropertyId(), sp.getPropertyValue())));
     }
@@ -157,7 +153,7 @@ public class JsltTransformationHelper {
   }
 
   private String rawTemplate(TemplateGroup group, String selector) {
-    return systemPropertiesService.getRawProperty(group, selector).block();
+    return systemPropertiesService.getRawProperty(group, selector);
   }
 
   private String cacheKey(TemplateGroup group, String selector) {

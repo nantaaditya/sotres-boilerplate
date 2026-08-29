@@ -6,13 +6,11 @@ import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Service
@@ -29,8 +27,6 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   }
 
   public void onStart() {
-    // TODO(refactor): direct blocking load; the Reactor bridges below go away when
-    // the web + ISO layers are blocking (Phases 2-3) and this interface can too.
     try {
       systemPropertiesRepository.findAll().forEach(this::loadSystemProperties);
     } catch (Exception e) {
@@ -58,34 +54,29 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   }
 
   @Override
-  public Mono<String> getRawProperty(TemplateGroup group, String selector) {
-    return Mono.fromCallable(() -> systemPropertiesRepository
-            .findByGroupIdAndPropertyId(group.getGroup(), selector)
-            .map(SystemProperties::getPropertyValue)
-            .orElse(null))
-        .subscribeOn(Schedulers.boundedElastic());
+  public String getRawProperty(TemplateGroup group, String selector) {
+    return systemPropertiesRepository
+        .findByGroupIdAndPropertyId(group.getGroup(), selector)
+        .map(SystemProperties::getPropertyValue)
+        .orElse(null);
   }
 
   @Override
-  public Flux<SystemProperties> getByGroupId(TemplateGroup group) {
-    return Mono.fromCallable(() -> systemPropertiesRepository.findByGroupId(group.getGroup()))
-        .subscribeOn(Schedulers.boundedElastic())
-        .flatMapMany(Flux::fromIterable);
+  public List<SystemProperties> getByGroupId(TemplateGroup group) {
+    return systemPropertiesRepository.findByGroupId(group.getGroup());
   }
 
   @Override
-  public Mono<SystemProperties> upsert(TemplateGroup group, String selector, String value) {
-    return Mono.fromCallable(() -> {
-      SystemProperties entity = systemPropertiesRepository
-          .findByGroupIdAndPropertyId(group.getGroup(), selector)
-          .map(existing -> existing.toBuilder().propertyValue(value).build())
-          .orElseGet(() -> SystemProperties.builder()
-              .groupId(group.getGroup())
-              .propertyId(selector)
-              .propertyValue(value)
-              .build());
-      return systemPropertiesRepository.save(entity);
-    }).subscribeOn(Schedulers.boundedElastic());
+  public SystemProperties upsert(TemplateGroup group, String selector, String value) {
+    SystemProperties entity = systemPropertiesRepository
+        .findByGroupIdAndPropertyId(group.getGroup(), selector)
+        .map(existing -> existing.toBuilder().propertyValue(value).build())
+        .orElseGet(() -> SystemProperties.builder()
+            .groupId(group.getGroup())
+            .propertyId(selector)
+            .propertyValue(value)
+            .build());
+    return systemPropertiesRepository.save(entity);
   }
 
   private void loadSystemProperties(SystemProperties sp) {

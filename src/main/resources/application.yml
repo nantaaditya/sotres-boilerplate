@@ -18,6 +18,14 @@ spring:
       idle-timeout: ${DB_POOL_IDLE_TIMEOUT:60000}
       max-lifetime: ${DB_POOL_MAX_LIFETIME:300000}
       connection-test-query: SELECT 1
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    generate-ddl: false
+    show-sql: ${JPA_SHOW_SQL:true}
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate.format_sql: ${HIBERNATE_FORMAT_SQL:true}
 
 logging:
   level:
@@ -55,14 +63,6 @@ participant.configuration.pool:
     flight-queue-time-out: ${TRANSACTION_FLIGHT_QUEUE_TIMEOUT:15000}
     message-queue-time-out: ${TRANSACTION_MESSAGE_QUEUE_TIME_OUT:60000}
     prefix: ${TRANSACTION_PREFIX:TransactionManager}
-  api:
-    core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
-    queue-size: ${TRANSACTION_QUEUE_SIZE:50}
-    flight-pool: ${TRANSACTION_FLIGHT_POOL_SIZE:100}
-    message-pool: ${TRANSACTION_MESSAGE_POOL:200}
-    flight-queue-time-out: ${TRANSACTION_FLIGHT_QUEUE_TIMEOUT:15000}
-    message-queue-time-out: ${TRANSACTION_MESSAGE_QUEUE_TIME_OUT:60000}
-    prefix: ${TRANSACTION_PREFIX:ApiManager}
 
 client:
   registry-type: ${CLIENT_REGISTRY_TYPE:CALLBACK}

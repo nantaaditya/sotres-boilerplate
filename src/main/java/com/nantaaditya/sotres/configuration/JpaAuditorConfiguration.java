@@ -7,11 +7,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.domain.AuditorAware;
-import org.springframework.data.jdbc.repository.config.EnableJdbcAuditing;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
 @Configuration
-@EnableJdbcAuditing
-public class JdbcAuditorConfiguration implements AuditorAware<String> {
+@EnableJpaAuditing
+public class JpaAuditorConfiguration implements AuditorAware<String> {
 
   @Value("${spring.application.name}")
   private String applicationName;

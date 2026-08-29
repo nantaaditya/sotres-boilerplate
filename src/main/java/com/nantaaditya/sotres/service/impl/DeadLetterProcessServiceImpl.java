@@ -8,6 +8,7 @@ import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.request.RetryDeadLetterProcessRequest;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
 import com.nantaaditya.sotres.service.AbstractRetryProcessorService;
+import com.nantaaditya.sotres.service.AbstractRetryProcessorService.DeadLetterContext;
 import com.nantaaditya.sotres.service.internal.DeadLetterProcessService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,9 +20,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 @Log4j2
 @Service
@@ -45,14 +43,12 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
     PageRequest pageRequest = PageRequest.of(0, request.size(),
         Sort.by(Direction.ASC, "createdDate"));
 
-    List<DeadLetterProcess> toRetry = getDeadLetterProcesses(request, pageRequest)
+    List<DeadLetterProcess> toRetry = getDeadLetterProcesses(request, pageRequest).stream()
         .filter(deadLetterProcess -> deadLetterProcess.getRetryCount() < deadLetterProcess.getMaxRetry())
-        .collectList()
-        .blockOptional()
-        .orElseGet(List::of);
+        .toList();
 
     try {
-      executeRetryProcess(request, toRetry).block();
+      executeRetryProcess(request, toRetry);
       log.info(AppLogMessage.message("#Retry - [{}] [{}] total {} retry processed",
           request.processType(), request.processName(), toRetry.size()));
     } catch (Exception error) {
@@ -61,43 +57,36 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
     }
   }
 
-  private Flux<DeadLetterProcess> getDeadLetterProcesses(RetryDeadLetterProcessRequest request,
+  private List<DeadLetterProcess> getDeadLetterProcesses(RetryDeadLetterProcessRequest request,
       PageRequest pageRequest) {
-    // TODO(refactor): blocking JDBC query wrapped for the still-reactive chain
-    return Mono.fromCallable(() -> deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
-            request.processType(), request.processName(),
-            Set.of(RetryStatus.NEW.name(), RetryStatus.FAILED.name()),
-            pageRequest))
-        .subscribeOn(Schedulers.boundedElastic())
-        .flatMapMany(Flux::fromIterable);
+    return deadLetterProcessRepository.findByProcessTypeAndProcessNameAndStatusIn(
+        request.processType(), request.processName(),
+        Set.of(RetryStatus.NEW.name(), RetryStatus.FAILED.name()),
+        pageRequest);
   }
 
-  public Mono<Void> executeRetryProcess(RetryDeadLetterProcessRequest request, List<DeadLetterProcess> deadLetterProcesses) {
+  public void executeRetryProcess(RetryDeadLetterProcessRequest request, List<DeadLetterProcess> deadLetterProcesses) {
     AbstractRetryProcessorService processor = retryProcessorHelper.getProcessor(request.processType(), request.processName());
 
     if (processor == null) {
       log.warn(AppLogMessage.message(
           "#DeadLetterProcess - no retry processor handler found with {} - {}",
           request.processType(), request.processName()));
-      return Mono.empty();
+      return;
     }
 
     processor.resetCounter();
 
-    return updateInProgress(deadLetterProcesses)
-        .filter(deadLetterProcess -> {
-            if (!processor.isEligibleToBeRetried(deadLetterProcess)) {
-              handleNotEligibleToBeRetried(deadLetterProcess, processor);
-              return false;
-            }
-            return true;
-        })
-        .flatMap(
-            deadLetterProcess -> processor.execute(deadLetterProcess)
-                .flatMap(result -> processor.update(deadLetterProcess, result))
-            , 4
-        )
-        .then();
+    // Sequential retry (the reactive version fanned out at concurrency 4); a real adopter that
+    // wires a producer + concrete RetryProcessorService can parallelise on the async executor.
+    for (DeadLetterProcess deadLetterProcess : updateInProgress(deadLetterProcesses)) {
+      if (!processor.isEligibleToBeRetried(deadLetterProcess)) {
+        handleNotEligibleToBeRetried(deadLetterProcess, processor);
+        continue;
+      }
+      DeadLetterContext result = processor.execute(deadLetterProcess);
+      processor.update(deadLetterProcess, result);
+    }
   }
 
   private void handleNotEligibleToBeRetried(DeadLetterProcess deadLetterProcess,
@@ -105,17 +94,13 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
     deadLetterProcess.setStatus(RetryStatus.SUCCESS.name());
     deadLetterProcess.setUpdatedBy("internal-retry-process");
     deadLetterProcess.setUpdatedDate(LocalDateTime.now());
-    deadLetterProcessRepository.save(deadLetterProcess); // TODO(refactor): blocking JDBC save
+    deadLetterProcessRepository.save(deadLetterProcess);
     processor.getNotEligibleCounter().incrementAndGet();
     log.warn(AppLogMessage.message("#DeadLetterProccess - {} is not eligible to be retried", deadLetterProcess.getId()));
   }
 
-  private Flux<DeadLetterProcess> updateInProgress(List<DeadLetterProcess> deadLetterProcesses) {
-    deadLetterProcesses
-        .forEach(d -> d.setStatus(RetryStatus.RETRYING.name()));
-    // TODO(refactor): blocking JDBC saveAll wrapped for the still-reactive chain
-    return Mono.fromCallable(() -> deadLetterProcessRepository.saveAll(deadLetterProcesses))
-        .subscribeOn(Schedulers.boundedElastic())
-        .flatMapMany(Flux::fromIterable);
+  private List<DeadLetterProcess> updateInProgress(List<DeadLetterProcess> deadLetterProcesses) {
+    deadLetterProcesses.forEach(d -> d.setStatus(RetryStatus.RETRYING.name()));
+    return deadLetterProcessRepository.saveAll(deadLetterProcesses);
   }
 }

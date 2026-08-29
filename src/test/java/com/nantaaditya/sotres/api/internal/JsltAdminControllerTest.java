@@ -30,7 +30,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
-import reactor.core.publisher.Mono;
 
 @DisplayName("JsltAdminController")
 @ExtendWith(MockitoExtension.class)
@@ -160,7 +159,7 @@ class JsltAdminControllerTest {
       TemplateResponse dto = TemplateResponse.from(saved);
 
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
-          .thenReturn(Mono.just(saved));
+          .thenReturn(saved);
       when(responseHelper.success(dto)).thenReturn(successResponse(dto));
 
       ResponseEntity<Response<TemplateResponse>> entity =
@@ -176,7 +175,7 @@ class JsltAdminControllerTest {
     @DisplayName("propagates error from upsert when DB write fails")
     void save_propagatesError() {
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
-          .thenReturn(Mono.error(new RuntimeException("DB write failed")));
+          .thenThrow(new RuntimeException("DB write failed"));
 
       assertThatThrownBy(() ->
           controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
@@ -206,7 +205,7 @@ class JsltAdminControllerTest {
       TemplateResponse dto = TemplateResponse.from(saved);
 
       when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
-          .thenReturn(Mono.just(saved));
+          .thenReturn(saved);
       when(responseHelper.success(dto)).thenReturn(successResponse(dto));
 
       ResponseEntity<Response<TemplateResponse>> entity =

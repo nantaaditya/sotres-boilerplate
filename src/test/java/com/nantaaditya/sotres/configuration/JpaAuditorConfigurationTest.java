@@ -13,18 +13,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-@DisplayName("JdbcAuditorConfiguration")
+@DisplayName("JpaAuditorConfiguration")
 @ExtendWith(MockitoExtension.class)
-class JdbcAuditorConfigurationTest {
+class JpaAuditorConfigurationTest {
 
   @Mock
   private TracerHelper tracerHelper;
 
-  private JdbcAuditorConfiguration config;
+  private JpaAuditorConfiguration config;
 
   @BeforeEach
   void setUp() {
-    config = new JdbcAuditorConfiguration();
+    config = new JpaAuditorConfiguration();
     ReflectionTestUtils.setField(config, "applicationName", "test-app");
     ReflectionTestUtils.setField(config, "tracerHelper", tracerHelper);
   }
