@@ -31,7 +31,7 @@
 
 ### Global Request Headers
 
-Every request passes through `AppFilter` (WebFilter, highest precedence). The filter reads the following headers and makes them available throughout the request lifecycle:
+Every request passes through `HeaderFilter` (`OncePerRequestFilter`, highest precedence). The filter reads the following headers and makes them available throughout the request lifecycle (via `ContextHelper`, a request attribute, and Micrometer baggage):
 
 | Header | Required | Description |
 |---|---|---|
@@ -99,11 +99,17 @@ All endpoints return the same JSON envelope (`Response<T>`). Fields are `@JsonIn
 | `998` | `BAD_REQUEST` | Business rule rejection or endpoint not found |
 | `999` | `INTERNAL_ERROR` | Unhandled server error or DB grammar error |
 
-### PropertiesGroup Enum Values
+### ConfigGroup Enum Values
 
-Used in `group` / `key` query parameters:
+Used in the `group` / `key` query parameters of the configuration reload/read endpoints (#9, #10):
 
-`ISO8583_MASK_FIELDS` · `ACQUIRERS` · `INCOMING_MTI` · `OUTGOING_MTI` · `CURRENCY_FRACTIONS` · `PATH_MAPPING` · `RESPONSE_MAPPING` · `REGISTRY_RESPONSE_SELECTOR` · `REGISTRY_CALLBACK_SELECTOR` · `CLIENT_SPEC_REQUEST` · `CLIENT_SPEC_RESPONSE`
+`ISO8583_MASK_FIELDS` · `ACQUIRERS` · `INCOMING_MTI` · `OUTGOING_MTI` · `CURRENCY_FRACTIONS` · `PATH_MAPPING` · `RESPONSE_MAPPING` · `REGISTRY_RESPONSE_SELECTOR` · `REGISTRY_CALLBACK_SELECTOR`
+
+### TemplateGroup Enum Values
+
+Used in the `group` query parameter of the JSLT template endpoint (#14):
+
+`CLIENT_SPEC_REQUEST` · `CLIENT_SPEC_RESPONSE`
 
 ---
 
@@ -538,7 +544,7 @@ ISO8583 --> Service : 0810 (response)
 }
 ```
 
-`data` reflects the actual boolean result from `NetworkService.sendEcho()` — unlike sign-on/off, this is synchronous in the reactive chain.
+`data` reflects the actual boolean result from `NetworkService.sendEcho()` — unlike sign-on/off (which return a fixed `true` and fire the ISO message via `@Async`), this endpoint returns the real echo/health result.
 
 **List Response Code**
 
@@ -582,7 +588,7 @@ Controller --> Client : 200 {"data": true}
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `group` | PropertiesGroup | Yes | Enum value identifying which group to reload from the database. See Shared Conventions for valid values. |
+| `group` | ConfigGroup | Yes | Enum value identifying which group to reload from the database. See Shared Conventions for valid values. |
 
 **Response Body**
 
@@ -604,7 +610,7 @@ Response is returned immediately. The database re-fetch and in-memory cache upda
 | Code | Description |
 |---|---|
 | `000` | Accepted — cache reload dispatched |
-| `900` | `group` is not a valid `PropertiesGroup` enum value |
+| `900` | `group` is not a valid `ConfigGroup` enum value |
 | `999` | Internal error |
 
 **Sequence Flow**
@@ -628,7 +634,7 @@ else valid
     note over Controller, Repo : async — after response sent
     Controller -> Service : reload(PATH_MAPPING)
     Service -> Repo : findByGroupId("endpoint_path")
-    Repo --> Service : Flux<SystemProperties>
+    Repo --> Service : List<SystemProperties>
     Service -> Service : update PROPERTY_COLLECTION_MAP
 end
 @enduml
@@ -648,7 +654,7 @@ end
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `key` | PropertiesGroup | Yes | Enum value identifying which in-memory group to read. See Shared Conventions for valid values. |
+| `key` | ConfigGroup | Yes | Enum value identifying which in-memory group to read. See Shared Conventions for valid values. |
 
 **Response Body**
 
@@ -672,7 +678,7 @@ end
 | Code | Description |
 |---|---|
 | `000` | Success — in-memory map returned |
-| `900` | `key` is not a valid `PropertiesGroup` enum value |
+| `900` | `key` is not a valid `ConfigGroup` enum value |
 | `999` | Internal error |
 
 **Sequence Flow**
@@ -898,16 +904,16 @@ Helper -> Helper : expressionCache.clear()
 
 Helper -> Service : getByGroupId(CLIENT_SPEC_REQUEST)
 Service -> Repo : findByGroupId("client_spec_request")
-Repo --> Service : Flux<SystemProperties>
-Service --> Helper : Flux<SystemProperties>
+Repo --> Service : List<SystemProperties>
+Service --> Helper : List<SystemProperties>
 
 Helper -> Service : getByGroupId(CLIENT_SPEC_RESPONSE)
 Service -> Repo : findByGroupId("client_spec_response")
-Repo --> Service : Flux<SystemProperties>
-Service --> Helper : Flux<SystemProperties>
+Repo --> Service : List<SystemProperties>
+Service --> Helper : List<SystemProperties>
 
 Helper -> Helper : compileAndCache(each template)
-Helper --> Controller : Mono<Void>
+Helper --> Controller : void
 Controller --> Client : 200 {"data": true}
 @enduml
 ```
@@ -928,7 +934,7 @@ Controller --> Client : 200 {"data": true}
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `selector` | String | Yes | Transaction selector key (e.g. `10.97-E001`). Becomes `property_id` in `system_properties`. |
-| `group` | PropertiesGroup | Yes | Direction: `CLIENT_SPEC_REQUEST` to shape the outgoing REST body, `CLIENT_SPEC_RESPONSE` to normalise the REST reply. |
+| `group` | TemplateGroup | Yes | Direction: `CLIENT_SPEC_REQUEST` to shape the outgoing REST body, `CLIENT_SPEC_RESPONSE` to normalise the REST reply. |
 
 Request body (raw, `text/plain`):
 ```
@@ -999,7 +1005,7 @@ else valid
     Service -> Repo : save(entity)
     Repo --> Service : saved SystemProperties
     Service -> Service : loadSystemProperties(saved)
-    Service --> Controller : Mono<SystemProperties>
+    Service --> Controller : SystemProperties
     Controller -> Helper : evictExpression(CLIENT_SPEC_REQUEST, "10.97-E001")
     Helper -> Helper : expressionCache.remove("client_spec_request:10.97-E001")
     Controller --> Client : 200 {"data": {"id": 42, "groupId": "client_spec_request", ...}}
