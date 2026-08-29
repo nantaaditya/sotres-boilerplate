@@ -1,7 +1,8 @@
 # Environment Variables Reference
 
 > Auto-generated from `src/main/resources/application.yml`.
-> Last updated: 2026-07-12
+> Last updated: 2026-08-29 — **partially hand-patched** for the reactive→blocking + JDBC→JPA
+> migration; regenerate with `/env-var-documentation` for a clean sweep.
 
 ## Legend
 
@@ -26,7 +27,8 @@ Before deploying to production, verify:
 - [ ] `ISO8583_HOST` and `ISO8583_PORT` point to the production ISO8583 host
 - [ ] `TRANSACTION_CLIENT_HOSTNAME` points to the production REST downstream
 - [ ] `ROOT_LOG_LEVEL` is `WARN` or `ERROR` — not `INFO` or `DEBUG` — in production
-- [ ] `ZALANDO_LOG_LEVEL`, `R2DBC_LOG_LEVEL`, `POSTGRESQL_LOG_LEVEL` are set to `WARN` or `OFF` in production
+- [ ] `ZALANDO_LOG_LEVEL`, `JDBC_LOG_LEVEL`, `POSTGRESQL_LOG_LEVEL` are set to `WARN` or `OFF` in production
+- [ ] `JPA_DDL_AUTO` is `none` (schema is managed by `ddl.sql`) and `JPA_SHOW_SQL` is `false` in production
 - [ ] `TRACING_SAMPLING_PROBABILITY` is reduced from `1.0` (100%) to an appropriate rate (e.g. `0.1`) in production
 
 ---
@@ -44,25 +46,27 @@ Before deploying to production, verify:
 | Variable                 | Description                                         | Type    | Default          | Required | Sensitivity | Nonprod Value | Prod Value | Notes                            |
 |--------------------------|-----------------------------------------------------|---------|------------------|----------|-------------|---------------|------------|----------------------------------|
 | `APPLICATION_NAME`       | Spring application name, used in tracing and logs   | String  | `sotres-api`     | No       |             |               |            |                                  |
-| `CONTEXT_PATH`           | WebFlux base path prefix for all endpoints          | String  | `/sotres`        | No       |             |               |            |                                  |
-| `VIRTUAL_THREAD_ENABLED` | Enable Java virtual threads for reactive processing | Boolean | `true`           | No       |             |               |            | Requires JDK 21+                 |
+| `CONTEXT_PATH`           | Servlet context path (`server.servlet.context-path`) for all endpoints | String  | `/sotres`        | No       |             |               |            |                                  |
+| `VIRTUAL_THREAD_ENABLED` | Run Tomcat request threads and the async executors on virtual threads  | Boolean | `true`           | No       |             |               |            | Requires JDK 21+                 |
 | `APPS_VERSION`           | Application version string reported in metrics/info | String  | `1.0.0-SNAPSHOT` | No       |             |               |            | Set to release version on deploy |
 
 ---
 
-## 3. Database (R2DBC / PostgreSQL)
+## 3. Database (JDBC / HikariCP / Spring Data JPA)
 
-| Variable                 | Description                                                          | Type    | Default                                         | Required | Sensitivity | Nonprod Value | Prod Value | Notes                                            |
-|--------------------------|----------------------------------------------------------------------|---------|-------------------------------------------------|----------|-------------|---------------|------------|--------------------------------------------------|
-| `DB_URL`                 | R2DBC connection URL for PostgreSQL                                  | String  | `r2dbc:postgresql://localhost:5432/boilerplate` | No       |             |               |            | Format: `r2dbc:postgresql://<host>:<port>/<db>`  |
-| `DB_USER`                | PostgreSQL username                                                  | String  | `postgres`                                      | No       | 🔒 Secret   |               |            |                                                  |
-| `DB_PASS`                | PostgreSQL password                                                  | String  | `changeme`                                      | No       | 🔒 Secret   |               |            | ⚠️ Rotate before prod — default is a placeholder |
-| `R2DBC_POOL_ENABLED`     | Enable R2DBC connection pooling                                      | Boolean | `true`                                          | No       |             |               |            | Keep `true` in all environments                  |
-| `R2DBC_INITIAL_SIZE`     | Initial number of connections in the pool                            | Integer | `5`                                             | No       |             |               |            |                                                  |
-| `R2DBC_MAX_SIZE`         | Maximum number of connections in the pool                            | Integer | `10`                                            | No       |             |               |            | Size to expected concurrency                     |
-| `R2DBC_IDLE_TIME`        | Maximum time a connection may be idle (ISO-8601 duration)            | String  | `PT1M`                                          | No       |             |               |            | e.g. `PT2M` for 2 minutes                        |
-| `R2DBC_MAX_LIFE_TIME`    | Maximum total lifetime of a connection (ISO-8601 duration)           | String  | `PT5M`                                          | No       |             |               |            |                                                  |
-| `R2DBC_MAX_ACQUIRE_TIME` | Maximum wait time for a connection from the pool (ISO-8601 duration) | String  | `PT5S`                                          | No       |             |               |            |                                                  |
+| Variable                    | Description                                                | Type    | Default                                        | Required | Sensitivity | Nonprod Value | Prod Value | Notes                                            |
+|-----------------------------|-----------------------------------------------------------|---------|-----------------------------------------------|----------|-------------|---------------|------------|--------------------------------------------------|
+| `DB_URL`                    | JDBC connection URL for PostgreSQL                         | String  | `jdbc:postgresql://localhost:5432/boilerplate` | No       |             |               |            | Format: `jdbc:postgresql://<host>:<port>/<db>`   |
+| `DB_USER`                   | PostgreSQL username                                        | String  | `postgres`                                     | No       | 🔒 Secret   |               |            |                                                  |
+| `DB_PASS`                   | PostgreSQL password                                        | String  | `changeme`                                     | No       | 🔒 Secret   |               |            | ⚠️ Rotate before prod — default is a placeholder |
+| `DB_POOL_MAX_SIZE`          | HikariCP maximum pool size                                 | Integer | `10`                                           | No       |             |               |            | Size to expected concurrency                     |
+| `DB_POOL_MIN_IDLE`          | HikariCP minimum idle connections                          | Integer | `5`                                            | No       |             |               |            |                                                  |
+| `DB_POOL_CONNECTION_TIMEOUT`| Max wait for a connection from the pool (ms)               | Integer | `5000`                                         | No       |             |               |            |                                                  |
+| `DB_POOL_IDLE_TIMEOUT`      | Max idle time before a connection is retired (ms)          | Integer | `60000`                                        | No       |             |               |            |                                                  |
+| `DB_POOL_MAX_LIFETIME`      | Max total lifetime of a connection (ms)                    | Integer | `300000`                                       | No       |             |               |            |                                                  |
+| `JPA_DDL_AUTO`              | Hibernate `ddl-auto`                                       | String  | `none`                                         | No       |             |               |            | Schema is managed externally via `ddl.sql`       |
+| `JPA_SHOW_SQL`              | Log generated SQL statements                               | Boolean | `true`                                         | No       |             |               | `false`    | Set `false` in production                        |
+| `HIBERNATE_FORMAT_SQL`      | Pretty-print logged SQL                                    | Boolean | `true`                                         | No       |             |               | `false`    |                                                  |
 
 ---
 
@@ -72,7 +76,7 @@ Before deploying to production, verify:
 |------------------------|--------------------------------------------------------------|---------|---------------------------------|----------|-------------|---------------|------------|------------------------------------------------------------------------|
 | `ROOT_LOG_LEVEL`       | Root logging level for the application                       | String  | `INFO`                          | No       |             |               |            | Set to `WARN` in production                                            |
 | `ZALANDO_LOG_LEVEL`    | Log level for Logbook HTTP request/response logging          | String  | `TRACE`                         | No       |             |               |            | Set to `WARN` or `OFF` in production                                   |
-| `R2DBC_LOG_LEVEL`      | Log level for R2DBC query execution                          | String  | `DEBUG`                         | No       |             |               |            | Set to `WARN` in production                                            |
+| `JDBC_LOG_LEVEL`       | Log level for `org.springframework.jdbc.core`                | String  | `INFO`                          | No       |             |               |            | Set to `WARN` in production                                            |
 | `POSTGRESQL_LOG_LEVEL` | Log level for PostgreSQL query and parameter logging         | String  | `DEBUG`                         | No       |             |               |            | Controls both `QUERY` and `PARAM` loggers; set to `WARN` in production |
 | `LOG_PATH`             | Directory path for log file output                           | String  | `logs/`                         | No       |             |               |            | Ensure path is writable by the app process                             |
 | `APPS_LOG_LEVEL`       | Log format selector: `json` for structured, `text` for plain | String  | `json`                          | No       |             |               |            | Selects the `log4j2-spring-<value>.xml` config                         |
@@ -175,11 +179,7 @@ Before deploying to production, verify:
 
 ## 11. Scheduler
 
-| Variable                         | Description                                                    | Type    | Default           | Required | Sensitivity | Nonprod Value | Prod Value | Notes                                       |
-|----------------------------------|----------------------------------------------------------------|---------|-------------------|----------|-------------|---------------|------------|---------------------------------------------|
-| `RETRY_PROCESSOR_TYPE`           | Reactor scheduler type for the retry processor                 | String  | `BOUNDED_ELASTIC` | No       |             |               |            | Valid values: `BOUNDED_ELASTIC`, `PARALLEL` |
-| `RETRY_PROCESSOR_SCHEDULER_NAME` | Name of the retry processor scheduler                          | String  | `retry-processor` | No       |             |               |            |                                             |
-| `RETRY_PROCESSOR_DAEMON`         | Run retry processor threads as daemon threads                  | Boolean | `true`            | No       |             |               |            |                                             |
-| `RETRY_PROCESSOR_POOL`           | Thread pool size for the retry processor scheduler             | Integer | `10`              | No       |             |               |            |                                             |
-| `RETRY_PROCESSOR_QUEUE`          | Task queue size for the retry processor scheduler              | Integer | `10`              | No       |             |               |            |                                             |
-| `RETRY_PROCESSOR_TTL`            | Time-to-live for idle threads in the retry processor (seconds) | Integer | `60`              | No       |             |               |            | Unit is **seconds**                         |
+_Removed._ The reactor-scheduler retry-processor infrastructure (`RETRY_PROCESSOR_*`,
+`SCHEDULER_*`) was deleted in the reactive→blocking migration. Background work now runs on the
+`@Async("defaultAsyncTaskExecutor")` pool (see [Async](#8-async-execution)); the dead-letter
+retry path is a synchronous, unwired extension point.

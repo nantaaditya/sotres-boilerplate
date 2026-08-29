@@ -97,7 +97,7 @@ The direct benchmark shows ±59% error vs ±16% for JSLT. At sub-microsecond tim
 
 ### 1. Reactive scheduling overhead is not included
 
-In production, every `transform()` call goes through `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`. The thread-hand-off overhead (context switch + queue scheduling) is on the order of **1–10 µs** — comparable to or larger than the JSLT evaluation itself for simple templates. The benchmark measures raw JSLT performance in isolation, not the full reactive pipeline cost.
+In production, `transform()` runs synchronously on the calling (virtual) thread — no thread hand-off, no scheduler queue. The benchmark measures the same raw JSLT evaluation the production path does; the only production overhead on top is the Caffeine cache lookup for the compiled `Expression`.
 
 ### 2. Template complexity scales cost
 
