@@ -50,8 +50,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
   }
 
   @Override
-  public ResponseContext send(ChannelHandlerContext context, IsoMessage incomingMessage,
-      RequestContext requestContext) {
+  public ResponseContext send(ChannelHandlerContext context, IsoMessage incomingMessage, RequestContext requestContext) {
     try {
       ResponseContext responseContext = transactionClient.send(requestContext);
       tracerHelper.setBaggage(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());

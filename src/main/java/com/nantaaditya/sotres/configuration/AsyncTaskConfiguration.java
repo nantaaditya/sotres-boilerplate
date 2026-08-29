@@ -4,6 +4,8 @@ import com.nantaaditya.sotres.helper.AsyncMDCTaskDecorator;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -53,6 +55,8 @@ public class AsyncTaskConfiguration {
     executor.setKeepAliveSeconds(configuration.keepAliveSeconds());
     executor.setTaskDecorator(asyncMDCTaskDecorator);
     executor.setVirtualThreads(configuration.virtualThreadEnabled());
+    executor.setRejectedExecutionHandler(new CallerRunsPolicy());
+    executor.setWaitForTasksToCompleteOnShutdown(true);
     executor.initialize();
     return executor;
   }

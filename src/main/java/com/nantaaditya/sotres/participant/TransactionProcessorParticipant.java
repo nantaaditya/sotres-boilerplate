@@ -173,7 +173,8 @@ public class TransactionProcessorParticipant
       ResponseContext responseContext = senderProtocolStrategy.send(                     // blocking downstream call
           participantContext.getChannelHandlerContext(),
           participantContext.getIsoMessage(),
-          participantContext.getRequestContext());
+          participantContext.getRequestContext()
+      );
       participantContext.onResponse(responseContext);
       senderProtocolStrategy.handleResponse(participantContext);                         // writes the 0210
 
