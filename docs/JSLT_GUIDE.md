@@ -202,19 +202,24 @@ Full JSLT language reference: https://github.com/schibsted/jslt
 
 ## Cache Behavior
 
-`JsltTransformationHelper` keeps a `ConcurrentHashMap<String, Mono<Expression>>` keyed by `groupId:selector` (e.g., `client_spec_request:10.97-E001`).
+`transform(...)` is **synchronous** — it returns a `JsonNode` directly, no `Mono`/`block()`.
+
+`JsltTransformationHelper` keeps a Caffeine `Cache<String, Optional<Expression>>` keyed by
+`groupId:selector` (e.g. `client_spec_request:10.97-E001`), `expireAfterWrite(10m)`.
 
 | Event | What happens |
 |-------|-------------|
-| First `transform` call for a key | DB fetch → compile → result cached as a hot `Mono` |
-| Subsequent calls for the same key | Cached `Mono` replays the compiled `Expression` — no DB round-trip |
-| Template not found in DB | Pass-through result returned; **cache entry evicted** so the next call retries the DB |
-| Compilation error (`JsltException`) | Error propagated to caller; **cache entry evicted** so the next call retries the DB |
+| First `transform` call for a key | DB fetch → compile → `Optional.of(expression)` cached |
+| Subsequent calls for the same key | Cached `Expression` applied — no DB round-trip |
+| Template not found in DB | Pass-through result returned; **`Optional.empty()` cached** (negative cache) so the next call does *not* hit the DB again until the entry expires |
+| Compilation error (`JsltException`) | Error propagated to caller; **nothing cached** so the next call retries the DB |
 | `evictExpression(group, selector)` | Specific entry removed; next call recompiles from DB |
 | `evictAndReload(selector)` | Both directions evicted, then immediately re-fetched and recompiled |
 | `evictAll()` | Entire cache cleared, then rewarm by fetching all rows for both groups |
 
-The self-evicting behavior on empty and error means a transient DB unavailability or a missing template at startup does not permanently poison the cache. Once the template is inserted and `_reload` is called, all subsequent callers pick it up.
+Negative caching (empty templates) is bounded by the 10-minute write TTL; compilation errors are
+never cached, so a transient DB blip or a missing template at startup does not permanently poison
+the cache. Once the template is inserted and `_reload` is called, all subsequent callers pick it up.
 
 ---
 
