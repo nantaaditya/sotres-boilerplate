@@ -14,6 +14,11 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 @ControllerAdvice
 public class ResponseHeaderInterceptor implements ResponseBodyAdvice<Object> {
 
+  /**
+   * Applies to every response body write so {@code x-response-time} is present on all controller
+   * responses. Bodies rendered outside an {@code HttpMessageConverter} (e.g. container error pages)
+   * are not covered.
+   */
   @Override
   public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
     return true;

@@ -1,7 +1,6 @@
 package com.nantaaditya.sotres.service.impl;
 
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
-import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.RetryProcessorHelper;
 import com.nantaaditya.sotres.model.constant.RetryStatus;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -32,7 +31,7 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
   @Async("defaultAsyncTaskExecutor")
   @Override
   public void remove(int days) {
-    LocalDateTime now = LocalDateTime.now(DateTimeHelper.ZONE_ID);
+    LocalDateTime now = LocalDateTime.now();
     deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(
         now.minusDays(days), RetryStatus.EXHAUSTED.name());
   }

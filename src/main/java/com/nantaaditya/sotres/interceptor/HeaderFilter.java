@@ -27,8 +27,14 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * First app filter on the request path: builds the {@link ContextDTO}, sets response headers +
+ * tracing baggage, and starts the {@code API_PUBLIC} {@link Observation}.
+ */
 @Log4j2
 @Component("appHeaderFilter")
+// Just after the framework's security / tracing filters (HIGHEST_PRECEDENCE, +1) so baggage and the
+// cached body are in place before anything downstream — including the audit interceptor — reads them.
 @Order(Ordered.HIGHEST_PRECEDENCE + 2)
 public class HeaderFilter extends OncePerRequestFilter {
 
@@ -75,12 +81,10 @@ public class HeaderFilter extends OncePerRequestFilter {
     );
     observationWrapper.setObservation(cachedRequest, observation);
 
-    Map<String, String> contextMap = MDC.getCopyOfContextMap();
-
+    // Snapshot MDC on entry; the observation scope populates trace/span keys, so restore (or clear)
+    // on exit to leave the thread as we found it — matters when virtual threads are disabled.
+    Map<String, String> previousMdc = MDC.getCopyOfContextMap();
     try (Observation.Scope scope = observation.openScope()) {
-      if (contextMap != null) {
-        MDC.setContextMap(contextMap);
-      }
       filterChain.doFilter(cachedRequest, response);
     } catch (Exception exception) {
       log.error(AppLogMessage.message("#Observation - error").error(exception));
@@ -91,6 +95,11 @@ public class HeaderFilter extends OncePerRequestFilter {
         observation.stop();
       }
       observationWrapper.clear(cachedRequest);
+      if (previousMdc != null) {
+        MDC.setContextMap(previousMdc);
+      } else {
+        MDC.clear();
+      }
     }
   }
 

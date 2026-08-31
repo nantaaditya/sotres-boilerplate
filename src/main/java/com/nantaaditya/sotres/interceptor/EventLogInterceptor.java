@@ -8,7 +8,7 @@ import com.nantaaditya.sotres.model.dto.CacheBodyRequest;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.LogProperties;
-import com.nantaaditya.sotres.repository.EventLogRepository;
+import com.nantaaditya.sotres.service.internal.EventLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -26,7 +26,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @RequiredArgsConstructor
 public class EventLogInterceptor implements HandlerInterceptor {
 
-  private final EventLogRepository eventLogRepository;
+  private final EventLogService eventLogService;
   private final LogProperties logProperties;
   private final Gson gson;
   private final ContextHelper contextHelper;
@@ -50,10 +50,10 @@ public class EventLogInterceptor implements HandlerInterceptor {
       String cleanedPayload = GsonHelper.cleanJson(readBody(request), gson);
 
       EventLog eventLog = createEventLog(context, additionalData, cleanedPayload);
-      log.debug(AppLogMessage.message("#EventLog - save event log"));
-      eventLogRepository.save(eventLog);
+      log.debug(AppLogMessage.message("#EventLog - queue event log save"));
+      eventLogService.save(eventLog);
     } catch (Exception e) {
-      log.error(AppLogMessage.message("#EventLog - failed save event log").error(e));
+      log.error(AppLogMessage.message("#EventLog - failed to build event log").error(e));
     } finally {
       contextHelper.cleanUp(context.getRequestId());
     }

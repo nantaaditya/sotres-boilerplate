@@ -1,5 +1,6 @@
 package com.nantaaditya.sotres.service.impl;
 
+import com.nantaaditya.sotres.entity.EventLog;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.EventLogRepository;
 import com.nantaaditya.sotres.service.internal.EventLogService;
@@ -15,6 +16,16 @@ import org.springframework.stereotype.Service;
 public class EventLogServiceImpl implements EventLogService {
 
   private final EventLogRepository eventLogRepository;
+
+  @Async("defaultAsyncTaskExecutor")
+  @Override
+  public void save(EventLog eventLog) {
+    try {
+      eventLogRepository.save(eventLog);
+    } catch (Exception e) {
+      log.error(AppLogMessage.message("#EventLog - failed save event log").error(e));
+    }
+  }
 
   @Async("defaultAsyncTaskExecutor")
   @Override

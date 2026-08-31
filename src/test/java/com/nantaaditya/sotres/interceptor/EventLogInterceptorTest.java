@@ -13,7 +13,7 @@ import com.nantaaditya.sotres.entity.EventLog;
 import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.properties.LogProperties;
-import com.nantaaditya.sotres.repository.EventLogRepository;
+import com.nantaaditya.sotres.service.internal.EventLogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class EventLogInterceptorTest {
 
   @Mock
-  private EventLogRepository eventLogRepository;
+  private EventLogService eventLogService;
   @Mock
   private LogProperties logProperties;
   @Mock
@@ -38,7 +38,7 @@ class EventLogInterceptorTest {
 
   @BeforeEach
   void setUp() {
-    interceptor = new EventLogInterceptor(eventLogRepository, logProperties, new Gson(), contextHelper);
+    interceptor = new EventLogInterceptor(eventLogService, logProperties, new Gson(), contextHelper);
   }
 
   private MockHttpServletRequest requestWithContext(ContextDTO context) {
@@ -69,7 +69,7 @@ class EventLogInterceptorTest {
 
     interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null);
 
-    verify(eventLogRepository).save(any(EventLog.class));
+    verify(eventLogService).save(any(EventLog.class));
     verify(contextHelper).cleanUp("req-001");
   }
 
@@ -80,7 +80,7 @@ class EventLogInterceptorTest {
 
     interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null);
 
-    verify(eventLogRepository, never()).save(any());
+    verify(eventLogService, never()).save(any());
     verify(contextHelper, never()).cleanUp(anyString());
   }
 
@@ -92,7 +92,7 @@ class EventLogInterceptorTest {
 
     interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null);
 
-    verify(eventLogRepository, never()).save(any());
+    verify(eventLogService, never()).save(any());
     verify(contextHelper).cleanUp("req-001");
   }
 
@@ -101,7 +101,7 @@ class EventLogInterceptorTest {
   void afterCompletion_saveThrows_swallowed() {
     MockHttpServletRequest request = requestWithContext(context("/api/payment"));
     when(logProperties.isIgnoredPath("/api/payment")).thenReturn(false);
-    doThrow(new RuntimeException("db down")).when(eventLogRepository).save(any(EventLog.class));
+    doThrow(new RuntimeException("db down")).when(eventLogService).save(any(EventLog.class));
 
     assertThatCode(() ->
         interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null))
