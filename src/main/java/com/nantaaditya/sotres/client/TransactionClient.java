@@ -6,6 +6,7 @@ import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.RestSender;
+import com.nantaaditya.sotres.helper.RetryTemplateHelper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.ExternalFeatureConstant;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
@@ -56,6 +57,7 @@ public class TransactionClient extends BaseClient {
       ObjectMapper objectMapper,
       Logbook logbook,
       ClientProperties clientProperties,
+      RetryTemplateHelper retryTemplateHelper,
       ObservationRegistry observationRegistry) {
 
     this.systemPropertiesService = systemPropertiesService;
@@ -63,7 +65,8 @@ public class TransactionClient extends BaseClient {
     this.objectMapper = objectMapper;
     this.clientProperties = clientProperties;
     this.clientConfiguration = this.clientProperties.getConfiguration("transaction");
-    this.restSender = createRestSender("transaction", logbook, this.clientConfiguration);
+    this.restSender = createRestSender("transaction", logbook, this.clientConfiguration,
+        retryTemplateHelper.getRetryTemplate("transaction"));
     this.observationRegistry = observationRegistry;
 
     log.info(AppLogMessage.message(
@@ -82,18 +85,31 @@ public class TransactionClient extends BaseClient {
     ObservationHelper.createIsoContext(observation, requestContext.getRrn(), featureConstant);
 
     try {
-      JsonNode requestBody =
-          jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, selector, requestContext);
-      ObservationHelper.publishEvent(observation, REQUEST, toJson(requestBody));
+      JsonNode transformedRequestBody = jsltTransformationHelper.transform(
+          TemplateGroup.CLIENT_SPEC_REQUEST,
+          selector,
+          requestContext
+      );
 
-      JsonNode rawResponse = restSender.executeWithRetry(HttpMethod.POST, apiPath,
-          buildHeaders(requestContext), requestBody, JSON_NODE).getBody();
+      ObservationHelper.publishEvent(observation, REQUEST, toJson(transformedRequestBody));
+
+      JsonNode rawResponse = restSender.executeWithRetry(
+          HttpMethod.POST,
+          apiPath,
+          buildHeaders(requestContext),
+          transformedRequestBody,
+          JSON_NODE,
+          "transaction"
+      )
+          .getBody();
       ObservationHelper.publishEvent(observation, RESPONSE, toJson(rawResponse));
 
-      JsonNode normalized =
-          jsltTransformationHelper.transform(TemplateGroup.CLIENT_SPEC_RESPONSE, selector, rawResponse);
+      JsonNode normalized = jsltTransformationHelper.transform(
+          TemplateGroup.CLIENT_SPEC_RESPONSE,
+          selector,
+          rawResponse
+      );
       ResponseContext responseContext = objectMapper.treeToValue(normalized, ResponseContext.class);
-
       ObservationHelper.observeResponse(observation, responseContext.getResponseCode(), null);
       return responseContext;
     } catch (Exception e) {
@@ -114,7 +130,8 @@ public class TransactionClient extends BaseClient {
     headers.set(HeaderConstant.CLIENT_ID.getHeader(), applicationName);
     headers.set(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
     headers.set(HeaderConstant.REQUEST_TIME.getHeader(), DateTimeHelper.getDateInFormat(
-        ZonedDateTime.now(ZoneId.systemDefault()), DateTimeHelper.ISO_8601_GMT7_FORMAT));
+        ZonedDateTime.now(ZoneId.systemDefault()), DateTimeHelper.ISO_8601_GMT7_FORMAT)
+    );
     return headers;
   }
 

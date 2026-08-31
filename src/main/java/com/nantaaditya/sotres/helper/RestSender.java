@@ -1,7 +1,8 @@
 package com.nantaaditya.sotres.helper;
 
+import com.nantaaditya.sotres.model.constant.HeaderConstant;
+import com.nantaaditya.sotres.model.constant.RetryConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
-import com.nantaaditya.sotres.properties.embedded.RetryConfiguration;
 import java.nio.charset.StandardCharsets;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.core.ParameterizedTypeReference;
@@ -9,28 +10,35 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.retry.RetryCallback;
+import org.springframework.retry.RetryContext;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * Blocking outbound HTTP sender built on {@link RestClient}. Modelled on the
- * spring-boilerplate-non-reactive {@code RestSender}, trimmed to what sotres
- * needs (single body type, optional bounded retry).
+ * spring-boilerplate-non-reactive {@code RestSender}, trimmed to what sotres needs
+ * (single body type, optional {@link RetryTemplate}-backed retry).
  *
- * <p>2xx and 4xx responses are returned to the caller (the body is mapped); any
- * other status raises {@code res.createException()}.
+ * <p>2xx and 4xx responses are returned to the caller (the body is mapped); any other status
+ * raises {@code HttpServerErrorException}. {@link #executeWithRetry} delegates the attempt loop,
+ * backoff and exception classification to the configured {@link RetryTemplate}, and seeds the
+ * {@link RetryContext} with request metadata so {@code RestSenderRetryListener} can dead-letter an
+ * exhausted call.
  */
 @Log4j2
 public final class RestSender {
 
   private final String name;
   private final RestClient restClient;
-  private final RetryConfiguration retryConfiguration;
+  private final RetryTemplate retryTemplate;
 
   private RestSender(Builder builder) {
     this.name = builder.name;
     this.restClient = builder.restClient;
-    this.retryConfiguration = builder.retryConfiguration;
+    this.retryTemplate = builder.retryTemplate;
   }
 
   public <S, T> ResponseEntity<T> execute(HttpMethod method, String apiPath, HttpHeaders headers,
@@ -38,31 +46,47 @@ public final class RestSender {
     return call(method, apiPath, headers, body, responseType);
   }
 
+  /**
+   * @param processName logical name of the outbound call, used by the retry listener for
+   *     dead-letter classification.
+   */
   public <S, T> ResponseEntity<T> executeWithRetry(HttpMethod method, String apiPath,
-      HttpHeaders headers, S body, ParameterizedTypeReference<T> responseType) {
+      HttpHeaders headers, S body, ParameterizedTypeReference<T> responseType, String processName) {
 
-    int totalAttempts = retryConfiguration == null
-        ? 1
-        : Math.max(1, retryConfiguration.maxAttempt()) + 1;
+    if (retryTemplate == null) {
+      throw new IllegalStateException(
+          String.format("#Client - [%s] retryTemplate not configured", name));
+    }
 
-    RuntimeException last = null;
-    for (int attempt = 1; attempt <= totalAttempts; attempt++) {
+    RetryCallback<ResponseEntity<T>, RuntimeException> retryable = context -> {
+      seedRetryContext(context, method, apiPath, headers, body, processName);
       try {
         return call(method, apiPath, headers, body, responseType);
-      } catch (RuntimeException e) {
-        last = e;
-        boolean canRetry = retryConfiguration != null
-            && attempt < totalAttempts
-            && retryConfiguration.isRetryable(e.getClass());
-        if (!canRetry) {
-          throw e;
-        }
-        log.warn(AppLogMessage.message("#Client - [{}] attempt {}/{} failed, retrying: {}",
-            name, attempt, totalAttempts, e.getMessage()));
-        sleep(retryConfiguration.minBackOff());
+      } catch (RestClientResponseException e) {
+        context.setAttribute(RetryConstant.RESPONSE.key(), e.getResponseBodyAsString());
+        throw e;
       }
+    };
+    return retryTemplate.execute(retryable);
+  }
+
+  private void seedRetryContext(RetryContext context, HttpMethod method, String apiPath,
+      HttpHeaders headers, Object body, String processName) {
+    context.setAttribute(RetryConstant.CLIENT_NAME.key(), name);
+    context.setAttribute(RetryConstant.METHOD.key(), method.name());
+    context.setAttribute(RetryConstant.PATH.key(), apiPath);
+    context.setAttribute(RetryConstant.HEADERS.key(), headers);
+    context.setAttribute(RetryConstant.PROCESS_TYPE.key(), "client");
+    context.setAttribute(RetryConstant.PROCESS_NAME.key(), processName);
+    if (body != null) {
+      context.setAttribute(RetryConstant.REQUEST.key(), body);
     }
-    throw last;
+    String requestId = headers == null
+        ? null
+        : headers.getFirst(HeaderConstant.REQUEST_ID.getHeader());
+    if (requestId != null) {
+      context.setAttribute(RetryConstant.REQUEST_ID.key(), requestId);
+    }
   }
 
   private <S, T> ResponseEntity<T> call(HttpMethod method, String apiPath, HttpHeaders headers,
@@ -92,19 +116,10 @@ public final class RestSender {
     });
   }
 
-  private static void sleep(long millis) {
-    try {
-      Thread.sleep(Math.max(0, millis));
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException("retry backoff interrupted", e);
-    }
-  }
-
   public static final class Builder {
     private final String name;
     private final RestClient restClient;
-    private RetryConfiguration retryConfiguration;
+    private RetryTemplate retryTemplate;
 
     public Builder(String name, RestClient restClient) {
       if (name == null || name.isBlank()) {
@@ -117,8 +132,8 @@ public final class RestSender {
       this.restClient = restClient;
     }
 
-    public Builder retryConfiguration(RetryConfiguration retryConfiguration) {
-      this.retryConfiguration = retryConfiguration;
+    public Builder retryTemplate(RetryTemplate retryTemplate) {
+      this.retryTemplate = retryTemplate;
       return this;
     }
 

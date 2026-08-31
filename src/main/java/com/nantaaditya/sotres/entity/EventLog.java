@@ -8,12 +8,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
 
 @Data
 @Entity
 @Table(name = "event_logs")
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @SuppressWarnings("java:S1068")
@@ -29,7 +28,7 @@ public class EventLog {
   private String responseDescription;
   private byte[] payload;
   private byte[] additionalData;
-  @CreatedDate
+  // set explicitly by EventLogInterceptor — no JPA auditing listener on this entity
   private LocalDateTime createdDate;
 
 }

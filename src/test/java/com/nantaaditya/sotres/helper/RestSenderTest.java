@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
-import com.nantaaditya.sotres.properties.embedded.RetryConfiguration;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +22,7 @@ import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -31,8 +31,6 @@ import org.springframework.web.client.RestClient;
 class RestSenderTest {
 
   private static final ParameterizedTypeReference<JsonNode> JSON = new ParameterizedTypeReference<>() {};
-  private static final String RETRYABLE =
-      "org.springframework.web.client.ResourceAccessException:true";
 
   private WireMockServer wireMock;
 
@@ -59,9 +57,18 @@ class RestSenderTest {
         .build();
   }
 
-  private RestSender sender(int readTimeoutMillis, RetryConfiguration retry) {
+  /** {@code maxAttempts} is total executions; only {@link ResourceAccessException} is retryable. */
+  private RetryTemplate retryTemplate(int maxAttempts) {
+    return RetryTemplate.builder()
+        .maxAttempts(maxAttempts)
+        .retryOn(ResourceAccessException.class)
+        .fixedBackoff(1)
+        .build();
+  }
+
+  private RestSender sender(int readTimeoutMillis, RetryTemplate retryTemplate) {
     return new RestSender.Builder("test", restClient(readTimeoutMillis))
-        .retryConfiguration(retry)
+        .retryTemplate(retryTemplate)
         .build();
   }
 
@@ -115,8 +122,8 @@ class RestSenderTest {
         .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
             .withBody("{\"ok\":true}")));
 
-    var response = sender(150, new RetryConfiguration(2, 1, RETRYABLE))
-        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON);
+    var response = sender(150, retryTemplate(3))
+        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON, "test");
 
     assertThat(response.getBody().get("ok").asBoolean()).isTrue();
     wireMock.verify(2, getRequestedFor(urlPathEqualTo("/x")));
@@ -127,8 +134,8 @@ class RestSenderTest {
   void executeWithRetry_nonRetryable_throwsImmediately() {
     wireMock.stubFor(get(urlPathEqualTo("/x")).willReturn(aResponse().withStatus(500)));
 
-    assertThatThrownBy(() -> sender(2000, new RetryConfiguration(3, 1, RETRYABLE))
-        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON))
+    assertThatThrownBy(() -> sender(2000, retryTemplate(3))
+        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON, "test"))
         .isInstanceOf(HttpServerErrorException.class);
 
     wireMock.verify(1, getRequestedFor(urlPathEqualTo("/x")));
@@ -140,23 +147,34 @@ class RestSenderTest {
     wireMock.stubFor(get(urlPathEqualTo("/x"))
         .willReturn(aResponse().withFixedDelay(400).withStatus(200)));
 
-    assertThatThrownBy(() -> sender(150, new RetryConfiguration(2, 1, RETRYABLE))
-        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON))
+    assertThatThrownBy(() -> sender(150, retryTemplate(3))
+        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON, "test"))
         .isInstanceOf(ResourceAccessException.class);
 
     wireMock.verify(3, getRequestedFor(urlPathEqualTo("/x")));
   }
 
   @Test
-  @DisplayName("executeWithRetry with no RetryConfiguration makes a single attempt")
-  void executeWithRetry_noConfig_singleAttempt() {
-    wireMock.stubFor(get(urlPathEqualTo("/x")).willReturn(aResponse().withStatus(500)));
+  @DisplayName("executeWithRetry with maxAttempts=1 makes a single attempt (no retry)")
+  void executeWithRetry_maxAttemptsOne_singleAttempt() {
+    wireMock.stubFor(get(urlPathEqualTo("/x"))
+        .willReturn(aResponse().withFixedDelay(400).withStatus(200)));
 
-    assertThatThrownBy(() -> sender(2000, null)
-        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON))
-        .isInstanceOf(HttpServerErrorException.class);
+    assertThatThrownBy(() -> sender(150, retryTemplate(1))
+        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON, "test"))
+        .isInstanceOf(ResourceAccessException.class);
 
     wireMock.verify(1, getRequestedFor(urlPathEqualTo("/x")));
+  }
+
+  @Test
+  @DisplayName("executeWithRetry without a RetryTemplate raises IllegalStateException")
+  void executeWithRetry_noTemplate_throws() {
+    assertThatThrownBy(() -> sender(2000, null)
+        .executeWithRetry(HttpMethod.GET, "/x", new HttpHeaders(), null, JSON, "test"))
+        .isInstanceOf(IllegalStateException.class);
+
+    wireMock.verify(0, getRequestedFor(urlPathEqualTo("/x")));
   }
 
   @Test

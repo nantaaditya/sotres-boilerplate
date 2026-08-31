@@ -39,6 +39,7 @@ class SystemPropertiesServiceImplTest {
   void setUp() {
     when(systemPropertiesRepository.findAll()).thenReturn(List.of());
     service = new SystemPropertiesServiceImpl(systemPropertiesRepository);
+    service.onStart();
   }
 
   @Nested
@@ -110,6 +111,7 @@ class SystemPropertiesServiceImplTest {
 
       SystemPropertiesServiceImpl freshService =
           new SystemPropertiesServiceImpl(systemPropertiesRepository);
+      freshService.onStart();
 
       assertThat(freshService.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
           .isEqualTo("360:2");
@@ -123,6 +125,7 @@ class SystemPropertiesServiceImplTest {
 
       SystemPropertiesServiceImpl freshService =
           new SystemPropertiesServiceImpl(systemPropertiesRepository);
+      freshService.onStart();
 
       assertThat(freshService.getProperty(ConfigGroup.CURRENCY_FRACTIONS)).isEmpty();
     }

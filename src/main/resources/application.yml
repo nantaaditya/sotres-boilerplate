@@ -56,13 +56,8 @@ iso8583.configuration:
 # Participant Pool Configurations
 participant.configuration.pool:
   transaction:
-    core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
-    queue-size: ${TRANSACTION_QUEUE_SIZE:50}
-    flight-pool: ${TRANSACTION_FLIGHT_POOL_SIZE:100}
-    message-pool: ${TRANSACTION_MESSAGE_POOL:200}
     flight-queue-time-out: ${TRANSACTION_FLIGHT_QUEUE_TIMEOUT:15000}
     message-queue-time-out: ${TRANSACTION_MESSAGE_QUEUE_TIME_OUT:60000}
-    prefix: ${TRANSACTION_PREFIX:TransactionManager}
 
 client:
   registry-type: ${CLIENT_REGISTRY_TYPE:CALLBACK}
@@ -78,10 +73,6 @@ client:
       client-read-time-out: ${TRANSACTION_CLIENT_READ_TIMEOUT:10000}
       client-write-time-out: ${TRANSACTION_CLIENT_WRITE_TIMEOUT:10000}
       time-unit: ${TRANSACTION_CLIENT_TIMEUNIT:MILLISECONDS}
-      retry-configuration:
-        max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
-        min-back-off: ${TRANSACTION_RETRY_MIN_BACK_OFF:500}
-        retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:org.springframework.web.client.ResourceAccessException:true}
 
 # Actuator Configurations
 management:
@@ -121,6 +112,16 @@ apps:
     sensitive-field: ${SENSITIVE_FIELD:cardNo}
     log-format: ${APPS_LOG_LEVEL:json}
     ignored-path: ${APPS_IGNORED_PATH:/actuator/**,/internal-api/**}
+  retry.configurations:
+    transaction:
+      type: ${TRANSACTION_RETRY_TYPE:EXPONENTIAL_RANDOM}
+      initial-interval: ${TRANSACTION_RETRY_INITIAL_INTERVAL:500}
+      multiplier: ${TRANSACTION_RETRY_MULTIPLIER:2.0}
+      max-interval: ${TRANSACTION_RETRY_MAX_INTERVAL:10000}
+      # 1 = single execution, no retry. Raise ONLY if the downstream dedupes on x-request-id (RRN).
+      max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
+      dead-letter-enabled: ${TRANSACTION_RETRY_DEAD_LETTER:true}
+      retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:org.springframework.web.client.ResourceAccessException:true}
   async.configurations:
     default:
       core-pool-size: ${ASYNC_CORE_POOL_SIZE:5}

@@ -96,7 +96,7 @@ class TransactionProcessorParticipantTest {
   private AbstractTransactionHandler routableHandler;
 
   private final ParticipantPoolConfiguration config =
-      new ParticipantPoolConfiguration(1, 100, 100, 100, 100, 2000, "test");
+      new ParticipantPoolConfiguration(100, 2000);
 
   private TransactionProcessorParticipant participant;
 

@@ -39,7 +39,7 @@ class CorrelationRegistryTest {
   // flightPool=100 (pending capacity), flightQueueTimeOut=5000 / messageQueueTimeOut=5000 —
   // long enough that write-expiry never fires mid-test
   private final ParticipantPoolConfiguration config =
-      new ParticipantPoolConfiguration(1, 100, 100, 100, 5000, 5000, "test");
+      new ParticipantPoolConfiguration(5000, 5000);
 
   @BeforeEach
   void setUp() {
@@ -117,7 +117,7 @@ class CorrelationRegistryTest {
     void complete_afterFlightWindowLapses_returnsLateResponse() {
       // short real-timeout window (30ms), long grace window (5s), no cancel
       ParticipantPoolConfiguration shortFlight =
-          new ParticipantPoolConfiguration(1, 100, 100, 100, 30, 5000, "test");
+          new ParticipantPoolConfiguration(30, 5000);
       when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
           .thenReturn(shortFlight);
       CorrelationRegistry reg = new CorrelationRegistry(participantConfigurationProperties);
@@ -161,20 +161,28 @@ class CorrelationRegistryTest {
   }
 
   @Nested
-  @DisplayName("capacity backstop")
-  class CapacityBackstop {
+  @DisplayName("real-timeout window (TTL only, never size)")
+  class RealTimeoutWindow {
 
     @Test
-    @DisplayName("evicts an un-answered pending future exceptionally when flight capacity is exceeded")
-    void register_overCapacity_evictsPendingExceptionally() {
-      // flightPool = 100 → registering well past it forces window-TinyLFU eviction
-      CompletableFuture<IsoMessage> first = registry.register(correlationId("K00000"));
-      for (int i = 1; i <= 400; i++) {
-        registry.register(correlationId(String.format("K%05d", i)));
-      }
+    @DisplayName("registering far past flightPool does not evict an earlier pending future")
+    void pendingFuture_notEvictedBySize() {
+      // long flight window so nothing lapses by TTL during the test
+      ParticipantPoolConfiguration longFlight =
+          new ParticipantPoolConfiguration(5000, 5000);
+      when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
+          .thenReturn(longFlight);
+      CorrelationRegistry reg = new CorrelationRegistry(participantConfigurationProperties);
 
-      await().atMost(Duration.ofSeconds(3))
-          .untilAsserted(() -> assertThat(first).isCompletedExceptionally());
+      CompletableFuture<IsoMessage> first = reg.register(correlationId("K00000"));
+      for (int i = 1; i <= 500; i++) {
+        reg.register(correlationId(String.format("K%05d", i)));
+      }
+      await().pollDelay(Duration.ofMillis(150)).atMost(Duration.ofSeconds(1)).until(() -> true);
+
+      assertThat(first)
+          .as("size never evicts a legitimate in-flight correlation")
+          .isNotDone();
     }
   }
 

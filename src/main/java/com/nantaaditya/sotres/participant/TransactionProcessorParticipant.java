@@ -64,13 +64,14 @@ public class TransactionProcessorParticipant
   private final Tracer tracer;
   private final Executor isoTransactionExecutor;
   private final Semaphore inFlightBulkhead;
+  // How long a transaction waits at the door for a bulkhead permit before it is shed with DE39=96.
+  // Set to flightQueueTimeOut (the transaction's whole life budget): waiting longer is pointless
+  // (it would be dead anyway), waiting less would shed transactions that still had time to finish.
   private final long inFlightAcquireTimeoutMs;
   private final IsoMessageProperties isoMessageProperties;
   private final ClientProperties clientProperties;
   private final List<String> responseRegistrySelectors;
 
-  // Spring resolves the executor/bulkhead via the @Qualifier + @Lazy proxies
-  // (both registered on ApplicationReadyEvent); tests pass them positionally.
   public TransactionProcessorParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler> transactionHandlers,
       IsoMessageLoggerHelper isoMessageLoggerHelper, IsoFieldHelper isoFieldHelper,
@@ -92,8 +93,7 @@ public class TransactionProcessorParticipant
     this.clientProperties = clientProperties;
     this.isoTransactionExecutor = isoTransactionExecutor;
     this.inFlightBulkhead = inFlightBulkhead;
-    this.inFlightAcquireTimeoutMs =
-        participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).flightQueueTimeOut();
+    this.inFlightAcquireTimeoutMs = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION).flightQueueTimeOut();
 
     this.responseRegistrySelectors = ConfigGroup.getList(
         this.systemPropertiesService,
@@ -132,11 +132,10 @@ public class TransactionProcessorParticipant
       }
 
       // hand the transaction off the Netty event loop onto a (virtual) worker thread
-      isoTransactionExecutor.execute(
-          () -> handleTransaction(ctx, isoMessage, requestContext, observation, span, mdc));
+      isoTransactionExecutor.execute(() -> handleTransaction(ctx, isoMessage, requestContext, observation, span, mdc));
     }
 
-    log.info(AppLogMessage.message("#Transaction - message with RRN {} processed", IsoFieldHelper.getField(isoMessage, 37)));
+    log.info(AppLogMessage.message("#Transaction - message with RRN {} received", IsoFieldHelper.getField(isoMessage, 37)));
     return false;
   }
 
@@ -153,13 +152,15 @@ public class TransactionProcessorParticipant
       isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
 
       Optional<AbstractTransactionHandler> maybeHandler = findTransactionHandler(requestContext);
-      participantContext.onUpdate(ctx, isoMessage, maybeHandler.orElse(null), requestContext, observation);
 
       if (maybeHandler.isEmpty()) {
         log.warn(AppLogMessage.message("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector()));
+        participantContext.onUpdate(ctx, isoMessage, null, requestContext, observation);
         isoFieldHelper.sendResponseWithObservation(participantContext, IsoResponseCode.UNABLE_TO_ROUTE_TRANSACTION.getCode(), null);
         return;
       }
+
+      participantContext.onUpdate(ctx, isoMessage, maybeHandler.get(), requestContext, observation);
 
       acquired = inFlightBulkhead.tryAcquire(inFlightAcquireTimeoutMs, TimeUnit.MILLISECONDS);
       if (!acquired) {
@@ -176,13 +177,13 @@ public class TransactionProcessorParticipant
           participantContext.getRequestContext()
       );
       participantContext.onResponse(responseContext);
-      senderProtocolStrategy.handleResponse(participantContext);                         // writes the 0210
+      senderProtocolStrategy.handleResponse(participantContext);                         // writes ISO response
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       senderProtocolStrategy.handleError(participantContext, e);
-    } catch (Throwable throwable) {
-      senderProtocolStrategy.handleError(participantContext, throwable);
+    } catch (Exception exception) {
+      senderProtocolStrategy.handleError(participantContext, exception);
     } finally {
       if (acquired) {
         inFlightBulkhead.release();

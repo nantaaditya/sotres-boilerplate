@@ -1,7 +1,5 @@
 package com.nantaaditya.sotres.properties.embedded;
 
-import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 public record ClientConfiguration(
@@ -14,14 +12,6 @@ public record ClientConfiguration(
     int clientConnectTimeOut,
     int clientReadTimeOut,
     int clientWriteTimeOut,
-    TimeUnit timeUnit,
-    RetryConfiguration retryConfiguration
+    TimeUnit timeUnit
 ) {
-
-  public boolean isNeedRetryable() {
-    return Optional.ofNullable(this)
-        .map(ClientConfiguration::retryConfiguration)
-        .filter(Objects::nonNull)
-        .isPresent();
-  }
 }

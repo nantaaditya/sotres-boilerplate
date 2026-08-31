@@ -244,7 +244,7 @@ class EnhancedIsoClientTest {
 
     private CorrelationRegistry realRegistry(int flightMs, int graceMs) {
       when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
-          .thenReturn(new ParticipantPoolConfiguration(1, 100, 100, 100, flightMs, graceMs, "test"));
+          .thenReturn(new ParticipantPoolConfiguration(flightMs, graceMs));
       return new CorrelationRegistry(participantConfigurationProperties);
     }
 
@@ -313,7 +313,7 @@ class EnhancedIsoClientTest {
     @DisplayName("CALLBACK: a response after the flight window lapses (no cancel) is LATE_RESPONSE")
     void sendWithCallback_lateResponse_isLate() throws Exception {
       when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
-          .thenReturn(new ParticipantPoolConfiguration(1, 100, 100, 100, 40, 5000, "test"));
+          .thenReturn(new ParticipantPoolConfiguration(40, 5000));
       CorrelationRegistry registry = new CorrelationRegistry(participantConfigurationProperties);
       when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
       TestClient client = new TestClient(new IsoClientConfigurationRequest(

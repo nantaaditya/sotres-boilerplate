@@ -6,6 +6,7 @@ import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.LogProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
+import com.nantaaditya.sotres.properties.RetryProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -19,7 +20,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     ClientProperties.class,
     IsoMessageProperties.class,
     LogProperties.class,
-    ParticipantConfigurationProperties.class
+    ParticipantConfigurationProperties.class,
+    RetryProperties.class
 })
 @EnableScheduling
 @EnableAsync

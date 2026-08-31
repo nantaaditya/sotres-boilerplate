@@ -9,11 +9,15 @@ import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 @Log4j2
 @Service
+@RequiredArgsConstructor
 public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
   private final SystemPropertiesRepository systemPropertiesRepository;
@@ -21,11 +25,11 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
   // [ConfigGroup: [propertyId: propertyValue]]
   private final Map<ConfigGroup, Map<String, String>> PROPERTY_COLLECTION_MAP = new ConcurrentHashMap<>();
 
-  public SystemPropertiesServiceImpl(SystemPropertiesRepository systemPropertiesRepository) {
-    this.systemPropertiesRepository = systemPropertiesRepository;
-    onStart();
-  }
-
+  /**
+   * Warm the in-memory routing cache once the context is up — never from the constructor, so a
+   * slow or unavailable database does not block bean creation / application start.
+   */
+  @EventListener(ApplicationReadyEvent.class)
   public void onStart() {
     try {
       systemPropertiesRepository.findAll().forEach(this::loadSystemProperties);

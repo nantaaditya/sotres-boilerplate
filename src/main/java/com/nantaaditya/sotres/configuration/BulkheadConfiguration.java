@@ -50,14 +50,14 @@ public class BulkheadConfiguration
       return;
     }
 
-    properties.configurations().forEach((key, config) -> registry.registerBeanDefinition(
-        key + POSTFIX_BEAN_NAME, bulkheadDefinition(config)));
+    properties.configurations().forEach((key, config) ->
+        registry.registerBeanDefinition(key + POSTFIX_BEAN_NAME, bulkheadDefinition(config)));
 
     log.debug(AppLogMessage.message("#Bulkhead - bean {} created",
         properties.getBeanNames(POSTFIX_BEAN_NAME)));
   }
 
-  private static RootBeanDefinition bulkheadDefinition(BulkheadPoolConfiguration config) {
+  private RootBeanDefinition bulkheadDefinition(BulkheadPoolConfiguration config) {
     return new RootBeanDefinition(Semaphore.class,
         () -> new Semaphore(config.permits(), config.fair()));
   }

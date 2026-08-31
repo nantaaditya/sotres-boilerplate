@@ -43,4 +43,5 @@ architecture-map.html
 
 # local-only working docs (not committed; review manually)
 docs/REFACTOR_PLAN.md
+docs/RETRY_REFACTOR_PLAN.md
 CLAUDE.md

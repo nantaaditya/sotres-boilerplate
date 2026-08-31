@@ -32,6 +32,7 @@ Before deploying to production, verify:
 - [ ] `TRACING_SAMPLING_PROBABILITY` is reduced from `1.0` (e.g. `0.1`)
 - [ ] `ISO8583_HOST` / `ISO8583_PORT` point to the production ISO8583 host
 - [ ] `TRANSACTION_CLIENT_HOSTNAME` points to the production REST downstream
+- [ ] `TRANSACTION_RETRY_MAX_ATTEMPT` stays `1` unless the downstream is idempotent on `x-request-id` (RRN); if raised, `TRANSACTION_RETRYABLE_EXCEPTIONS` is scoped and `dead_letter_process` rows have a drainer (no concrete `RetryProcessorService` ships)
 - [ ] `ISO8583_MASKING_ENABLED` is `true` and `SENSITIVE_FIELD` covers every PAN/PII field name
 
 ---
@@ -140,9 +141,27 @@ Sizes the virtual-thread executor + `CorrelationRegistry` windows for inbound IS
 | `TRANSACTION_CLIENT_READ_TIMEOUT`     | Socket read timeout                                                   | Long (ms) | `10000`                                                            | No       |             |               |            |       |
 | `TRANSACTION_CLIENT_WRITE_TIMEOUT`    | Socket write timeout                                                  | Long (ms) | `10000`                                                            | No       |             |               |            |       |
 | `TRANSACTION_CLIENT_TIMEUNIT`         | Unit for the timeout values above                                     | String    | `MILLISECONDS`                                                     | No       |             |               |            | `java.util.concurrent.TimeUnit` name |
-| `TRANSACTION_RETRY_MAX_ATTEMPT`       | Retry attempts on a retryable failure                                 | Integer   | `1`                                                               | No       |             |               |            |       |
-| `TRANSACTION_RETRY_MIN_BACK_OFF`      | Backoff before a retry                                                | Long (ms) | `500`                                                             | No       |             |               |            |       |
-| `TRANSACTION_RETRYABLE_EXCEPTIONS`    | Exception→retryable map                                               | String    | `org.springframework.web.client.ResourceAccessException:true`      | No       |             |               |            | Comma-separated `FQCN:boolean` pairs |
+
+### Retry (`apps.retry.configurations.transaction`)
+
+Backs a `org.springframework.retry.support.RetryTemplate` (classic `spring-retry`) wired into
+`RestSender.executeWithRetry`.
+
+> ⚠️ **Retry is off by default (`max-attempt = 1`).** The default retryable set is
+> `ResourceAccessException`, which includes **read timeouts** — where the downstream may already
+> have processed the request. Only raise `TRANSACTION_RETRY_MAX_ATTEMPT` above `1` if the
+> downstream service is **idempotent on `x-request-id` (the RRN)**; otherwise a retried
+> authorisation/capture can double-charge.
+
+| Variable                              | Description                                                             | Type      | Default                                                             | Required | Sensitivity | Nonprod Value | Prod Value | Notes |
+|---------------------------------------|-----------------------------------------------------------------------|-----------|-------------------------------------------------------------------|----------|-------------|---------------|------------|-------|
+| `TRANSACTION_RETRY_TYPE`              | Backoff strategy                                                      | Enum      | `EXPONENTIAL_RANDOM`                                              | No       |             |               |            | `FIXED` \| `EXPONENTIAL` \| `EXPONENTIAL_RANDOM` \| `UNIFORM_RANDOM` |
+| `TRANSACTION_RETRY_MAX_ATTEMPT`       | Total executions (incl. the first)                                   | Integer   | `1`                                                              | No       |             |               | `1`        | `1` = one call, no retry. Raise only for an idempotent downstream |
+| `TRANSACTION_RETRY_DEAD_LETTER`       | Persist an exhausted call to `dead_letter_process` (else log only)   | Boolean   | `true`                                                            | No       |             |               |            | No row is ever written when `max-attempt = 1` |
+| `TRANSACTION_RETRY_INITIAL_INTERVAL`  | First backoff interval / fixed period / uniform min                  | Long (ms) | `500`                                                            | No       |             |               |            |       |
+| `TRANSACTION_RETRY_MULTIPLIER`        | Exponential growth factor                                            | Double    | `2.0`                                                            | No       |             |               |            | `EXPONENTIAL` / `EXPONENTIAL_RANDOM` only |
+| `TRANSACTION_RETRY_MAX_INTERVAL`      | Backoff cap / uniform max                                            | Long (ms) | `10000`                                                          | No       |             |               |            |       |
+| `TRANSACTION_RETRYABLE_EXCEPTIONS`    | Exception→retryable map                                              | String    | `org.springframework.web.client.ResourceAccessException:true`     | No       |             |               |            | Comma-separated `FQCN:boolean` pairs; `true` = whitelist, `false` = blacklist; subclass-aware. Empty whitelist ⇒ retry on any exception |
 
 ---
 

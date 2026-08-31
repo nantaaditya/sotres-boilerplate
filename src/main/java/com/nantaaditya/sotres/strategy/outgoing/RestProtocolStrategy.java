@@ -17,6 +17,8 @@ import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.ReadTimeoutException;
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import lombok.extern.log4j.Log4j2;
@@ -24,6 +26,21 @@ import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+/**
+ * Forwards an ISO8583 transaction to the downstream REST backend via {@link TransactionClient}
+ * (blocking {@code RestClient} on a virtual thread) and maps the JSON reply back onto the 0210.
+ * Selected when {@code iso8583.configuration.outgoing-protocol=REST}.
+ *
+ * <p>Error contract ({@link #handleError}):
+ * <ul>
+ *   <li><b>timeout</b> (connect/read) — <b>no ISO reply is sent.</b> The downstream may have
+ *       processed the request, so the acquirer/switch must drive the reversal rather than the
+ *       gateway guessing a decline.</li>
+ *   <li><b>other {@link TransactionException}</b> — reply with DE39 = {@code 96}
+ *       ({@link IsoResponseCode#SYSTEM_MALFUNCTION}).</li>
+ *   <li><b>anything else</b> — logged, no ISO reply.</li>
+ * </ul>
+ */
 @Log4j2
 @Component
 @ConditionalOnProperty(prefix = "iso8583.configuration", name = "outgoing-protocol", havingValue = "REST")
@@ -55,8 +72,8 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
       ResponseContext responseContext = transactionClient.send(requestContext);
       tracerHelper.setBaggage(HeaderConstant.REQUEST_ID.getHeader(), requestContext.getRrn());
       return responseContext;
-    } catch (Throwable throwable) {
-      throw translateError(requestContext, throwable);
+    } catch (Exception exception) {
+      throw translateError(requestContext, exception);
     }
   }
 
@@ -95,18 +112,39 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
   public void handleError(ParticipantContext ctx, Throwable throwable) {
     log.error(AppLogMessage.message("#Transaction - got exception").error(throwable));
 
-    if (throwable instanceof TransactionException e) {
-      // when timeout does nothing, will be reverse from switcher
-      if (e.getOriginalError() instanceof ReadTimeoutException || e.getOriginalError() instanceof TimeoutException) {
-        log.error(AppLogMessage.message("#Transaction - timeout occurred for RRN {}, no response",
-            IsoFieldHelper.getField(ctx.getIsoMessage(),37)).error(throwable));
-      } else {
-        isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
-      }
-    } else {
-      // when unknown error does nothing, will be reverse from switcher
+    if (!(throwable instanceof TransactionException e)) {
+      // unknown error: no ISO response, the acquirer/switch drives the reversal
       log.error(AppLogMessage.message("#Transaction - skipping unknown exception").error(throwable));
+      return;
     }
+
+    if (isTimeout(e.getOriginalError())) {
+      // no ISO response on timeout: the downstream may have processed the request, so the
+      // acquirer must reverse rather than us guessing a decline
+      log.error(AppLogMessage.message(
+          "#Transaction - timeout for RRN {}, no ISO response sent (acquirer reverses)",
+          IsoFieldHelper.getField(ctx.getIsoMessage(), 37)).error(throwable));
+      return;
+    }
+
+    isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
+  }
+
+  /**
+   * Walks the cause chain: a {@code RestClient} timeout surfaces as {@code ResourceAccessException}
+   * wrapping {@link HttpTimeoutException} / {@link SocketTimeoutException}, not the bare Netty
+   * {@link ReadTimeoutException} the reactive stack used to raise.
+   */
+  private static boolean isTimeout(Throwable throwable) {
+    for (Throwable t = throwable; t != null && t != t.getCause(); t = t.getCause()) {
+      if (t instanceof ReadTimeoutException
+          || t instanceof TimeoutException
+          || t instanceof HttpTimeoutException
+          || t instanceof SocketTimeoutException) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private String mappingResponseCode(String responseCode) {

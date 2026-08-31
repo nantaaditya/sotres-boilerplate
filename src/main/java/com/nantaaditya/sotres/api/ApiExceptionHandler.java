@@ -23,8 +23,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.validation.FieldError;
 import org.springframework.validation.method.ParameterValidationResult;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -96,6 +99,35 @@ public class ApiExceptionHandler {
         errors.put(errorKey, List.of("NotValid"));
       }
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
+      return new ErrorResult(errors, response);
+    });
+  }
+
+  @ResponseBody
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public Response<Object> methodArgumentNotValidException(MethodArgumentNotValidException ex) {
+    return toBaseErrorResponse(ex, error -> {
+      Map<String, List<String>> errors = new HashMap<>();
+      for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+        putEntry(errors, fieldError.getField(),
+            fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "NotValid");
+      }
+      if (errors.isEmpty()) {
+        errors.put("body", List.of("NotValid"));
+      }
+      Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
+      return new ErrorResult(errors, response);
+    });
+  }
+
+  @ResponseBody
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public Response<Object> httpMessageNotReadableException(HttpMessageNotReadableException ex) {
+    return toBaseErrorResponse(ex, error -> {
+      Map<String, List<String>> errors = Map.of("body", List.of("not readable"));
+      Response<Object> response = responseHelper.failed(ApiResponseCode.BAD_REQUEST, errors);
       return new ErrorResult(errors, response);
     });
   }

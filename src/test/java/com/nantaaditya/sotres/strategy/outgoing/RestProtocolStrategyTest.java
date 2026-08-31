@@ -152,6 +152,20 @@ class RestProtocolStrategyTest {
   }
 
   @Test
+  @DisplayName("handleError with a RestClient read timeout (ResourceAccessException) does not send response")
+  void handleError_withRestClientReadTimeout_doesNotSendResponse() {
+    org.springframework.web.client.ResourceAccessException timeout =
+        new org.springframework.web.client.ResourceAccessException("read timed out",
+            new java.net.http.HttpTimeoutException("request timed out"));
+    TransactionException ex = new TransactionException(timeout, requestContext);
+
+    strategy.handleError(participantCtx, ex);
+
+    verify(isoFieldHelper, never()).sendResponse(any(), any(), anyString());
+    verify(isoFieldHelper, never()).sendResponseWithObservation(any(), anyString(), any());
+  }
+
+  @Test
   @DisplayName("handleError with non-timeout TransactionException sends system malfunction code")
   void handleError_withOtherTransactionException_sendsMalfunctionCode() {
     TransactionException ex = new TransactionException(new RuntimeException("other"),

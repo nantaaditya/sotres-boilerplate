@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
+import com.nantaaditya.sotres.helper.RetryTemplateHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
@@ -44,6 +45,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -63,6 +65,9 @@ class TransactionClientTest {
   @Mock
   private JsltTransformationHelper jsltTransformationHelper;
 
+  @Mock
+  private RetryTemplateHelper retryTemplateHelper;
+
   private TransactionClient transactionClient;
 
   @BeforeEach
@@ -74,8 +79,7 @@ class TransactionClientTest {
         "http://localhost:" + wireMockServer.port(),
         50, 60000, 60000, 60000, 30000,
         5000, 30000, 30000,
-        TimeUnit.MILLISECONDS,
-        null
+        TimeUnit.MILLISECONDS
     );
 
     ClientProperties clientProperties = new ClientProperties();
@@ -86,9 +90,12 @@ class TransactionClientTest {
     objectMapper = new ObjectMapper();
     observationRegistry = TestObservationRegistry.create();
 
+    when(retryTemplateHelper.getRetryTemplate("transaction"))
+        .thenReturn(RetryTemplate.builder().maxAttempts(1).build());
+
     transactionClient = new TransactionClient(
         systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
-        clientProperties, observationRegistry);
+        clientProperties, retryTemplateHelper, observationRegistry);
     ReflectionTestUtils.setField(transactionClient, "applicationName", "test-app");
   }
 
@@ -402,8 +409,7 @@ class TransactionClientTest {
           "http://localhost:" + wireMockServer.port(),
           50, 60000, 60000, 60000, 30000,
           5000, 200, 30000,
-          TimeUnit.MILLISECONDS,
-          null
+          TimeUnit.MILLISECONDS
       );
       ClientProperties shortReadTimeoutProperties = new ClientProperties();
       Map<String, ClientConfiguration> configs = new HashMap<>();
@@ -412,7 +418,7 @@ class TransactionClientTest {
 
       TransactionClient shortTimeoutClient = new TransactionClient(
           systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
-          shortReadTimeoutProperties, observationRegistry);
+          shortReadTimeoutProperties, retryTemplateHelper, observationRegistry);
       ReflectionTestUtils.setField(shortTimeoutClient, "applicationName", "test-app");
 
       assertThatThrownBy(() -> shortTimeoutClient.send(buildRequest()))

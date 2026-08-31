@@ -36,7 +36,7 @@ back into an ISO8583 0210/0430/0810 reply.
 
 Secondary responsibilities:
 
-- **Dead-letter retry** — a persisted-and-retried scaffold (`dead_letter_process` + `AbstractRetryProcessorService`) kept as an extension point; the boilerplate ships **no producer and no concrete processor** — wire your own
+- **Outbound retry + dead-letter** — `RestSender.executeWithRetry` wraps the downstream call in a classic `spring-retry` `RetryTemplate` (`apps.retry.configurations.*`); on exhaustion `RestSenderRetryListener` persists a `dead_letter_process` row. The reprocessing side (`AbstractRetryProcessorService`) stays an extension point — ships **no concrete processor**
 - **Audit logging** — every HTTP request processed by the service is written to `event_logs`
 - **Runtime configuration** — all routing tables, acquirer maps, response mappings, and JSLT templates are stored in `system_properties` and can be reloaded at runtime without restart
 - **Network management** — sign-on, sign-off, and echo messages are handled and exposed as operational endpoints
@@ -118,6 +118,24 @@ synchronously. Compiled expressions are held in a Caffeine `Cache<String, Option
 sentinel and is cached like any other entry, so a mis-configured selector stops hitting the
 database on every message.
 
+**Bounded retry and dead-letter on the outbound call**
+
+`RestSender.executeWithRetry` wraps the downstream POST in a classic `spring-retry`
+`RetryTemplate`, one per `apps.retry.configurations.<name>` entry, built by
+`RetryTemplateConfiguration` and looked up through `RetryTemplateHelper`. The policy is a
+`SimpleRetryPolicy` (total attempts + subclass-aware whitelist/blacklist from
+`retryable-exceptions`) plus a `BackOffPolicy` chosen by `type` — jittered exponential by default,
+so a downstream outage does not turn into a synchronised retry storm across virtual threads. When
+the budget is exhausted, `RestSenderRetryListener` (registered on the template) reads the request
+metadata off the `RetryContext` and writes one fresh `dead_letter_process` row; the failure still
+propagates to `RestProtocolStrategy.handleError`, which sends DE39=96 (`SYSTEM_MALFUNCTION`) for a
+genuine downstream error but stays **silent on a timeout** — the downstream may have processed the
+request, so the acquirer/switch reverses rather than the gateway guessing a decline.
+
+Retry defaults to **off** (`max-attempt = 1`): the default retryable exception is a read timeout,
+which is exactly the "maybe processed" case, so retry is only safe when the downstream deduplicates
+on `x-request-id` (the RRN).
+
 **System properties cache**
 
 All routing and configuration data is held in a `ConcurrentHashMap`-backed in-memory map
@@ -156,7 +174,7 @@ src/main/java/com/nantaaditya/sotres/
 │   ├── HeaderFilter.java               # OncePerRequestFilter: body cache, context, observation
 │   ├── EventLogInterceptor.java        # HandlerInterceptor: writes the event_logs audit row
 │   └── ResponseHeaderInterceptor.java  # ResponseBodyAdvice: adds x-response-time
-├── listener/                           # Application lifecycle event handlers
+├── listener/                           # Log layouts + RestSenderRetryListener (dead-letter on retry exhaustion)
 ├── model/
 │   ├── constant/                       # ApiResponseCode, ConfigGroup, TemplateGroup enums
 │   ├── dto/                            # RequestContext, ResponseContext
@@ -200,14 +218,17 @@ The response template normalises the downstream reply into a `ResponseContext` t
 layer can translate to a wire response. Templates are compiled once on first use and cached; if no
 template is configured for a selector the raw object passes through as-is.
 
-### Dead-letter retry (extension point — not wired)
+### Dead-letter retry (producer wired; consumer is the extension point)
 
-The scaffold is in place: the `dead_letter_process` table, `DeadLetterProcessService`
-(`@Async void remove/retry`), the `AbstractRetryProcessorService` SPI, and the admin endpoints for
-purge + targeted retry by `processType` + `processName`. What the boilerplate does **not** ship is
-a producer (nothing writes `dead_letter_process` rows on a failed outgoing call) or a concrete
-`RetryProcessorService`. Wire both to activate it; `retry` runs a sequential loop on the async
-executor and marks rows `EXHAUSTED` at `max_retry`.
+The **producer is now live**: when an outbound `RestSender.executeWithRetry` call exhausts its
+`apps.retry.configurations.<name>` budget, `RestSenderRetryListener` writes a fresh
+`dead_letter_process` row (`status = NEW`, `retry_count = 0`, `max_retry` = the configured
+`max-attempt`, `payload` + `headers` + `retry_histories` captured). The rest of the scaffold —
+the table, `DeadLetterProcessService` (`@Async void remove/retry`), the
+`AbstractRetryProcessorService` SPI, and the admin endpoints for purge + targeted retry by
+`processType` + `processName` — is unchanged. What the boilerplate still does **not** ship is a
+concrete `RetryProcessorService` (the consumer): register one to actually reprocess the rows;
+`retry` runs a sequential loop on the async executor and marks rows `EXHAUSTED` at `max_retry`.
 
 ### HTTP request audit log
 
@@ -476,7 +497,23 @@ All values are injectable via environment variable. Full reference: [`docs/ENVIR
 | `CLIENT_REGISTRY_TYPE` | `CALLBACK` | Response correlation mode (`CALLBACK` or `RESPONSE`) |
 | `TRANSACTION_CLIENT_HOSTNAME` | `http://localhost:8080` | Downstream REST base URL |
 | `TRANSACTION_CLIENT_READ_TIMEOUT` | `10000` | `RestClient` read timeout (ms) |
-| `TRANSACTION_RETRY_MAX_ATTEMPT` | `1` | Max retry attempts on `ResourceAccessException` |
+
+### Outbound Retry (`apps.retry.configurations.transaction`)
+
+> ⚠️ Retry is **off by default** (`max-attempt = 1`). The default retryable set is
+> `ResourceAccessException`, which includes read timeouts — where the downstream may already have
+> processed the request. Raise `TRANSACTION_RETRY_MAX_ATTEMPT` only if the downstream is
+> **idempotent on `x-request-id` (the RRN)**, or a retried auth/capture can double-charge.
+
+| Variable | Default | Description |
+|---|---|---|
+| `TRANSACTION_RETRY_TYPE` | `EXPONENTIAL_RANDOM` | Backoff strategy: `FIXED` / `EXPONENTIAL` / `EXPONENTIAL_RANDOM` / `UNIFORM_RANDOM` |
+| `TRANSACTION_RETRY_MAX_ATTEMPT` | `1` | Total executions incl. the first (`1` = no retry) |
+| `TRANSACTION_RETRY_DEAD_LETTER` | `true` | Persist an exhausted call to `dead_letter_process` (else log only); never written when `max-attempt = 1` |
+| `TRANSACTION_RETRY_INITIAL_INTERVAL` | `500` | First backoff / fixed period / uniform min (ms) |
+| `TRANSACTION_RETRY_MULTIPLIER` | `2.0` | Exponential growth factor |
+| `TRANSACTION_RETRY_MAX_INTERVAL` | `10000` | Backoff cap / uniform max (ms) |
+| `TRANSACTION_RETRYABLE_EXCEPTIONS` | `org.springframework.web.client.ResourceAccessException:true` | `FQCN:boolean` pairs — `true` whitelist, `false` blacklist; subclass-aware |
 
 ### Logging
 

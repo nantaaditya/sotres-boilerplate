@@ -141,7 +141,7 @@ class IsoToRestE2eTest {
   }
 
   @Test
-  @DisplayName("0200 downstream timeout: 0210 carries DE39=96 (system malfunction)")
+  @DisplayName("0200 downstream timeout: no 0210 is sent — the acquirer/switch drives the reversal")
   void downstreamTimeout() throws InterruptedException {
     DOWNSTREAM.stubFor(post(urlEqualTo("/api/transaction"))
         .willReturn(aResponse()
@@ -152,15 +152,14 @@ class IsoToRestE2eTest {
     String rrn = "RRN000000003";
     ISO_HOST.send(IsoMessages.authRequest("4111111111111111", "970000", 150000, nextStan(), rrn, "E001"));
 
-    // The RestClient read timeout surfaces as ResourceAccessException (not a raw
-    // ReadTimeoutException), so RestProtocolStrategy.handleError takes the
-    // non-timeout branch and answers with SYSTEM_MALFUNCTION rather than
-    // staying silent for a switch-driven reversal.
+    // The RestClient read timeout (1500ms client vs 4000ms delay) surfaces as
+    // ResourceAccessException -> HttpTimeoutException; RestProtocolStrategy.handleError
+    // recognises it as a timeout and stays silent. The downstream may have processed the
+    // auth, so the acquirer must reverse rather than the gateway guessing a decline.
     IsoMessage reply = ISO_HOST.awaitMessage(
-        m -> m.getType() == 0x210 && rrn.equals(str(m, 37)), Duration.ofSeconds(10));
+        m -> m.getType() == 0x210 && rrn.equals(str(m, 37)), Duration.ofSeconds(4));
 
-    assertThat(reply).as("0210 reply").isNotNull();
-    assertThat(str(reply, 39)).as("DE39 response code").isEqualTo("96");
+    assertThat(reply).as("no 0210 on downstream timeout").isNull();
   }
 
   @Test
