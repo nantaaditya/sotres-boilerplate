@@ -43,7 +43,7 @@ public class IsoMessageLoggerHelper {
         }
       }
 
-      return new JsonLogIsoMessage(mti, direction, dataElements);
+      return new JsonLogIsoMessage(direction, mti, dataElements);
     } catch (Exception e) {
       log.error(AppLogMessage.message("#Log - failed to serialize ISO8583 message. with message : {}", e.getMessage()).error(e));
       return null;
