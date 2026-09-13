@@ -1,7 +1,7 @@
 # Environment Variables Reference
 
 > Auto-generated from `src/main/resources/application.yml`  
-> Last updated: 2026-09-03
+> Last updated: 2026-09-13
 
 **Runtime:** Spring Boot 3.5.16 · Java 25 · servlet (Tomcat) + virtual threads
 
@@ -193,12 +193,13 @@ Before deploying to production, verify:
 
 ---
 
-## 12. Request-Context Cache Configuration
+## 12. Cache Configuration
 
 | Variable | Description | Type | Default | Required | Sensitivity | Nonprod Value | Prod Value | Notes |
 |----------|-------------|------|---------|----------|-------------|---------------|------------|-------|
 | `CONTEXT_CACHE_TTL_SECONDS` | Write-expiry TTL for `ContextHelper`'s per-request `ContextDTO` cache | Integer | `60` | No | | | | Entries are removed explicitly by `ContextHelper.cleanUp` on every request; this TTL is only a backstop against a leaked entry on a path that skips cleanup. Uncapped (no `maximumSize`) — see `CacheConfiguration` Javadoc |
 | `ADDITIONAL_CONTEXT_CACHE_TTL_SECONDS` | Write-expiry TTL for `ContextHelper`'s per-request additional-error-detail cache | Integer | `60` | No | | | | Same backstop rationale as `CONTEXT_CACHE_TTL_SECONDS`, separate named cache |
+| `JSLT_CACHE_SIZE` | Maximum number of compiled JSLT expressions held in `JsltTransformationHelper`'s cache | Integer | `100` | No | | | | Size-bounded (LRU), no TTL — entries are evicted explicitly via `evictExpression`/`evictAll` (the `/internal-api/jslt/_reload*` endpoints), not by time |
 
 ---
 
@@ -253,4 +254,4 @@ Java virtual threads (Project Loom) are **always enabled** in this application:
 
 ---
 
-**Generated:** 2026-09-03 | **Stack:** Spring Boot 3.5.16 · Java 25 · servlet (Tomcat) + virtual threads
+**Generated:** 2026-09-13 | **Stack:** Spring Boot 3.5.16 · Java 25 · servlet (Tomcat) + virtual threads
