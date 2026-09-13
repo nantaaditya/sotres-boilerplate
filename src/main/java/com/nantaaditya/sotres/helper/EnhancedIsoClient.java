@@ -52,7 +52,15 @@ public class EnhancedIsoClient
     this.setConfigurer(new ConnectorConfigurer<ClientConfiguration, Bootstrap>() {
       @Override
       public void configurePipeline(ChannelPipeline pipeline, ClientConfiguration configuration) {
-        pipeline.addLast(IsoCallbackConstant.CALLBACK_NAME,
+        // Iso8583ChannelInitializer.initChannel() adds the framework's own message-listener
+        // dispatcher (messageHandler -- fans out to TransactionProcessorParticipant et al.) via
+        // addLast BEFORE calling this configurer. addLast here would therefore run this handler
+        // AFTER that dispatcher for every inbound message: TransactionProcessorParticipant would
+        // read CALLBACK_ATTRIBUTE one message too late (stale/empty), never the current message's
+        // real classification. Insert right after the decoder instead, so classification always
+        // happens before any participant sees the message. "iso8583Decoder" is the fixed name
+        // Iso8583ChannelInitializer registers the decoder under.
+        pipeline.addAfter("iso8583Decoder", IsoCallbackConstant.CALLBACK_NAME,
             // classify the inbound response (success / late / orphan / external) and deliver
             // it to any waiting CorrelationRegistry future
             new IsoCallbackResponseHandler(

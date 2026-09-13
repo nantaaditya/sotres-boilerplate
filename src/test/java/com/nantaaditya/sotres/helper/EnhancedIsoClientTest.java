@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
 import com.github.kpavlov.jreactive8583.iso.MessageFactory;
+import com.nantaaditya.sotres.model.constant.IsoCallbackConstant;
 import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
@@ -577,6 +578,34 @@ class EnhancedIsoClientTest {
 
       assertThatThrownBy(() -> client.sendWithCallback(request))
           .isInstanceOf(IllegalStateException.class);
+    }
+  }
+
+  @Nested
+  @DisplayName("pipeline wiring")
+  class PipelineWiring {
+
+    @Test
+    @DisplayName("configurePipeline inserts IsoCallbackResponseHandler right after the decoder, "
+        + "ahead of the framework's message-listener dispatcher")
+    void configurePipeline_insertsCallbackHandlerBeforeMessageDispatcher() {
+      TestClient client = buildClient();
+      io.netty.channel.embedded.EmbeddedChannel channel = new io.netty.channel.embedded.EmbeddedChannel();
+      // mirrors Iso8583ChannelInitializer.initChannel(): decoder added first, then (eventually)
+      // the framework's own messageHandler dispatcher, THEN this configurer runs.
+      channel.pipeline().addLast("iso8583Decoder", new io.netty.channel.ChannelInboundHandlerAdapter());
+      channel.pipeline().addLast("messageHandler", new io.netty.channel.ChannelInboundHandlerAdapter());
+
+      client.getConfigurer().configurePipeline(channel.pipeline(), ClientConfiguration.newBuilder().build());
+
+      java.util.List<String> names = channel.pipeline().names();
+      int decoderIndex = names.indexOf("iso8583Decoder");
+      int callbackIndex = names.indexOf(IsoCallbackConstant.CALLBACK_NAME);
+      int dispatcherIndex = names.indexOf("messageHandler");
+
+      assertThat(callbackIndex).as("callback handler position").isEqualTo(decoderIndex + 1);
+      assertThat(callbackIndex).as("callback handler must run before the message dispatcher")
+          .isLessThan(dispatcherIndex);
     }
   }
 }

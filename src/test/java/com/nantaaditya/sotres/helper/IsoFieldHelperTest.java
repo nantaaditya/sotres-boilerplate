@@ -12,6 +12,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.kpavlov.jreactive8583.iso.J8583MessageFactory;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
+import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.TransactionException;
@@ -553,6 +554,43 @@ class IsoFieldHelperTest {
 
       verify(observation).lowCardinalityKeyValue("error", "java.lang.IllegalStateException");
       verify(observation).error(wrapper);
+    }
+
+    @Test
+    @DisplayName("callback-mode response: skips writing an ISO reply back to the channel")
+    void sendResponseWithObservation_callbackResponse_skipsWriteAndFlush() {
+      RequestContext callbackRequestContext = new RequestContext();
+      callbackRequestContext.setCallbackResponse(true);
+      participantContext.onUpdate(channelHandlerContext, isoMessage, null, callbackRequestContext, observation);
+
+      isoFieldHelper.sendResponseWithObservation(participantContext, "00", null);
+
+      verify(channelHandlerContext, never()).writeAndFlush(any());
+      verify(isoMessageLoggerHelper, never()).logIsoMessage(any());
+      verify(j8583MessageFactory, never()).createResponse(any());
+    }
+
+    @Test
+    @DisplayName("callback-mode response: still records the observation outcome")
+    void sendResponseWithObservation_callbackResponse_stillRecordsObservation() {
+      RequestContext callbackRequestContext = new RequestContext();
+      callbackRequestContext.setCallbackResponse(true);
+      participantContext.onUpdate(channelHandlerContext, isoMessage, null, callbackRequestContext, observation);
+
+      isoFieldHelper.sendResponseWithObservation(participantContext, "00", null);
+
+      verify(observation).lowCardinalityKeyValue("responseCode", "00");
+    }
+
+    @Test
+    @DisplayName("non-callback request context: writes ISO reply as before")
+    void sendResponseWithObservation_nonCallbackResponse_writesAndFlushesResponse() {
+      RequestContext plainRequestContext = new RequestContext();
+      participantContext.onUpdate(channelHandlerContext, isoMessage, null, plainRequestContext, observation);
+
+      isoFieldHelper.sendResponseWithObservation(participantContext, "96", null);
+
+      verify(channelHandlerContext).writeAndFlush(response);
     }
   }
 }

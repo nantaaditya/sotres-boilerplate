@@ -112,4 +112,48 @@ class RequestContextHelperTest {
     assertThat(context.getReversal().getOriginalMti()).isEqualTo("0200");
     assertThat(context.getReversal().getOriginalStan()).isEqualTo("123456");
   }
+
+  @Test
+  @DisplayName("create with SUCCESS sets callbackResponse (this inbound message is our own callback reply)")
+  void create_withSuccess_setsCallbackResponse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.SUCCESS);
+
+    assertThat(context.isCallbackResponse()).isTrue();
+  }
+
+  @Test
+  @DisplayName("create with LATE_RESPONSE sets callbackResponse")
+  void create_withLateResponse_setsCallbackResponse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.LATE_RESPONSE);
+
+    assertThat(context.isCallbackResponse()).isTrue();
+  }
+
+  @Test
+  @DisplayName("create with ORPHAN sets callbackResponse")
+  void create_withOrphan_setsCallbackResponse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.ORPHAN);
+
+    assertThat(context.isCallbackResponse()).isTrue();
+  }
+
+  @Test
+  @DisplayName("create with EXTERNAL_REQUEST leaves callbackResponse false (fresh switch-initiated request)")
+  void create_withExternalRequest_leavesCallbackResponseFalse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.EXTERNAL_REQUEST);
+
+    assertThat(context.isCallbackResponse()).isFalse();
+  }
+
+  @Test
+  @DisplayName("create with null category leaves callbackResponse false")
+  void create_withNullCategory_leavesCallbackResponseFalse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, null);
+
+    assertThat(context.isCallbackResponse()).isFalse();
+  }
 }

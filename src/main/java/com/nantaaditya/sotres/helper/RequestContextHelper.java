@@ -56,6 +56,13 @@ public class RequestContextHelper {
       context.setExternalRequest(true);
     }
 
+    // any non-null, non-EXTERNAL_REQUEST classification means IsoCallbackResponseHandler already
+    // matched this message as a reply to something we sent via EnhancedIsoClient — never a fresh
+    // switch-initiated request needing our own ISO reply.
+    if (isoCategory != null && isoCategory != IsoCategory.EXTERNAL_REQUEST) {
+      context.setCallbackResponse(true);
+    }
+
     return context;
   }
 }

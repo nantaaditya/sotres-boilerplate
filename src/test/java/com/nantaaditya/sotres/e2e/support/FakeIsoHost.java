@@ -74,6 +74,20 @@ public final class FakeIsoHost {
     return ch != null && ch.isActive();
   }
 
+  /**
+   * Closes the current client connection from the server side, forcing the application's
+   * {@code Iso8583Client} auto-reconnect (configured via {@code network.reconnect-interval}) to
+   * re-establish it. Useful when a test needs a fresh, per-connection pipeline handler (e.g.
+   * {@code IsoCallbackResponseHandler}) built after config that handler reads once, at connect
+   * time, has already been loaded -- see {@code CallbackModeE2eTest}.
+   */
+  public void disconnectClient() {
+    Channel ch = clientChannel.get();
+    if (ch != null) {
+      ch.close();
+    }
+  }
+
   /** Pushes a message to the connected application client. */
   public void send(IsoMessage message) throws InterruptedException {
     Channel ch = clientChannel.get();

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
+import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.RequestContext.Transaction;
@@ -305,6 +306,15 @@ public class IsoFieldHelper {
 
   public void sendResponseWithObservation(ParticipantContext context, String responseCode, Throwable throwable,
       Consumer<IsoMessage> responseConsumer) {
+    RequestContext requestContext = context.getRequestContext();
+    if (requestContext != null && requestContext.isCallbackResponse()) {
+      // this inbound message was already a reply to something we sent via EnhancedIsoClient
+      // (CALLBACK mode) — there is no one on the switch side waiting for a reply-to-a-reply.
+      log.debug(AppLogMessage.message("#Transaction - callback-mode response, skipping ISO reply"));
+      ObservationHelper.observeResponse(context.getObservation(), responseCode, throwable);
+      return;
+    }
+
     IsoMessage request = context.getIsoMessage();
     IsoMessage response = createResponse(request);
 

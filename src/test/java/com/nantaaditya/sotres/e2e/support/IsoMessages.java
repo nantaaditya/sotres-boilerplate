@@ -72,4 +72,30 @@ public final class IsoMessages {
     m.setValue(70, "301", IsoType.NUMERIC, 3);
     return m;
   }
+
+  /**
+   * 0210 reply carrying the same DE3/DE7/DE11/DE37/DE48 as {@code request}, so
+   * {@code CorrelationRegistry}/{@code IsoFieldHelper.getCorrelationId} matches it back to a
+   * request sent via {@code EnhancedIsoClient.sendWithCallback}.
+   */
+  public static IsoMessage callbackReply(IsoMessage request, String productIndicator, String responseCode) {
+    IsoMessage m = FACTORY.newMessage(0x210);
+    m.setValue(3, field(request, 3), IsoType.NUMERIC, 6);
+    // DE4/DE28/DE49: RequestContextHelper.create -> IsoFieldHelper.createTransaction NPEs
+    // (Double.parseDouble(null)) when DE4 is absent, same as IsoMessages.authRequest.
+    m.setValue(4, field(request, 4), IsoType.NUMERIC, 12);
+    m.setValue(7, field(request, 7), IsoType.NUMERIC, 10);
+    m.setValue(11, field(request, 11), IsoType.NUMERIC, 6);
+    m.setValue(28, field(request, 28), IsoType.LLVAR, 9);
+    m.setValue(37, field(request, 37), IsoType.ALPHA, 12);
+    String de48 = "PI" + String.format("%02d", productIndicator.length()) + productIndicator;
+    m.setValue(48, de48, IsoType.LLLVAR, 999);
+    m.setValue(49, field(request, 49), IsoType.ALPHA, 3);
+    m.setValue(39, responseCode, IsoType.ALPHA, 2);
+    return m;
+  }
+
+  private static String field(IsoMessage message, int field) {
+    return message.getField(field).toString();
+  }
 }
