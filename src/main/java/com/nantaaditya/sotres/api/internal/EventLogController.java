@@ -22,8 +22,7 @@ public class EventLogController extends BaseController {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<Response<Boolean>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
-    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
     eventLogService.remove(days);
-    return response;
+    return toResponse(responseHelper.success(Boolean.TRUE));
   }
 }

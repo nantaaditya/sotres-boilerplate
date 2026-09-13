@@ -14,8 +14,11 @@ import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
 import com.github.kpavlov.jreactive8583.iso.MessageFactory;
 import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
+import com.nantaaditya.sotres.model.constant.ObservationConstant;
 import com.nantaaditya.sotres.model.constant.RegistryType;
 import com.nantaaditya.sotres.model.dto.IsoClientConfigurationRequest;
+import com.nantaaditya.sotres.participant.TransactionResponseParticipant;
+import com.nantaaditya.sotres.properties.CacheProperties;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.embedded.ParticipantPoolConfiguration;
@@ -23,10 +26,20 @@ import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.tck.TestObservationRegistry;
+import io.micrometer.observation.tck.TestObservationRegistryAssert;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.Attribute;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,6 +68,14 @@ class EnhancedIsoClientTest {
   @Mock
   private TracerHelper tracerHelper;
   @Mock
+  private ObservationRegistry observationRegistry;
+  @Mock
+  private Tracer tracer;
+  @Mock
+  private Span span;
+  @Mock
+  private Tracer.SpanInScope spanInScope;
+  @Mock
   private ParticipantConfigurationProperties participantConfigurationProperties;
   @Mock
   private ClientProperties clientProperties;
@@ -68,6 +89,11 @@ class EnhancedIsoClientTest {
   private Channel channel;
   @Mock
   private ChannelFuture channelFuture;
+  @Mock
+  private ChannelHandlerContext ctx;
+  @Mock
+  @SuppressWarnings("rawtypes")
+  private Attribute callbackAttribute;
 
   /** exposes {@code setChannel} so tests can inject a (non-)writable channel without a real connection. */
   private static final class TestClient extends EnhancedIsoClient {
@@ -92,7 +118,8 @@ class EnhancedIsoClientTest {
         systemPropertiesService,
         tracerHelper,
         participantConfigurationProperties,
-        clientProperties
+        clientProperties,
+        observationRegistry
     ));
   }
 
@@ -100,6 +127,25 @@ class EnhancedIsoClientTest {
   void setUp() {
     lenient().when(correlationRegistry.register(any())).thenReturn(new CompletableFuture<>());
     lenient().when(isoFieldHelper.createResponse(request)).thenReturn(errorResponse);
+    // send() calls the static IsoFieldHelper.getIsoFeature(request), which unpacks DE48 (TLV) —
+    // an unstubbed getField(48) returns null and NPEs inside unpackTLV's raw.length() call.
+    lenient().when(request.getField(48)).thenReturn(isoValue("PI02QR"));
+
+    // send() must read a real Tracer/Span pair off tracerHelper — same collaborators
+    // TransactionResponseParticipant uses — so its iso.message observation is wired the same way.
+    lenient().when(tracerHelper.getTracer()).thenReturn(tracer);
+    lenient().when(tracer.withSpan(any())).thenReturn(spanInScope);
+    lenient().when(observationRegistry.isNoop()).thenReturn(true);
+    lenient().when(tracerHelper.startIsoObservation(any(), any())).thenAnswer(invocation -> {
+      ObservationRegistry registry = invocation.getArgument(1);
+      Observation observation = Observation.start(ObservationConstant.ISO_MESSAGE.getName(), registry);
+      return new IsoObservationContext(observation, span, new HashMap<>(), null);
+    });
+
+    // for CrossClassCorrelation: TransactionResponseParticipant.onMessage() reads the callback
+    // classification off ctx.channel().attr(...) — set upstream by IsoCallbackResponseHandler.
+    lenient().when(ctx.channel()).thenReturn(channel);
+    lenient().when(channel.attr(any())).thenReturn(callbackAttribute);
   }
 
   @Nested
@@ -209,25 +255,32 @@ class EnhancedIsoClientTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
+  private IsoValue<Object> isoValue(String value) {
+    return new IsoValue<>(IsoType.ALPHA, value, value.length());
+  }
+
+  /** request/response echo DE48/3/11/37/7 → same correlation id, distinct objects. */
+  private IsoMessage isoMsg(String stan) {
+    IsoMessage m = mock(IsoMessage.class);
+    lenient().when(m.getField(48)).thenReturn(isoValue("PI02QR"));
+    lenient().when(m.getField(3)).thenReturn(isoValue("000000"));
+    lenient().when(m.getField(11)).thenReturn(isoValue(stan));
+    lenient().when(m.getField(37)).thenReturn(isoValue("000000000009"));
+    lenient().when(m.getField(7)).thenReturn(isoValue("0615103045"));
+    return m;
+  }
+
+  private CorrelationRegistry realRegistry(int flightMs, int graceMs) {
+    when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
+        .thenReturn(new ParticipantPoolConfiguration(flightMs, graceMs));
+    return new CorrelationRegistry(participantConfigurationProperties, new SimpleMeterRegistry(),
+        new CaffeineCacheHelper(mock(CacheProperties.class)));
+  }
+
   @Nested
   @DisplayName("RESPONSE-mode response delivery (real CorrelationRegistry)")
   class ResponseDelivery {
-
-    @SuppressWarnings("unchecked")
-    private IsoValue<Object> isoValue(String value) {
-      return new IsoValue<>(IsoType.ALPHA, value, value.length());
-    }
-
-    /** request/response echo DE48/3/11/37/7 → same correlation id, distinct objects. */
-    private IsoMessage isoMsg(String stan) {
-      IsoMessage m = mock(IsoMessage.class);
-      lenient().when(m.getField(48)).thenReturn(isoValue("PI02QR"));
-      lenient().when(m.getField(3)).thenReturn(isoValue("000000"));
-      lenient().when(m.getField(11)).thenReturn(isoValue(stan));
-      lenient().when(m.getField(37)).thenReturn(isoValue("000000000009"));
-      lenient().when(m.getField(7)).thenReturn(isoValue("0615103045"));
-      return m;
-    }
 
     private TestClient responseClient(CorrelationRegistry registry) {
       when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
@@ -235,17 +288,12 @@ class EnhancedIsoClientTest {
           new InetSocketAddress("localhost", 5000),
           ClientConfiguration.newBuilder().build(),
           messageFactory, registry, isoFieldHelper, isoMessageLoggerHelper,
-          systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties));
+          systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
+          observationRegistry));
       when(channel.isWritable()).thenReturn(true);
       lenient().when(channel.writeAndFlush(any())).thenReturn(channelFuture);
       c.useChannel(channel);
       return c;
-    }
-
-    private CorrelationRegistry realRegistry(int flightMs, int graceMs) {
-      when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
-          .thenReturn(new ParticipantPoolConfiguration(flightMs, graceMs));
-      return new CorrelationRegistry(participantConfigurationProperties);
     }
 
     @Test
@@ -314,13 +362,15 @@ class EnhancedIsoClientTest {
     void sendWithCallback_lateResponse_isLate() throws Exception {
       when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
           .thenReturn(new ParticipantPoolConfiguration(40, 5000));
-      CorrelationRegistry registry = new CorrelationRegistry(participantConfigurationProperties);
+      CorrelationRegistry registry = new CorrelationRegistry(participantConfigurationProperties,
+          new SimpleMeterRegistry(), new CaffeineCacheHelper(mock(CacheProperties.class)));
       when(clientProperties.getRegistryType()).thenReturn(RegistryType.CALLBACK);
       TestClient client = new TestClient(new IsoClientConfigurationRequest(
           new InetSocketAddress("localhost", 5000),
           ClientConfiguration.newBuilder().build(),
           messageFactory, registry, isoFieldHelper, isoMessageLoggerHelper,
-          systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties));
+          systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
+          observationRegistry));
       when(channel.isWritable()).thenReturn(true);
       when(channel.writeAndFlush(any())).thenReturn(channelFuture);
       lenient().when(channelFuture.sync()).thenReturn(channelFuture);
@@ -333,6 +383,171 @@ class EnhancedIsoClientTest {
 
       await().pollDelay(Duration.ofMillis(120)).atMost(Duration.ofSeconds(1)).until(() -> true);
       assertThat(registry.complete(resp)).isEqualTo(IsoCategory.LATE_RESPONSE);
+    }
+  }
+
+  @Nested
+  @DisplayName("send() — iso.message observation lifecycle (matches TransactionResponseParticipant.onMessage())")
+  class ObservationLifecycle {
+
+    private TestObservationRegistry testObservationRegistry;
+
+    /** same wiring as ResponseDelivery.responseClient(), but with a real, assertable ObservationRegistry. */
+    private TestClient observedClient(CorrelationRegistry registry) {
+      testObservationRegistry = TestObservationRegistry.create();
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
+      TestClient c = new TestClient(new IsoClientConfigurationRequest(
+          new InetSocketAddress("localhost", 5000),
+          ClientConfiguration.newBuilder().build(),
+          messageFactory, registry, isoFieldHelper, isoMessageLoggerHelper,
+          systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
+          testObservationRegistry));
+      when(channel.isWritable()).thenReturn(true);
+      lenient().when(channel.writeAndFlush(any())).thenReturn(channelFuture);
+      c.useChannel(channel);
+      return c;
+    }
+
+    @Test
+    @DisplayName("a successful round trip starts AND stops one iso.message observation")
+    void send_success_stopsIsoMessageObservation() throws Exception {
+      CorrelationRegistry registry = realRegistry(5000, 5000);
+      TestClient client = observedClient(registry);
+      when(channelFuture.sync()).thenReturn(channelFuture);
+
+      IsoMessage req = isoMsg("990001");
+      IsoMessage resp = isoMsg("990001");
+
+      ExecutorService pool = Executors.newSingleThreadExecutor();
+      try {
+        Future<IsoMessage> sending = pool.submit(() -> client.send(req, Duration.ofSeconds(3)));
+        await().pollDelay(Duration.ofMillis(60)).atMost(Duration.ofSeconds(1)).until(() -> true);
+        registry.complete(resp);
+        sending.get(3, TimeUnit.SECONDS);
+      } finally {
+        pool.shutdownNow();
+      }
+
+      // this is the same assertion TransactionResponseParticipantTest makes for its own
+      // iso.message observation — proves the two classes' observations are wired the same way.
+      TestObservationRegistryAssert.assertThat(testObservationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.ISO_MESSAGE.getName())
+          .that()
+          .hasBeenStopped();
+    }
+
+    @Test
+    @DisplayName("negative: a timeout still stops the iso.message observation, marked as errored")
+    void send_timeout_stopsIsoMessageObservationAsErrored() throws Exception {
+      CorrelationRegistry registry = realRegistry(5000, 5000);
+      TestClient client = observedClient(registry);
+      when(channel.writeAndFlush(any())).thenReturn(channelFuture);
+      lenient().when(channelFuture.sync()).thenReturn(channelFuture);
+      lenient().when(isoFieldHelper.createResponse(any())).thenReturn(mock(IsoMessage.class));
+
+      IsoMessage req = isoMsg("990002");
+
+      client.send(req, Duration.ofMillis(80)); // no response ever delivered → caller's own get() times out
+
+      TestObservationRegistryAssert.assertThat(testObservationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.ISO_MESSAGE.getName())
+          .that()
+          .hasBeenStopped()
+          .hasError();
+    }
+
+    @Test
+    @DisplayName("negative: a downstream write failure still stops the iso.message observation, marked as errored")
+    void send_writeFails_stopsIsoMessageObservationAsErrored() throws Exception {
+      CorrelationRegistry registry = realRegistry(5000, 5000);
+      TestClient client = observedClient(registry);
+      when(channel.writeAndFlush(any())).thenReturn(channelFuture);
+      when(channelFuture.sync()).thenThrow(new RuntimeException("boom"));
+      lenient().when(isoFieldHelper.createResponse(any())).thenReturn(mock(IsoMessage.class));
+
+      client.send(isoMsg("990003"), Duration.ofMillis(80));
+
+      TestObservationRegistryAssert.assertThat(testObservationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.ISO_MESSAGE.getName())
+          .that()
+          .hasBeenStopped()
+          .hasError();
+    }
+  }
+
+  @Nested
+  @DisplayName("EnhancedIsoClient + TransactionResponseParticipant — iso.message observations correlate")
+  class CrossClassCorrelation {
+
+    private static final String RRN = "770099000001";
+
+    @Test
+    @DisplayName("client-side send() and participant-side onMessage() tag their iso.message "
+        + "observation with the same requestId (DE37/RRN) on the one app-wide ObservationRegistry")
+    void send_and_onMessage_shareSameRequestIdOnSharedRegistry() throws Exception {
+      // one shared TestObservationRegistry, exactly like the single ObservationRegistry bean
+      // both EnhancedIsoClient and TransactionResponseParticipant are wired to in production.
+      TestObservationRegistry sharedRegistry = TestObservationRegistry.create();
+      CorrelationRegistry correlation = realRegistry(5000, 5000);
+
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
+      TestClient client = new TestClient(new IsoClientConfigurationRequest(
+          new InetSocketAddress("localhost", 5000),
+          ClientConfiguration.newBuilder().build(),
+          messageFactory, correlation, isoFieldHelper, isoMessageLoggerHelper,
+          systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
+          sharedRegistry));
+      when(channel.isWritable()).thenReturn(true);
+      when(channel.writeAndFlush(any())).thenReturn(channelFuture);
+      when(channelFuture.sync()).thenReturn(channelFuture);
+      client.useChannel(channel);
+
+      TransactionResponseParticipant participant = new TransactionResponseParticipant(
+          systemPropertiesService, correlation, sharedRegistry, isoMessageLoggerHelper,
+          isoFieldHelper, tracerHelper, tracer, clientProperties, Runnable::run);
+
+      IsoMessage req = isoMsgWithRrn(RRN);
+      IsoMessage resp = isoMsgWithRrn(RRN);
+
+      ExecutorService pool = Executors.newSingleThreadExecutor();
+      try {
+        Future<IsoMessage> sending = pool.submit(() -> client.send(req, Duration.ofSeconds(3)));
+        await().pollDelay(Duration.ofMillis(60)).atMost(Duration.ofSeconds(1)).until(() -> true);
+
+        // NOTE: TransactionResponseParticipant.onMessage() does NOT itself resolve the
+        // CorrelationRegistry future (see the separately-flagged finding on
+        // TransactionResponseParticipantTest.onMessage_completesCorrelationAndReturnsFalse) — in
+        // production that's done by IsoCallbackResponseHandler, upstream in the same Netty
+        // pipeline, before onMessage() ever runs. Reproduce that ordering explicitly here so
+        // this test verifies observation correlation, not the separate completion gap.
+        correlation.complete(resp);
+        participant.onMessage(ctx, resp);
+
+        sending.get(3, TimeUnit.SECONDS);
+      } finally {
+        pool.shutdownNow();
+      }
+
+      // two DISTINCT iso.message observations (one per class) that correlate on the same
+      // business key — this codebase's actual correlation mechanism (ObservationHelper
+      // .createTransactionContext tags "requestId" = DE37/RRN), not a shared trace/span: each
+      // side calls TracerHelper.startIsoObservation independently with .setNoParent(), so the
+      // two observations are NOT part of the same trace.
+      TestObservationRegistryAssert.assertThat(sharedRegistry)
+          .hasNumberOfObservationsWithNameEqualTo(ObservationConstant.ISO_MESSAGE.getName(), 2)
+          .forAllObservationsWithNameEqualTo(ObservationConstant.ISO_MESSAGE.getName(),
+              context -> context.hasHighCardinalityKeyValue("requestId", RRN));
+    }
+
+    /** request/response echo DE48/3/11/37/7 → same correlation id, same RRN tag, distinct objects. */
+    private IsoMessage isoMsgWithRrn(String rrn) {
+      IsoMessage m = mock(IsoMessage.class);
+      lenient().when(m.getField(48)).thenReturn(isoValue("PI02QR"));
+      lenient().when(m.getField(3)).thenReturn(isoValue("000000"));
+      lenient().when(m.getField(11)).thenReturn(isoValue("770099"));
+      lenient().when(m.getField(37)).thenReturn(isoValue(rrn));
+      lenient().when(m.getField(7)).thenReturn(isoValue("0615103045"));
+      return m;
     }
   }
 

@@ -1,7 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
@@ -9,6 +8,8 @@ import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.embedded.ParticipantPoolConfiguration;
 import com.solab.iso8583.IsoMessage;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -61,19 +62,38 @@ public class CorrelationRegistry {
    * @param participantConfigurationProperties supplies the {@code transaction} pool timings;
    *     construction fails fast if {@code messageQueueTimeOut < flightQueueTimeOut}
    *     (see {@link ParticipantConfigurationProperties#getPool}).
+   * @param meterRegistry backs the {@code correlation.inflight}/{@code correlation.registered}
+   *     gauges below — both cache sizes, sampled on read, not push-updated.
    */
-  public CorrelationRegistry(ParticipantConfigurationProperties participantConfigurationProperties) {
+  public CorrelationRegistry(ParticipantConfigurationProperties participantConfigurationProperties,
+      MeterRegistry meterRegistry, CaffeineCacheHelper caffeineCacheHelper) {
     ParticipantPoolConfiguration pool = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION);
-    this.inFlights = createCache(pool.flightQueueTimeOut(), TimeUnit.MILLISECONDS,
+    this.inFlights = caffeineCacheHelper.createCache(pool.flightQueueTimeOut(), TimeUnit.MILLISECONDS,
         caffeine -> caffeine.removalListener((key, future, cause) -> {
           if (cause == RemovalCause.EXPIRED && future != null && !future.isDone()) {
-            future.completeExceptionally(new TimeoutException(
-                "message [" + key + "] timed out before a response arrived"));
+            future.completeExceptionally(
+                new TimeoutException("message [" + key + "] timed out before a response arrived"));
           }
         }));
 
-    this.registered = createCache(pool.messageQueueTimeOut(), TimeUnit.MILLISECONDS,
-        UnaryOperator.identity());
+    this.registered = caffeineCacheHelper.createCache(
+        pool.messageQueueTimeOut(),
+        TimeUnit.MILLISECONDS,
+        UnaryOperator.identity()
+    );
+
+    // Alert threshold: isoTransaction's bulkhead (see BulkheadConfiguration.resolvePermits) caps
+    // real in-flight admissions at maxPoolSize + queueCapacity + headroom (90+10+10=110 by
+    // default) -- correlation.inflight sustaining a value near that ceiling for more than a
+    // few seconds means the bulkhead itself, not just a slow downstream call, is saturated.
+    // correlation.registered includes the LATE_RESPONSE grace window on top, so it will always
+    // run somewhat higher; alert on inflight, use registered for trend/diagnosis.
+    Gauge.builder("correlation.inflight", inFlights, Cache::estimatedSize)
+        .description("Pending ISO8583 correlations awaiting a reply (real-timeout window)")
+        .register(meterRegistry);
+    Gauge.builder("correlation.registered", registered, Cache::estimatedSize)
+        .description("Registered ISO8583 correlations still within the grace window (real-timeout window + late-response grace window)")
+        .register(meterRegistry);
   }
 
   /**
@@ -90,6 +110,14 @@ public class CorrelationRegistry {
 
   /**
    * Deliver an inbound response to its waiting future and classify the outcome.
+   *
+   * <p>Callable more than once for the same message: two call sites in this codebase (
+   * {@code IsoCallbackResponseHandler} and {@code TransactionResponseParticipant}) may both
+   * invoke this for one response if {@code registry.callback_selector} and
+   * {@code registry.response_selector} config ever overlap for a selector. This is safe — a
+   * second call finds the future already removed by the first and simply falls through — but it
+   * logs a misleading {@link IsoCategory#ORPHAN} for whichever call runs second. Keep those two
+   * selector configs disjoint to avoid that log noise.
    *
    * @return {@link IsoCategory#SUCCESS} when the response arrived within the real-timeout
    *         window; {@link IsoCategory#LATE_RESPONSE} when that window had lapsed but the
@@ -125,24 +153,5 @@ public class CorrelationRegistry {
       future.cancel(false);
     }
     log.warn(AppLogMessage.message("#ISO - cancelled correlation key {}", correlationId));
-  }
-
-  /**
-   * Build a write-expiring {@link Cache} and let {@code operator} add per-cache tuning
-   * (a removal listener, a size cap). The unchecked cast is unavoidable: {@link Caffeine#newBuilder()}
-   * is {@code Caffeine<Object, Object>} and cannot be typed until a terminal builder call, but the
-   * {@code operator} lambda needs the concrete {@code Caffeine<String, T>} to bind its parameter
-   * types — Caffeine's builder is safe to reinterpret this way (it carries no state keyed by K/V).
-   *
-   * @param timeOut  write-expiry duration
-   * @param timeUnit unit for {@code timeOut}
-   * @param operator per-cache tuning applied before {@code build()}
-   */
-  @SuppressWarnings("unchecked")
-  private <T> Cache<String, T> createCache(int timeOut, TimeUnit timeUnit,
-      UnaryOperator<Caffeine<String, T>> operator) {
-    Caffeine<String, T> caffeine =
-        (Caffeine<String, T>) (Caffeine<?, ?>) Caffeine.newBuilder().expireAfterWrite(timeOut, timeUnit);
-    return operator.apply(caffeine).build();
   }
 }

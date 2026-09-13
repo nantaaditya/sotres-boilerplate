@@ -7,6 +7,7 @@ import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.RestSender;
 import com.nantaaditya.sotres.helper.RetryTemplateHelper;
+import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.ExternalFeatureConstant;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
@@ -58,21 +59,29 @@ public class TransactionClient extends BaseClient {
       Logbook logbook,
       ClientProperties clientProperties,
       RetryTemplateHelper retryTemplateHelper,
-      ObservationRegistry observationRegistry) {
+      ObservationRegistry observationRegistry
+  ) {
 
     this.systemPropertiesService = systemPropertiesService;
     this.jsltTransformationHelper = jsltTransformationHelper;
     this.objectMapper = objectMapper;
     this.clientProperties = clientProperties;
     this.clientConfiguration = this.clientProperties.getConfiguration("transaction");
-    this.restSender = createRestSender("transaction", logbook, this.clientConfiguration,
-        retryTemplateHelper.getRetryTemplate("transaction"));
+    this.restSender = createRestSender(
+        "transaction",
+        logbook,
+        this.clientConfiguration,
+        retryTemplateHelper.getRetryTemplate("transaction"),
+        retryTemplateHelper.getRetryConfiguration("transaction")
+    );
     this.observationRegistry = observationRegistry;
 
     log.info(AppLogMessage.message(
         "#Client - create transaction client with configuration: hostname {}, connect time out {}ms, read time out {}ms",
-        this.clientConfiguration.hostname(), this.clientConfiguration.clientConnectTimeOut(),
-        this.clientConfiguration.clientReadTimeOut())
+        this.clientConfiguration.hostname(),
+        this.clientConfiguration.clientConnectTimeOut(),
+        this.clientConfiguration.clientReadTimeOut()
+        )
     );
   }
 
@@ -82,7 +91,7 @@ public class TransactionClient extends BaseClient {
 
     Observation observation = Observation.start(ObservationConstant.API_EXTERNAL.getName(), observationRegistry);
     String featureConstant = ExternalFeatureConstant.getFeature(HttpMethod.POST.name(), apiPath);
-    ObservationHelper.createIsoContext(observation, requestContext.getRrn(), featureConstant);
+    ObservationHelper.createTransactionContext(observation, requestContext.getRrn(), featureConstant);
 
     try {
       JsonNode transformedRequestBody = jsltTransformationHelper.transform(
@@ -113,7 +122,7 @@ public class TransactionClient extends BaseClient {
       ObservationHelper.observeResponse(observation, responseContext.getResponseCode(), null);
       return responseContext;
     } catch (Exception e) {
-      ObservationHelper.observeResponse(observation, null, e);
+      ObservationHelper.observeResponse(observation, ApiResponseCode.INTERNAL_ERROR.getCode(), e);
       if (e instanceof RuntimeException runtimeException) {
         throw runtimeException;
       }

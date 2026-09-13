@@ -1,9 +1,11 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
 import com.nantaaditya.sotres.factory.RetryTemplateHelperFactory;
 import com.nantaaditya.sotres.listener.RestSenderRetryListener;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import com.nantaaditya.sotres.properties.LogProperties;
 import com.nantaaditya.sotres.properties.RetryProperties;
 import com.nantaaditya.sotres.properties.embedded.RetryConfiguration;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
@@ -39,8 +41,15 @@ public class RetryTemplateConfiguration {
   private final RetryProperties retryProperties;
   private final DeadLetterProcessRepository deadLetterProcessRepository;
   private final ObjectMapper objectMapper;
+  private final Gson gson;
+  private final LogProperties logProperties;
 
   private static final String POSTFIX_BEAN_NAME = "RetryTemplate";
+
+  @Bean
+  public RestSenderRetryListener restSenderRetryListener() {
+    return new RestSenderRetryListener(deadLetterProcessRepository, objectMapper, gson, logProperties);
+  }
 
   @Bean
   public RetryTemplateHelperFactory retryTemplateHelperFactory() {
@@ -50,6 +59,7 @@ public class RetryTemplateConfiguration {
     if (retryProperties.configurations() == null || retryProperties.configurations().isEmpty()) {
       log.warn(AppLogMessage.message("#Retry - no retry template configured"));
       factory.setRetryTemplates(retryTemplates);
+      factory.setRetryConfigurations(Map.of());
       return factory;
     }
 
@@ -62,6 +72,7 @@ public class RetryTemplateConfiguration {
         ))
     );
     factory.setRetryTemplates(retryTemplates);
+    factory.setRetryConfigurations(Map.copyOf(retryProperties.configurations()));
     log.info(AppLogMessage.message("#Retry - retry templates created {}",
         retryProperties.getBeanNames(POSTFIX_BEAN_NAME)));
     return factory;
@@ -72,9 +83,7 @@ public class RetryTemplateConfiguration {
     retryTemplate.setRetryPolicy(createPolicy(configuration));
     retryTemplate.setBackOffPolicy(createBackOffPolicy(configuration));
     retryTemplate.setThrowLastExceptionOnExhausted(true);
-    retryTemplate.registerListener(new RestSenderRetryListener(name,
-        Math.max(1, configuration.maxAttempt()), configuration.deadLetterEnabled(),
-        deadLetterProcessRepository, objectMapper));
+    retryTemplate.registerListener(restSenderRetryListener());
     log.debug(AppLogMessage.message("#Retry - [{}] template built type={} maxAttempt={}",
         name, configuration.type(), configuration.maxAttempt()));
     return retryTemplate;

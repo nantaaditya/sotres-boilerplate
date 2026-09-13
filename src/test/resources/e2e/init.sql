@@ -64,8 +64,10 @@ INSERT INTO system_properties (id, group_id, property_id, property_value) VALUES
     (3, 'mti',           'outgoing',                   '272,528,1072,2064'),
     (4, 'mask_fields',   'iso8583',                    '2'),
     (5, 'currency',      'fractions',                  '360:2,840:2'),
-    (6, 'endpoint_path', 'mapping',                    '20.97-E001:/api/transaction,20.98-E002:/api/passthrough'),
-    (7, 'response',      'incoming_outgoing_mapping',  '00:00,05:05,51:51'),
+    (6, 'endpoint_path', 'mapping',                    '20.97-E001:/api/transaction,20.98-E002:/api/passthrough,20.96-E003:/api/deadletter'),
+    -- 59:05 is deliberately non-identity (host code 59 -> ISO DE39 05) to exercise a real
+    -- mapping translation, as opposed to 00:00/05:05/51:51 which happen to be identity.
+    (7, 'response',      'incoming_outgoing_mapping',  '00:00,05:05,51:51,59:05'),
     (8, 'registry',      'callback_selector',          ''),
     (9, 'registry',      'response_selector',          '');
 
@@ -80,3 +82,11 @@ INSERT INTO system_properties (id, group_id, property_id, property_value) VALUES
      '{"response": {"code": .rc}, "data": {"transaction": {"approvalCode": .auth}}}');
 
 -- selector 20.98-E002 has a path mapping but NO JSLT templates -> exercises pass-through.
+
+-- JSLT: request shaping for selector 20.96-E003 (RestSenderRetryDeadLetterE2eTest).
+-- Field is named "cardNo" (unlike 20.97-E001's "pan") specifically so MaskingHelper's
+-- hardcoded CARD_NO_KEYS masking (RestSenderRetryListener's dead-letter payload masking)
+-- actually applies -- this is what proves the payload is masked, not just present.
+INSERT INTO system_properties (id, group_id, property_id, property_value) VALUES
+    (102, 'client_spec_request', '20.96-E003',
+     '{"cardNo": .cardNo, "rrn": .rrn, "stan": .stan}');

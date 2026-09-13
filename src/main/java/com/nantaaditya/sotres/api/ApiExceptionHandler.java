@@ -2,6 +2,8 @@ package com.nantaaditya.sotres.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nantaaditya.sotres.helper.ObservationHelper;
+import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
@@ -9,6 +11,8 @@ import com.nantaaditya.sotres.model.error.GeneralFlowException;
 import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.response.Response;
+import io.micrometer.observation.Observation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
@@ -42,6 +46,8 @@ public class ApiExceptionHandler {
 
   private final ObjectMapper objectMapper;
   private final ResponseHelper responseHelper;
+  private final ObservationWrapper observationWrapper;
+  private final HttpServletRequest request;
 
   private static final String ERROR_LOG = "#ApiError - got error";
   private static final String EXCEPTION_KEY = "exception";
@@ -182,6 +188,9 @@ public class ApiExceptionHandler {
       String exceptionDetail = getErrors(result.errors());
       responseHelper.getContextHelper().put(getRequestId(), exceptionDetail);
     }
+
+    Observation observation = observationWrapper.getObservation(request);
+    ObservationHelper.observeResponse(observation, result.response.getResponse().getCode(), ex);
 
     return result.response();
   }

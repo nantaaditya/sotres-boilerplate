@@ -9,10 +9,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
 import com.nantaaditya.sotres.model.constant.RetryConstant;
 import com.nantaaditya.sotres.model.constant.RetryStatus;
+import com.nantaaditya.sotres.properties.LogProperties;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,21 +37,31 @@ class RestSenderRetryListenerTest {
   @Mock
   private DeadLetterProcessRepository deadLetterProcessRepository;
 
+  private static final Gson GSON = new Gson();
+  private static final LogProperties LOG_PROPERTIES =
+      new LogProperties(true, true, true, "cardNo,password", "json", "");
+
   private RestSenderRetryListener listener;
 
   @BeforeEach
   void setUp() {
-    listener = new RestSenderRetryListener("transaction", MAX_ATTEMPTS, true,
-        deadLetterProcessRepository, new ObjectMapper());
+    listener = new RestSenderRetryListener(
+        deadLetterProcessRepository, new ObjectMapper(), GSON, LOG_PROPERTIES);
   }
 
   private RetryContextSupport exhaustedContext(Throwable last) {
+    return exhaustedContext(last, true);
+  }
+
+  private RetryContextSupport exhaustedContext(Throwable last, boolean deadLetterEnabled) {
     RetryContextSupport context = new RetryContextSupport(null);
     context.setAttribute(RetryConstant.CLIENT_NAME.key(), "transaction");
     context.setAttribute(RetryConstant.PROCESS_NAME.key(), "transaction");
     context.setAttribute(RetryConstant.METHOD.key(), "POST");
     context.setAttribute(RetryConstant.PATH.key(), "/api/payment");
     context.setAttribute(RetryConstant.REQUEST_ID.key(), "RRN-1");
+    context.setAttribute(RetryConstant.MAX_ATTEMPTS.key(), MAX_ATTEMPTS);
+    context.setAttribute(RetryConstant.DEAD_LETTER_ENABLED.key(), deadLetterEnabled);
     HttpHeaders headers = new HttpHeaders();
     headers.add("x-request-id", "RRN-1");
     context.setAttribute(RetryConstant.HEADERS.key(), headers);
@@ -96,6 +109,7 @@ class RestSenderRetryListenerTest {
   void close_notExhausted_noPersist() {
     ResourceAccessException last = new ResourceAccessException("one-shot");
     RetryContextSupport context = new RetryContextSupport(null);
+    context.setAttribute(RetryConstant.MAX_ATTEMPTS.key(), MAX_ATTEMPTS);
     context.registerThrowable(last); // retryCount == 1 < MAX_ATTEMPTS
 
     listener.close(context, null, last);
@@ -115,11 +129,9 @@ class RestSenderRetryListenerTest {
   @Test
   @DisplayName("deadLetterEnabled=false: exhaustion is logged, not persisted")
   void close_deadLetterDisabled_noPersist() {
-    RestSenderRetryListener logOnly = new RestSenderRetryListener("transaction", MAX_ATTEMPTS, false,
-        deadLetterProcessRepository, new ObjectMapper());
     ResourceAccessException last = new ResourceAccessException("downstream down");
 
-    logOnly.close(exhaustedContext(last), null, last);
+    listener.close(exhaustedContext(last, false), null, last);
 
     verifyNoInteractions(deadLetterProcessRepository);
   }
@@ -127,14 +139,84 @@ class RestSenderRetryListenerTest {
   @Test
   @DisplayName("maxAttempts=1: a single failure is logged, not persisted")
   void close_maxAttemptsOne_noPersist() {
-    RestSenderRetryListener singleShot = new RestSenderRetryListener("transaction", 1, true,
-        deadLetterProcessRepository, new ObjectMapper());
     ResourceAccessException last = new ResourceAccessException("downstream down");
     RetryContextSupport context = new RetryContextSupport(null);
+    context.setAttribute(RetryConstant.MAX_ATTEMPTS.key(), 1);
+    context.setAttribute(RetryConstant.DEAD_LETTER_ENABLED.key(), true);
     context.registerThrowable(last); // retryCount == 1 == maxAttempts
 
-    singleShot.close(context, null, last);
+    listener.close(context, null, last);
 
     verifyNoInteractions(deadLetterProcessRepository);
+  }
+
+  @Test
+  @DisplayName("persists the request payload unmasked — dead-letter reprocessing needs the exact original request")
+  void close_payloadContainsPan_persistsOriginalUnmasked() {
+    RetryContextSupport context = exhaustedContext(new ResourceAccessException("downstream down"));
+    context.setAttribute(RetryConstant.REQUEST.key(), Map.of("cardNo", "1234567890123456"));
+    ResourceAccessException last = new ResourceAccessException("downstream down");
+
+    listener.close(context, null, last);
+
+    ArgumentCaptor<DeadLetterProcess> captor = ArgumentCaptor.forClass(DeadLetterProcess.class);
+    verify(deadLetterProcessRepository).save(captor.capture());
+    String payload = new String(captor.getValue().getPayload(), StandardCharsets.UTF_8);
+    assertThat(payload).contains("1234567890123456");
+  }
+
+  @Test
+  @DisplayName("persists header values unmasked — dead-letter reprocessing needs the exact original request")
+  void close_sensitiveHeader_persistsOriginalUnmasked() {
+    RetryContextSupport context = new RetryContextSupport(null);
+    context.setAttribute(RetryConstant.CLIENT_NAME.key(), "transaction");
+    context.setAttribute(RetryConstant.PROCESS_NAME.key(), "transaction");
+    context.setAttribute(RetryConstant.METHOD.key(), "POST");
+    context.setAttribute(RetryConstant.PATH.key(), "/api/payment");
+    context.setAttribute(RetryConstant.REQUEST_ID.key(), "RRN-1");
+    context.setAttribute(RetryConstant.MAX_ATTEMPTS.key(), MAX_ATTEMPTS);
+    context.setAttribute(RetryConstant.DEAD_LETTER_ENABLED.key(), true);
+    HttpHeaders headers = new HttpHeaders();
+    headers.add("password", "super-secret-value");
+    context.setAttribute(RetryConstant.HEADERS.key(), headers);
+    context.setAttribute(RetryConstant.REQUEST.key(), Map.of("amount", 100));
+    ResourceAccessException last = new ResourceAccessException("downstream down");
+    for (int i = 0; i < MAX_ATTEMPTS; i++) {
+      context.registerThrowable(last);
+    }
+
+    listener.close(context, null, last);
+
+    ArgumentCaptor<DeadLetterProcess> captor = ArgumentCaptor.forClass(DeadLetterProcess.class);
+    verify(deadLetterProcessRepository).save(captor.capture());
+    assertThat(captor.getValue().getHeaders()).contains("super-secret-value");
+  }
+
+  @Test
+  @DisplayName("persists the downstream response body unmasked within retry histories — needed for exact reprocessing")
+  void close_responseContainsPan_persistsRetryHistoriesOriginalUnmasked() {
+    RetryContextSupport context = exhaustedContext(new ResourceAccessException("downstream down"));
+    context.setAttribute(RetryConstant.RESPONSE.key(), "{\"cardNo\":\"1234567890123456\"}");
+    ResourceAccessException last = new ResourceAccessException("downstream down");
+
+    listener.close(context, null, last);
+
+    ArgumentCaptor<DeadLetterProcess> captor = ArgumentCaptor.forClass(DeadLetterProcess.class);
+    verify(deadLetterProcessRepository).save(captor.capture());
+    String histories = new String(captor.getValue().getRetryHistories(), StandardCharsets.UTF_8);
+    assertThat(histories).contains("1234567890123456");
+  }
+
+  @Test
+  @DisplayName("persists the exception message unmasked as lastError")
+  void close_exceptionMessageContainsSensitiveText_persistsOriginalLastError() {
+    ResourceAccessException last =
+        new ResourceAccessException("downstream rejected cardNo 1234567890123456");
+
+    listener.close(exhaustedContext(last), null, last);
+
+    ArgumentCaptor<DeadLetterProcess> captor = ArgumentCaptor.forClass(DeadLetterProcess.class);
+    verify(deadLetterProcessRepository).save(captor.capture());
+    assertThat(captor.getValue().getLastError()).contains("1234567890123456");
   }
 }

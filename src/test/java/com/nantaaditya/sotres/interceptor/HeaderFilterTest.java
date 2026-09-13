@@ -13,6 +13,8 @@ import com.nantaaditya.sotres.model.dto.ContextDTO;
 import io.micrometer.observation.ObservationRegistry;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
+import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -41,6 +44,11 @@ class HeaderFilterTest {
   void setUp() {
     filter = new HeaderFilter("/sotres", contextHelper, tracerHelper,
         ObservationRegistry.NOOP, observationWrapper);
+  }
+
+  @AfterEach
+  void tearDown() {
+    MDC.clear();
   }
 
   private MockHttpServletRequest request(String method, String uri, byte[] body) {
@@ -124,5 +132,51 @@ class HeaderFilterTest {
         .hasMessage("chain error");
 
     verify(observationWrapper).clear(any());
+  }
+
+  @Test
+  @DisplayName("restores the calling thread's MDC to its pre-filter state when non-empty on entry")
+  void doFilter_mdcNonEmptyOnEntry_isRestored() throws ServletException, IOException {
+    MDC.put("traceId", "pre-existing-trace");
+    Map<String, String> mdcBefore = MDC.getCopyOfContextMap();
+    MockHttpServletRequest request = request("GET", "/sotres/api/health", null);
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    filter.doFilter(request, response, new MockFilterChain());
+
+    assertThat(MDC.getCopyOfContextMap()).isEqualTo(mdcBefore);
+  }
+
+  @Test
+  @DisplayName("clears the calling thread's MDC when it was empty on entry")
+  void doFilter_mdcEmptyOnEntry_isCleared() throws ServletException, IOException {
+    MDC.clear();
+    MockHttpServletRequest request = request("GET", "/sotres/api/health", null);
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    filter.doFilter(request, response, new MockFilterChain());
+
+    assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
+  }
+
+  @Test
+  @DisplayName("restores the calling thread's MDC even when the chain throws")
+  void doFilter_chainThrows_mdcStillRestored() {
+    MDC.put("traceId", "pre-existing-trace");
+    Map<String, String> mdcBefore = MDC.getCopyOfContextMap();
+    MockHttpServletRequest request = request("POST", "/sotres/api/payment", null);
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain throwingChain = new MockFilterChain() {
+      @Override
+      public void doFilter(jakarta.servlet.ServletRequest req, jakarta.servlet.ServletResponse res) {
+        MDC.put("requestId", "leaked-from-chain");
+        throw new RuntimeException("chain error");
+      }
+    };
+
+    assertThatThrownBy(() -> filter.doFilter(request, response, throwingChain))
+        .isInstanceOf(RuntimeException.class);
+
+    assertThat(MDC.getCopyOfContextMap()).isEqualTo(mdcBefore);
   }
 }

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.google.gson.Gson;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -208,4 +210,46 @@ class MaskingHelperTest {
       assertThat(result).contains("alice").contains("30");
     }
   }
+
+  @Nested
+  @DisplayName("maskHeaders(Map, Predicate)")
+  class HeaderMasking {
+
+    @Test
+    @DisplayName("masks values of headers the predicate flags as sensitive")
+    void maskHeaders_sensitiveHeader_masksValues() {
+      Map<String, List<String>> headers = Map.of(
+          "authorization", List.of("Bearer abcdefghijklmnop"),
+          "content-type", List.of("application/json"));
+
+      Map<String, List<String>> result =
+          MaskingHelper.maskHeaders(headers, key -> key.equalsIgnoreCase("authorization"));
+
+      assertThat(result.get("authorization").get(0)).doesNotContain("abcdefghijklmnop");
+      assertThat(result.get("content-type")).isEqualTo(List.of("application/json"));
+    }
+
+    @Test
+    @DisplayName("leaves non-sensitive headers untouched")
+    void maskHeaders_noSensitiveHeaders_returnsUnchanged() {
+      Map<String, List<String>> headers = Map.of("x-request-id", List.of("RRN-1"));
+
+      Map<String, List<String>> result = MaskingHelper.maskHeaders(headers, key -> false);
+
+      assertThat(result).isEqualTo(headers);
+    }
+
+    @Test
+    @DisplayName("masks every value in a multi-valued sensitive header")
+    void maskHeaders_multiValuedSensitiveHeader_masksAllValues() {
+      Map<String, List<String>> headers = Map.of(
+          "x-api-key", List.of("key-1234567890", "key-0987654321"));
+
+      Map<String, List<String>> result = MaskingHelper.maskHeaders(headers, key -> true);
+
+      assertThat(result.get("x-api-key").get(0)).doesNotContain("1234567890");
+      assertThat(result.get("x-api-key").get(1)).doesNotContain("0987654321");
+    }
+  }
+
 }

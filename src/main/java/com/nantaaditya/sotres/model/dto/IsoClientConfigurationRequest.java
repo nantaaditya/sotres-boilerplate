@@ -10,6 +10,7 @@ import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
+import io.micrometer.observation.ObservationRegistry;
 import java.net.SocketAddress;
 
 public record IsoClientConfigurationRequest(
@@ -22,7 +23,8 @@ public record IsoClientConfigurationRequest(
     SystemPropertiesService systemPropertiesService,
     TracerHelper tracerHelper,
     ParticipantConfigurationProperties participantConfigurationProperties,
-    ClientProperties clientProperties
+    ClientProperties clientProperties,
+    ObservationRegistry observationRegistry
 ) {
 
 }

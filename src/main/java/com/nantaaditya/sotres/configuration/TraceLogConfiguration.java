@@ -41,10 +41,12 @@ public class TraceLogConfiguration implements HttpExchangeRepository {
     HttpExchange.Response response = trace.getResponse();
 
     if (!logProperties.enableTraceLog()) {
+      log.debug(AppLogMessage.message("#Trace - trace log is disabled"));
       return;
     }
 
     if (logProperties.isIgnoredPath(request.getUri().getPath())) {
+      log.debug(AppLogMessage.message("#Trace - ignored path {}", request.getUri().getPath()));
       return;
     }
 
@@ -52,8 +54,14 @@ public class TraceLogConfiguration implements HttpExchangeRepository {
     if (request.getHeaders().containsKey(HeaderConstant.REQUEST_ID.getHeader())) {
       tracerHelper.setBaggage(
           HeaderConstant.REQUEST_ID.getHeader(),
-          request.getHeaders().get(HeaderConstant.REQUEST_ID.getHeader()).stream().findFirst().orElse(null));
+          request.getHeaders()
+              .get(HeaderConstant.REQUEST_ID.getHeader())
+              .stream()
+              .findFirst()
+              .orElse(null)
+      );
     }
+
     MultiValueMap<String, String> requestHeaders = new LinkedMultiValueMap<>();
     for (Entry<String, List<String>> headers : request.getHeaders().entrySet()) {
       if (isInternalHeader(headers.getKey())) {

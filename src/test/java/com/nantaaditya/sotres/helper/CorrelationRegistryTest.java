@@ -3,15 +3,19 @@ package com.nantaaditya.sotres.helper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.constant.IsoCategory;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
+import com.nantaaditya.sotres.properties.CacheProperties;
 import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.embedded.ParticipantPoolConfiguration;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -35,6 +39,7 @@ class CorrelationRegistryTest {
   private ParticipantConfigurationProperties participantConfigurationProperties;
 
   private CorrelationRegistry registry;
+  private MeterRegistry meterRegistry;
 
   // flightPool=100 (pending capacity), flightQueueTimeOut=5000 / messageQueueTimeOut=5000 —
   // long enough that write-expiry never fires mid-test
@@ -44,7 +49,12 @@ class CorrelationRegistryTest {
   @BeforeEach
   void setUp() {
     when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)).thenReturn(config);
-    registry = new CorrelationRegistry(participantConfigurationProperties);
+    meterRegistry = new SimpleMeterRegistry();
+    registry = new CorrelationRegistry(participantConfigurationProperties, meterRegistry, caffeineCacheHelper());
+  }
+
+  private CaffeineCacheHelper caffeineCacheHelper() {
+    return new CaffeineCacheHelper(mock(CacheProperties.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -120,7 +130,8 @@ class CorrelationRegistryTest {
           new ParticipantPoolConfiguration(30, 5000);
       when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
           .thenReturn(shortFlight);
-      CorrelationRegistry reg = new CorrelationRegistry(participantConfigurationProperties);
+      CorrelationRegistry reg = new CorrelationRegistry(participantConfigurationProperties,
+          new SimpleMeterRegistry(), caffeineCacheHelper());
 
       reg.register(correlationId("200003"));
       // let the 30ms flight window lapse without a cancel
@@ -172,7 +183,8 @@ class CorrelationRegistryTest {
           new ParticipantPoolConfiguration(5000, 5000);
       when(participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION))
           .thenReturn(longFlight);
-      CorrelationRegistry reg = new CorrelationRegistry(participantConfigurationProperties);
+      CorrelationRegistry reg = new CorrelationRegistry(participantConfigurationProperties,
+          new SimpleMeterRegistry(), caffeineCacheHelper());
 
       CompletableFuture<IsoMessage> first = reg.register(correlationId("K00000"));
       for (int i = 1; i <= 500; i++) {
@@ -216,6 +228,37 @@ class CorrelationRegistryTest {
       }
 
       assertThat(successes.get()).isEqualTo(n);
+    }
+  }
+
+  @Nested
+  @DisplayName("gauges")
+  class Gauges {
+
+    @Test
+    @DisplayName("correlation.inflight and correlation.registered are registered on construction")
+    void gaugesAreRegisteredOnConstruction() {
+      assertThat(meterRegistry.find("correlation.inflight").gauge()).isNotNull();
+      assertThat(meterRegistry.find("correlation.registered").gauge()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("both gauges reflect the cache size after register(), then drop after complete()")
+    void gaugesReflectSizeAfterRegisterAndComplete() {
+      double inflightBefore = meterRegistry.find("correlation.inflight").gauge().value();
+      double registeredBefore = meterRegistry.find("correlation.registered").gauge().value();
+
+      registry.register(correlationId("400001"));
+
+      assertThat(meterRegistry.find("correlation.inflight").gauge().value())
+          .isEqualTo(inflightBefore + 1);
+      assertThat(meterRegistry.find("correlation.registered").gauge().value())
+          .isEqualTo(registeredBefore + 1);
+
+      registry.complete(message("400001"));
+
+      assertThat(meterRegistry.find("correlation.inflight").gauge().value()).isEqualTo(inflightBefore);
+      assertThat(meterRegistry.find("correlation.registered").gauge().value()).isEqualTo(registeredBefore);
     }
   }
 }

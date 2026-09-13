@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -111,7 +112,7 @@ class RestProtocolStrategyTest {
     strategy.handleResponse(participantCtx);
 
     verify(isoFieldHelper).sendResponseWithObservation(participantCtx, "96", null);
-    verify(observation).stop();
+    verify(observation, never()).stop();
   }
 
   @Test
@@ -122,9 +123,9 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage),
+    verify(isoFieldHelper).sendResponseWithObservation(eq(participantCtx), eq("96"), isNull(),
         any(Consumer.class));
-    verify(observation).stop();
+    verify(observation, never()).stop();
   }
 
   @Test
@@ -137,7 +138,7 @@ class RestProtocolStrategyTest {
     strategy.handleResponse(participantCtx);
 
     verify(isoFieldHelper).sendResponseWithObservation(eq(participantCtx), eq("96"), any(RuntimeException.class));
-    verify(observation).stop();
+    verify(observation, never()).stop();
   }
 
   @Test

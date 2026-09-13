@@ -5,7 +5,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.util.StringUtils;
 
@@ -14,6 +19,7 @@ public class MaskingHelper {
 
   public static final String MASKED_CHAR = "*";
   private static final Set<String> CARD_NO_KEYS = Set.of("cardNo", "2");
+  private static final Pattern PAN_LIKE_DIGIT_RUN = Pattern.compile("\\b\\d{13,19}\\b");
 
   private MaskingHelper() {}
 
@@ -46,6 +52,26 @@ public class MaskingHelper {
     if (!StringUtils.hasText(cardNo) || cardNo.length() < 16) return cardNo;
 
     return masking(cardNo, 6, 4);
+  }
+
+  /**
+   * Masks the values of any header {@code isSensitive} flags true, leaving all others untouched.
+   * Shared by {@link ApiLogbookFormatter} (inbound/outbound HTTP logging) and
+   * {@link com.nantaaditya.sotres.listener.RestSenderRetryListener} (dead-letter persistence) —
+   * the two places headers get written somewhere durable.
+   */
+  public static Map<String, List<String>> maskHeaders(
+      Map<String, List<String>> headers, Predicate<String> isSensitive) {
+    Map<String, List<String>> result = new LinkedHashMap<>();
+    for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+      result.put(
+          entry.getKey(),
+          isSensitive.test(entry.getKey())
+              ? entry.getValue().stream().map(MaskingHelper::masking).toList()
+              : entry.getValue()
+      );
+    }
+    return result;
   }
 
   public static String maskingJson(Gson gson, Set<String> maskingKeys, String jsonPayload) {

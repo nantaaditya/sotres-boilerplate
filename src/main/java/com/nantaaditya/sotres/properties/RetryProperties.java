@@ -15,11 +15,6 @@ public record RetryProperties(
     Map<String, RetryConfiguration> configurations
 ) {
 
-  /** @return the config for {@code retryKey}, or {@code null} if none is defined. */
-  public RetryConfiguration get(String retryKey) {
-    return configurations == null ? null : configurations.get(retryKey);
-  }
-
   /** @return {@code <name> + postfix} for every configured entry (bean-name helper for logging). */
   public Set<String> getBeanNames(String postfix) {
     Set<String> result = new HashSet<>();

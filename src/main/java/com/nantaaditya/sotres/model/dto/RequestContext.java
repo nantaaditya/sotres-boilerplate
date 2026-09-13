@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
-import com.nantaaditya.sotres.model.constant.AccountType;
 import java.beans.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -161,16 +160,6 @@ public class RequestContext {
   @Transient
   public LocalDate convertExpiryDate() {
     return DateTimeHelper.convertExpiryDate(expirationDate);
-  }
-
-  @Transient
-  public AccountType getFromAccountType() {
-    return AccountType.fromCode(IsoFieldHelper.substring(processingCode, 2, 4));
-  }
-
-  @Transient
-  public AccountType getToAccountType() {
-    return AccountType.fromCode(IsoFieldHelper.substring(processingCode, 4, 6));
   }
 
   @Transient

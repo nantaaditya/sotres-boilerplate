@@ -13,7 +13,9 @@ public enum RetryConstant {
   RESPONSE("retry.response"),
   REQUEST_ID("retry.requestId"),
   PROCESS_TYPE("retry.processType"),
-  PROCESS_NAME("retry.processName");
+  PROCESS_NAME("retry.processName"),
+  MAX_ATTEMPTS("retry.maxAttempts"),
+  DEAD_LETTER_ENABLED("retry.deadLetterEnabled");
 
   private final String key;
 

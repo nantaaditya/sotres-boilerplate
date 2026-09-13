@@ -1,59 +1,66 @@
 package com.nantaaditya.sotres.api.internal;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nantaaditya.sotres.api.ApiExceptionHandler;
 import com.nantaaditya.sotres.entity.SystemProperties;
+import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
-import com.nantaaditya.sotres.model.constant.ApiResponseCode;
+import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.error.InvalidTemplateException;
-import com.nantaaditya.sotres.model.response.Response;
 import com.nantaaditya.sotres.model.response.TemplateResponse;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @DisplayName("JsltAdminController")
-@ExtendWith(MockitoExtension.class)
 class JsltAdminControllerTest {
 
-  @Mock
+  private static final String SELECTOR = "10.97-E001";
+
   private JsltTransformationHelper jsltTransformationHelper;
-
-  @Mock
   private SystemPropertiesService systemPropertiesService;
-
-  @Mock
-  private ResponseHelper responseHelper;
-
-  @Mock
-  private ObservationWrapper observationWrapper;
-
-  private JsltAdminController controller;
+  private MockMvc mockMvc;
 
   @BeforeEach
   void setUp() {
-    controller = new JsltAdminController(jsltTransformationHelper, systemPropertiesService);
+    jsltTransformationHelper = mock(JsltTransformationHelper.class);
+    systemPropertiesService = mock(SystemPropertiesService.class);
+
+    ResponseHelper responseHelper =
+        new ResponseHelper(mock(TracerHelper.class), mock(ContextHelper.class));
+    ApiExceptionHandler exceptionHandler =
+        new ApiExceptionHandler(new ObjectMapper(), responseHelper,
+            mock(ObservationWrapper.class), mock(HttpServletRequest.class));
+
+    JsltAdminController controller =
+        new JsltAdminController(jsltTransformationHelper, systemPropertiesService);
     ReflectionTestUtils.setField(controller, "responseHelper", responseHelper);
-    ReflectionTestUtils.setField(controller, "observationWrapper", observationWrapper);
+    ReflectionTestUtils.setField(controller, "observationWrapper", mock(ObservationWrapper.class));
+
+    mockMvc = MockMvcBuilders.standaloneSetup(controller)
+        .setControllerAdvice(exceptionHandler)
+        .build();
   }
 
   @Nested
@@ -62,29 +69,30 @@ class JsltAdminControllerTest {
 
     @Test
     @DisplayName("returns 200 with template map after evicting and reloading selector")
-    void reload_returnsTemplateMap() {
+    void reload_returnsTemplateMap() throws Exception {
       Map<String, String> templates = Map.of(
           "client_spec_request", "{\"result\": .value}",
           "client_spec_response", "{\"mapped\": .data}"
       );
-      when(jsltTransformationHelper.evictAndReload("10.97-E001")).thenReturn(templates);
-      when(responseHelper.success(templates)).thenReturn(successResponse(templates));
+      when(jsltTransformationHelper.evictAndReload(SELECTOR)).thenReturn(templates);
 
-      ResponseEntity<Response<Map<String, String>>> entity = controller.reload("10.97-E001");
+      mockMvc.perform(post("/internal-api/jslt/_reload").param("selector", SELECTOR))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.response.code").value("000"))
+          .andExpect(jsonPath("$.data.client_spec_request").value("{\"result\": .value}"));
 
-      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(entity.getBody().getData()).isEqualTo(templates);
-      verify(jsltTransformationHelper).evictAndReload("10.97-E001");
+      verify(jsltTransformationHelper).evictAndReload(SELECTOR);
     }
 
     @Test
-    @DisplayName("propagates error from helper")
-    void reload_propagatesError() {
-      when(jsltTransformationHelper.evictAndReload("10.97-E001"))
+    @DisplayName("propagates error from helper as a 500 / code 999 envelope")
+    void reload_propagatesError() throws Exception {
+      when(jsltTransformationHelper.evictAndReload(SELECTOR))
           .thenThrow(new RuntimeException("DB error"));
 
-      assertThatThrownBy(() -> controller.reload("10.97-E001"))
-          .isInstanceOf(RuntimeException.class);
+      mockMvc.perform(post("/internal-api/jslt/_reload").param("selector", SELECTOR))
+          .andExpect(status().isInternalServerError())
+          .andExpect(jsonPath("$.response.code").value("999"));
     }
   }
 
@@ -94,29 +102,29 @@ class JsltAdminControllerTest {
 
     @Test
     @DisplayName("returns 200 with current template content for selector")
-    void templates_returnsTemplateContent() {
+    void templates_returnsTemplateContent() throws Exception {
       Map<String, String> templates = Map.of(
           "client_spec_request", "{\"result\": .value}",
           "client_spec_response", ""
       );
-      when(jsltTransformationHelper.getTemplates("10.97-E001")).thenReturn(templates);
-      when(responseHelper.success(templates)).thenReturn(successResponse(templates));
+      when(jsltTransformationHelper.getTemplates(SELECTOR)).thenReturn(templates);
 
-      ResponseEntity<Response<Map<String, String>>> entity = controller.templates("10.97-E001");
+      mockMvc.perform(get("/internal-api/jslt/templates").param("selector", SELECTOR))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.client_spec_request").exists());
 
-      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(entity.getBody().getData()).containsKey("client_spec_request");
-      verify(jsltTransformationHelper).getTemplates("10.97-E001");
+      verify(jsltTransformationHelper).getTemplates(SELECTOR);
     }
 
     @Test
-    @DisplayName("propagates error from helper")
-    void templates_propagatesError() {
-      when(jsltTransformationHelper.getTemplates("10.97-E001"))
+    @DisplayName("propagates error from helper as a 500 / code 999 envelope")
+    void templates_propagatesError() throws Exception {
+      when(jsltTransformationHelper.getTemplates(SELECTOR))
           .thenThrow(new RuntimeException("service error"));
 
-      assertThatThrownBy(() -> controller.templates("10.97-E001"))
-          .isInstanceOf(RuntimeException.class);
+      mockMvc.perform(get("/internal-api/jslt/templates").param("selector", SELECTOR))
+          .andExpect(status().isInternalServerError())
+          .andExpect(jsonPath("$.response.code").value("999"));
     }
   }
 
@@ -125,24 +133,24 @@ class JsltAdminControllerTest {
   class ReloadAll {
 
     @Test
-    @DisplayName("returns 200 with true after evicting and rewarming all templates")
-    void reloadAll_returnsTrue() {
-      when(responseHelper.success(Boolean.TRUE)).thenReturn(successResponse(Boolean.TRUE));
+    @DisplayName("returns 200 with a per-selector compile-status map after evicting and rewarming all templates")
+    void reloadAll_returnsPerSelectorStatus() throws Exception {
+      Map<String, Boolean> results = Map.of("client_spec_request:10.97-E001", true);
+      when(jsltTransformationHelper.evictAll()).thenReturn(results);
 
-      ResponseEntity<Response<Boolean>> entity = controller.reloadAll();
-
-      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(entity.getBody().getData()).isTrue();
-      verify(jsltTransformationHelper).evictAll();
+      mockMvc.perform(post("/internal-api/jslt/_reload-all"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data['client_spec_request:10.97-E001']").value(true));
     }
 
     @Test
-    @DisplayName("propagates error from helper")
-    void reloadAll_propagatesError() {
+    @DisplayName("propagates error from helper as a 500 / code 999 envelope")
+    void reloadAll_propagatesError() throws Exception {
       doThrow(new RuntimeException("reload failed")).when(jsltTransformationHelper).evictAll();
 
-      assertThatThrownBy(() -> controller.reloadAll())
-          .isInstanceOf(RuntimeException.class);
+      mockMvc.perform(post("/internal-api/jslt/_reload-all"))
+          .andExpect(status().isInternalServerError())
+          .andExpect(jsonPath("$.response.code").value("999"));
     }
   }
 
@@ -151,80 +159,61 @@ class JsltAdminControllerTest {
   class Save {
 
     @Test
-    @DisplayName("returns 200 with TemplateResponse DTO after upsert and cache eviction")
-    void save_returnsTemplateResponseDto() {
+    @DisplayName("returns 200 with TemplateResponse DTO after upsert")
+    void save_returnsTemplateResponseDto() throws Exception {
       SystemProperties saved = SystemProperties.builder()
-          .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
+          .id(1L).groupId("client_spec_request").propertyId(SELECTOR)
           .propertyValue("{\"result\": .value}").build();
-      TemplateResponse dto = TemplateResponse.from(saved);
-
-      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, "{\"result\": .value}"))
           .thenReturn(saved);
-      when(responseHelper.success(dto)).thenReturn(successResponse(dto));
 
-      ResponseEntity<Response<TemplateResponse>> entity =
-          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}");
+      mockMvc.perform(put("/internal-api/jslt/template")
+              .param("selector", SELECTOR)
+              .param("group", "CLIENT_SPEC_REQUEST")
+              .contentType(MediaType.TEXT_PLAIN)
+              .content("{\"result\": .value}"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.template").value("{\"result\": .value}"))
+          .andExpect(jsonPath("$.data.selector").value(SELECTOR))
+          .andExpect(jsonPath("$.data.group").value("client_spec_request"));
 
-      assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(entity.getBody().getData().template()).isEqualTo("{\"result\": .value}");
-      assertThat(entity.getBody().getData().selector()).isEqualTo("10.97-E001");
-      assertThat(entity.getBody().getData().group()).isEqualTo("client_spec_request");
+      // validation + cache eviction now happen inside SystemPropertiesServiceImpl.upsert()
+      // (already unit-tested there) — the controller just delegates to it in one call.
+      verify(systemPropertiesService).upsert(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, "{\"result\": .value}");
     }
 
     @Test
-    @DisplayName("propagates error from upsert when DB write fails")
-    void save_propagatesError() {
-      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
+    @DisplayName("propagates error from upsert when DB write fails as a 500 / code 999 envelope")
+    void save_propagatesError() throws Exception {
+      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, "{\"result\": .value}"))
           .thenThrow(new RuntimeException("DB write failed"));
 
-      assertThatThrownBy(() ->
-          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}"))
-          .isInstanceOf(RuntimeException.class);
+      mockMvc.perform(put("/internal-api/jslt/template")
+              .param("selector", SELECTOR)
+              .param("group", "CLIENT_SPEC_REQUEST")
+              .contentType(MediaType.TEXT_PLAIN)
+              .content("{\"result\": .value}"))
+          .andExpect(status().isInternalServerError())
+          .andExpect(jsonPath("$.response.code").value("999"));
     }
 
     @Test
-    @DisplayName("propagates InvalidTemplateException and never calls upsert when template is invalid")
-    void save_invalidTemplate_rejectsBeforeUpsert() {
-      doThrow(new InvalidTemplateException("invalid JSLT syntax"))
-          .when(jsltTransformationHelper).validateTemplate("<<< bad >>>");
+    @DisplayName("rejects an invalid template as a 400 / code 900 envelope")
+    void save_invalidTemplate_rejectsBeforeUpsert() throws Exception {
+      // validation now happens inside SystemPropertiesServiceImpl.upsert() (already unit-tested
+      // there via jsltTransformationHelper.validateTemplate) — the controller-mocked service
+      // simulates that same failure.
+      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, "<<< bad >>>"))
+          .thenThrow(new InvalidTemplateException("invalid JSLT syntax"));
 
-      assertThatThrownBy(() ->
-          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "<<< bad >>>"))
-          .isInstanceOf(InvalidTemplateException.class);
-
-      verify(systemPropertiesService, never())
-          .upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "<<< bad >>>");
+      mockMvc.perform(put("/internal-api/jslt/template")
+              .param("selector", SELECTOR)
+              .param("group", "CLIENT_SPEC_REQUEST")
+              .contentType(MediaType.TEXT_PLAIN)
+              .content("<<< bad >>>"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.response.code").value("900"))
+          .andExpect(jsonPath("$.error.violations.template").exists());
     }
-
-    @Test
-    @DisplayName("validates before upserting - validateTemplate is called first")
-    void save_validTemplate_validatesBeforeUpsert() {
-      SystemProperties saved = SystemProperties.builder()
-          .id(1L).groupId("client_spec_request").propertyId("10.97-E001")
-          .propertyValue("{\"result\": .value}").build();
-      TemplateResponse dto = TemplateResponse.from(saved);
-
-      when(systemPropertiesService.upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}"))
-          .thenReturn(saved);
-      when(responseHelper.success(dto)).thenReturn(successResponse(dto));
-
-      ResponseEntity<Response<TemplateResponse>> entity =
-          controller.save("10.97-E001", TemplateGroup.CLIENT_SPEC_REQUEST, "{\"result\": .value}");
-
-      assertThat(entity.getStatusCode().value()).isEqualTo(200);
-      InOrder order = inOrder(jsltTransformationHelper, systemPropertiesService);
-      order.verify(jsltTransformationHelper).validateTemplate("{\"result\": .value}");
-      order.verify(systemPropertiesService).upsert(TemplateGroup.CLIENT_SPEC_REQUEST, "10.97-E001", "{\"result\": .value}");
-    }
-  }
-
-  private <T> Response<T> successResponse(T data) {
-    return Response.<T>builder()
-        .response(Response.ResponseMetadata.builder()
-            .code(ApiResponseCode.SUCCESS.getCode())
-            .description(ApiResponseCode.SUCCESS.getMessage())
-            .build())
-        .data(data)
-        .build();
   }
 }

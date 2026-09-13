@@ -38,21 +38,17 @@ public class JsltAdminController extends BaseController {
   }
 
   @PostMapping(value = "/_reload-all", produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<Response<Boolean>> reloadAll() {
-    jsltTransformationHelper.evictAll();
-    return toResponse(responseHelper.success(Boolean.TRUE));
+  public ResponseEntity<Response<Map<String, Boolean>>> reloadAll() {
+    return toResponse(responseHelper.success(jsltTransformationHelper.evictAll()));
   }
 
   @PutMapping(value = "/template",
       consumes = MediaType.TEXT_PLAIN_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<Response<TemplateResponse>> save(
-      @RequestParam String selector,
-      @RequestParam TemplateGroup group,
-      @RequestBody String template) {
-    jsltTransformationHelper.validateTemplate(template);
+  public ResponseEntity<Response<TemplateResponse>> save(@RequestParam String selector,
+      @RequestParam TemplateGroup group, @RequestBody String template) {
+
     SystemProperties saved = systemPropertiesService.upsert(group, selector, template);
-    jsltTransformationHelper.evictExpression(group, selector);
     return toResponse(responseHelper.success(TemplateResponse.from(saved)));
   }
 }

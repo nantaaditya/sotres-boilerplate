@@ -3,8 +3,8 @@ package com.nantaaditya.sotres.helper;
 import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.IsoFeatureConstant;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
-import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.RequestContext.Transaction;
@@ -37,8 +37,8 @@ import org.springframework.stereotype.Component;
 public class IsoFieldHelper {
 
   private static final int DEFAULT_FRACTION_DIGIT = 2;
-  private static final String ISO_REQUEST_EVENT = "iso_request";
-  private static final String ISO_RESPONSE_EVENT = "iso_response";
+  public static final String ISO_REQUEST_EVENT = "iso_request";
+  public static final String ISO_RESPONSE_EVENT = "iso_response";
 
   private final MessageFactoryHelper messageFactoryHelper;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
@@ -139,7 +139,7 @@ public class IsoFieldHelper {
   }
 
   private static double getCalculateTransactionAmount(String feeType, double originalAmount, double transactionFee) {
-    return  "C".equalsIgnoreCase(feeType) ?
+    return "C".equalsIgnoreCase(feeType) ?
         (originalAmount + transactionFee) : (originalAmount - transactionFee);
   }
 
@@ -287,21 +287,28 @@ public class IsoFieldHelper {
     isoMessage.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode, 2));
   }
 
-  public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {
-    sendResponse(context, request, response -> setResponseCode(response, responseCode));
+  public static String getIsoFeature(IsoMessage isoMessage) {
+    String mti = IsoFieldHelper.getMTI(isoMessage.getType());
+    String processingCode = IsoFieldHelper.getField(isoMessage, 3);
+    Map<String, String> additionalDataMap = IsoFieldHelper.unpackTLV(IsoFieldHelper.getField(
+        isoMessage, 48), 2, 2);
+    String selector = IsoFieldHelper.createSelector(mti, processingCode, additionalDataMap);
+    return IsoFeatureConstant.getBySelector(selector);
   }
 
-  public void sendResponse(ChannelHandlerContext context, IsoMessage request, Consumer<IsoMessage> responseConsumer) {
+  public void sendResponse(ChannelHandlerContext context, IsoMessage request, String responseCode) {
     IsoMessage response = createResponse(request);
-    responseConsumer.accept(response);
+    setResponseCode(response, responseCode);
     isoMessageLoggerHelper.logIsoMessage(response);
     context.writeAndFlush(response);
   }
 
-  public void sendResponseWithObservation(ParticipantContext context, String responseCode, Throwable throwable) {
+  public void sendResponseWithObservation(ParticipantContext context, String responseCode, Throwable throwable,
+      Consumer<IsoMessage> responseConsumer) {
     IsoMessage request = context.getIsoMessage();
     IsoMessage response = createResponse(request);
-    setResponseCode(response, responseCode);
+
+    responseConsumer.accept(response);
 
     Observation observation = context.getObservation();
     publishIsoEvent(observation, response, ISO_RESPONSE_EVENT);
@@ -314,23 +321,17 @@ public class IsoFieldHelper {
     ObservationHelper.observeResponse(context.getObservation(), responseCode, throwable);
   }
 
+  public void sendResponseWithObservation(ParticipantContext context, String responseCode, Throwable throwable) {
+    sendResponseWithObservation(context, responseCode, throwable, isoMessage -> {
+      setResponseCode(isoMessage, responseCode);
+    });
+  }
+
   public IsoMessage createResponse(IsoMessage request) {
     return messageFactoryHelper.getDefaultMessageFactory().createResponse(request);
   }
 
-  public RequestContext logAndObserve(IsoMessage isoMessage, RequestContext requestContext,
-      Observation observation) {
-
-    ObservationHelper.createIsoContext(observation, requestContext.getRrn(), requestContext.getIsoFeatureConstant());
-
-    publishIsoEvent(observation, isoMessage, ISO_REQUEST_EVENT);
-
-    isoMessageLoggerHelper.logIsoMessage(isoMessage);
-
-    return requestContext;
-  }
-
-  private void publishIsoEvent(Observation observation, IsoMessage isoMessage, String event) {
+  public void publishIsoEvent(Observation observation, IsoMessage isoMessage, String event) {
     try {
       JsonLogIsoMessage jsonLogIsoMessage = isoMessageLoggerHelper.toLogMessage(isoMessage);
       String isoRequest = objectMapper.writeValueAsString(jsonLogIsoMessage);

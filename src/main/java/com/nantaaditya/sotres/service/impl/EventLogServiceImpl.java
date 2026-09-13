@@ -30,7 +30,7 @@ public class EventLogServiceImpl implements EventLogService {
   @Async("defaultAsyncTaskExecutor")
   @Override
   public void remove(int days) {
-    eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days));
-    log.info(AppLogMessage.message("#EventLog - removed obsolete event logs older than {} days", days));
+    int deleted = eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days));
+    log.info(AppLogMessage.message("#EventLog - removed {} obsolete event log(s) older than {} days", deleted, days));
   }
 }

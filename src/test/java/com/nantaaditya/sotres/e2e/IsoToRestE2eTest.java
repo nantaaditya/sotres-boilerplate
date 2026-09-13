@@ -183,6 +183,28 @@ class IsoToRestE2eTest {
   }
 
   @Test
+  @DisplayName("0200 with a path mapping but no JSLT template: a non-identity RESPONSE_MAPPING entry"
+      + " translates the host's response code onto a different ISO DE39")
+  void passThroughWithNonIdentityResponseMapping() throws InterruptedException {
+    // e2e/init.sql seeds response.incoming_outgoing_mapping with 59:05 specifically for this case
+    // -- 00:00/05:05/51:51 (used by the other scenarios) happen to be identity and would not catch
+    // a translation bug in RestProtocolStrategy.mappingResponseCode.
+    DOWNSTREAM.stubFor(post(urlEqualTo("/api/passthrough"))
+        .willReturn(aResponse()
+            .withHeader("Content-Type", "application/json")
+            .withBody("{\"response\":{\"code\":\"59\"}}")));
+
+    String rrn = "RRN000000008";
+    ISO_HOST.send(IsoMessages.authRequest("4111111111111111", "980000", 2500, nextStan(), rrn, "E002"));
+
+    IsoMessage reply = ISO_HOST.awaitMessage(
+        m -> m.getType() == 0x210 && rrn.equals(str(m, 37)), Duration.ofSeconds(10));
+
+    assertThat(reply).as("0210 reply").isNotNull();
+    assertThat(str(reply, 39)).as("DE39 mapped from host code 59 to ISO 05").isEqualTo("05");
+  }
+
+  @Test
   @DisplayName("0200 with an unmapped selector (no handler): 0210 carries DE39=92 (unable to route)")
   void unableToRoute() throws InterruptedException {
     // Phase 2C-3 populates the ParticipantContext before the no-handler branch,

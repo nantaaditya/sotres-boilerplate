@@ -1,192 +1,120 @@
-# API Reference — sotres
+# API Reference
 
-> **Last Modified**: 2026-07-12  
-> Auto-generated from `src/main/java/com/nantaaditya/sotres/api/`.
-
-**Controllers**: ExampleController, DeadLetterProcessController, EventLogController, NetworkController, SystemPropertiesController, JsltAdminController
-
----
-
-## Table of Contents
-
-- [Shared Conventions](#shared-conventions)
-- [1. Greeting](#1-greeting)
-- [2. Demo Error Response](#2-demo-error-response)
-- [3. Purge Dead-Letter Records](#3-purge-dead-letter-records)
-- [4. Retry Dead-Letter Records](#4-retry-dead-letter-records)
-- [5. Purge Audit Log Records](#5-purge-audit-log-records)
-- [6. ISO8583 Sign-On](#6-iso8583-sign-on)
-- [7. ISO8583 Sign-Off](#7-iso8583-sign-off)
-- [8. ISO8583 Echo / Health Check](#8-iso8583-echo--health-check)
-- [9. Reload Configuration Group](#9-reload-configuration-group)
-- [10. Read Configuration Group](#10-read-configuration-group)
-- [11. Reload JSLT Templates for a Selector](#11-reload-jslt-templates-for-a-selector)
-- [12. Get JSLT Template Text for a Selector](#12-get-jslt-template-text-for-a-selector)
-- [13. Reload All JSLT Templates](#13-reload-all-jslt-templates)
-- [14. Create or Update JSLT Template](#14-create-or-update-jslt-template)
+**Runtime:** Spring Boot 3.5.16 · Java 25 · servlet (Tomcat) + virtual threads  
+**Last Updated:** 2026-09-03
 
 ---
 
 ## Shared Conventions
 
-### Global Request Headers
+### Global Headers
 
-Every request passes through `HeaderFilter` (`OncePerRequestFilter`, highest precedence). The filter reads the following headers and makes them available throughout the request lifecycle (via `ContextHelper`, a request attribute, and Micrometer baggage):
+All endpoints use these optional headers for request tracking and correlation:
 
-| Header | Required | Description |
-|---|---|---|
-| `x-client-id` | No | Caller identity. Defaults to `SYSTEM` if absent. Used for audit log writes. |
-| `x-request-id` | No | Request correlation ID. Defaults to a server-generated TSID if absent. Propagated as Micrometer Brave baggage. |
-| `x-request-time` | No | Client-side initiation timestamp (ISO-8601). Recorded in the audit log. |
+| Header | Mandatory | Description |
+|--------|-----------|-------------|
+| `x-client-id` | O | Client identifier; echoed in response |
+| `x-request-id` | O | Request correlation ID; echoed in response |
+| `x-request-time` | O | Client-side timestamp (ISO 8601); echoed in response |
 
-The filter also adds `x-received-time` to every response (server receive timestamp, ISO-8601 GMT+7).
+**Response headers** include:
+- `x-received-time` — server receive timestamp (ISO 8601)
+- `x-response-time` — round-trip duration (milliseconds)
 
 ### Response Envelope
 
-All endpoints return the same JSON envelope (`Response<T>`). Fields are `@JsonInclude(NON_NULL)` — `data` is absent on error, `error` is absent on success.
+All responses follow this structure:
 
 ```json
 {
   "response": {
     "code": "000",
     "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
   "data": {},
-  "error": {
-    "violations": {
-      "fieldName": ["ErrorMessage"]
-    }
-  }
+  "error": null
 }
 ```
 
 | Field | Type | Description |
-|---|---|---|
-| `response.code` | String | Application-level response code |
-| `response.description` | String | Human-readable description of the code |
-| `response.time` | String | Server response time, ISO-8601 GMT+7 |
-| `data` | T | Payload on success; absent on error |
-| `error.violations` | Map\<String, List\<String\>\> | Field-level validation errors; absent on success |
+|-------|------|-------------|
+| `response.code` | String | Three-digit code: `000` (success), `900` (validation error), `998` (bad request), `999` (internal error) |
+| `response.description` | String | Human-readable description |
+| `response.time` | String | ISO 8601 timestamp |
+| `data` | Any | Payload on success; null on error |
+| `error` | Object or null | Validation violations (if present) |
 
-### HTTP Status Mapping
+### Response Codes
 
-`BaseController.toResponse()` maps application code to HTTP status:
-
-| Application Code | HTTP Status |
-|---|---|
-| `000` (SUCCESS) | 200 OK |
-| Anything else | 400 Bad Request |
-
-`ApiExceptionHandler` covers framework-level failures:
-
-| Exception | HTTP Status | App Code |
-|---|---|---|
-| `HandlerMethodValidationException` | 400 | 900 |
-| `ConstraintViolationException` | 400 | 900 |
-| `NoResourceFoundException` | 400 | 998 |
-| `EmissionException` | 400 | 998 |
-| `BadSqlGrammarException` | 500 | 999 |
-| `GeneralFlowException` | 500 | (from exception payload) |
-| `Throwable` (catch-all) | 500 | 999 |
-
-### Global Response Codes
-
-| Code | Constant | Meaning |
-|---|---|---|
-| `000` | `SUCCESS` | Request processed successfully |
-| `900` | `INVALID_PARAMS` | Bean validation failure — check `error.violations` |
-| `998` | `BAD_REQUEST` | Business rule rejection or endpoint not found |
-| `999` | `INTERNAL_ERROR` | Unhandled server error or DB grammar error |
-
-### ConfigGroup Enum Values
-
-Used in the `group` / `key` query parameters of the configuration reload/read endpoints (#9, #10):
-
-`ISO8583_MASK_FIELDS` · `ACQUIRERS` · `INCOMING_MTI` · `OUTGOING_MTI` · `CURRENCY_FRACTIONS` · `PATH_MAPPING` · `RESPONSE_MAPPING` · `REGISTRY_RESPONSE_SELECTOR` · `REGISTRY_CALLBACK_SELECTOR`
-
-### TemplateGroup Enum Values
-
-Used in the `group` query parameter of the JSLT template endpoint (#14):
-
-`CLIENT_SPEC_REQUEST` · `CLIENT_SPEC_RESPONSE`
+| Code | Description | HTTP Status |
+|------|-------------|-------------|
+| `000` | success | 200 |
+| `900` | invalid parameters | 400 |
+| `998` | bad request | 400 |
+| `999` | internal error | 400 |
 
 ---
 
-## 1. Greeting
+## Endpoints
 
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/api/example` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
+### 1. Greeting
 
-**Request** — no request body.
+**Purpose:** Simple greeting endpoint to verify the API is responding.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `name` | String | No | Name to greet. Defaults to `you` if omitted. |
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/api/example` | Standard headers (all optional) |
 
-**Response Body**
+**Request**
+
+Query parameters:
+
+| Parameter | Type | Mandatory | Default | Description |
+|-----------|------|-----------|---------|-------------|
+| `name` | String | O | `"you"` | Name to greet |
+
+**Response**
 
 ```json
 {
   "response": {
     "code": "000",
     "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
-  "data": "Hi Alice!"
+  "data": "Hi Alice!",
+  "error": null
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `data` | String | Greeting string: `"Hi {name}!"` |
-
-**List Response Code**
+**Response Codes**
 
 | Code | Description |
-|---|---|
-| `000` | Success — greeting returned |
-| `999` | Internal error (catch-all) |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "ExampleController" as Controller
-participant "ResponseHelper" as Helper
-
-Client -> Controller : GET /api/example?name=Alice
-Controller -> Helper : success("Hi Alice!")
-Helper --> Controller : Response<String>
-Controller --> Client : 200 {"data": "Hi Alice!"}
-@enduml
-```
+|------|-------------|
+| `000` | success |
+| `999` | internal error |
 
 ---
 
-## 2. Demo Error Response
+### 2. Error Response Demo
 
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/api/example/error` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
+**Purpose:** Demonstrate error response structure.
 
-**Request** — no body, no parameters.
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/api/example/error` | Standard headers (all optional) |
 
-**Response Body**
+**Response**
 
 ```json
 {
   "response": {
     "code": "998",
     "description": "bad request",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
+  "data": null,
   "error": {
     "violations": {
       "key": ["value"]
@@ -195,820 +123,507 @@ Controller --> Client : 200 {"data": "Hi Alice!"}
 }
 ```
 
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `998` | Always returned — endpoint exists solely to demonstrate the error envelope shape |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "ExampleController" as Controller
-participant "ResponseHelper" as Helper
-
-Client -> Controller : GET /api/example/error
-Controller -> Helper : failed(BAD_REQUEST, {"key": ["value"]})
-Helper --> Controller : Response<Object> with error
-Controller --> Client : 400 {"response": {"code": "998"}, "error": {...}}
-@enduml
-```
-
 ---
 
-## 3. Purge Dead-Letter Records
+### 3. System Properties: Get Configuration
 
-| | |
-|---|---|
-| **HTTP Method** | `DELETE` |
-| **Path** | `/internal-api/dead_letter_process` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
+**Purpose:** Retrieve all system properties for a given configuration group.
 
-**Request** — no request body.
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/internal-api/configurations` | Standard headers (all optional) |
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `days` | Integer | No | Age threshold in days. Records older than this are deleted. Defaults to `30`. |
+**Request**
 
-**Response Body**
+Query parameters:
+
+| Parameter | Type | Mandatory | Description |
+|-----------|------|-----------|-------------|
+| `key` | String | M | Configuration group (enum: `REGISTRY_TYPE`, etc.) |
+
+**Response**
 
 ```json
 {
   "response": {
     "code": "000",
     "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
-  "data": true
+  "data": {
+    "key1": "value1",
+    "key2": "value2"
+  },
+  "error": null
 }
 ```
 
-Response is returned immediately. Deletion runs asynchronously after the response is sent (`doOnSuccess`).
-
-**List Response Code**
+**Response Codes**
 
 | Code | Description |
-|---|---|
-| `000` | Accepted — deletion is running asynchronously |
-| `900` | `days` failed constraint validation |
-| `999` | Internal error |
+|------|-------------|
+| `000` | success |
+| `998` | bad request (invalid `key`) |
+| `999` | internal error |
 
-**Sequence Flow**
+---
 
-```plantuml
-@startuml
-participant Client
-participant "DeadLetterProcessController" as Controller
-participant "ResponseHelper" as Helper
-participant "DeadLetterProcessService" as Service
+### 4. System Properties: Reload Configuration
 
-Client -> Controller : DELETE /internal-api/dead_letter_process?days=30
-Controller -> Helper : success(true)
-Helper --> Controller : Response<Boolean>
-Controller --> Client : 200 {"data": true}
+**Purpose:** Reload a configuration group from the database and refresh the in-memory cache.
 
-note over Controller, Service : async — after response sent
-Controller -> Service : remove(30)
-Service --> Controller : (void subscription)
-@enduml
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| PUT | `/internal-api/configurations/_reload` | Standard headers (all optional) |
+
+**Request**
+
+Query parameters:
+
+| Parameter | Type | Mandatory | Description |
+|-----------|------|-----------|-------------|
+| `group` | String | M | Configuration group to reload |
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": true,
+  "error": null
+}
 ```
 
 ---
 
-## 4. Retry Dead-Letter Records
+### 5. Network: Send Sign-On
 
-| | |
-|---|---|
-| **HTTP Method** | `POST` |
-| **Path** | `/internal-api/dead_letter_process/_retry` |
-| **Content-Type** | `application/json` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
+**Purpose:** Initiate ISO8583 sign-on handshake with the upstream host.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/internal-api/network/sign-on` | Standard headers (all optional) |
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": true,
+  "error": null
+}
+```
+
+---
+
+### 6. Network: Send Sign-Off
+
+**Purpose:** Initiate ISO8583 sign-off handshake with the upstream host.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/internal-api/network/sign-off` | Standard headers (all optional) |
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": true,
+  "error": null
+}
+```
+
+---
+
+### 7. Network: Send Echo
+
+**Purpose:** Send an ISO8583 echo to verify connectivity.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/internal-api/network/echo` | Standard headers (all optional) |
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": true,
+  "error": null
+}
+```
+
+**Response Codes**
+
+| Code | Description |
+|------|-------------|
+| `000` | success (echo received) |
+| `998` | bad request (echo failed) |
+| `999` | internal error |
+
+---
+
+### 8. Dead Letter Process: Remove Old Records
+
+**Purpose:** Delete dead-letter records older than a specified number of days.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| DELETE | `/internal-api/dead_letter_process` | Standard headers (all optional) |
+
+**Request**
+
+Query parameters:
+
+| Parameter | Type | Mandatory | Default | Description |
+|-----------|------|-----------|---------|-------------|
+| `days` | Integer | O | `30` | Age threshold in days |
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": true,
+  "error": null
+}
+```
+
+**Note:** Deletion runs asynchronously on `defaultAsyncTaskExecutor`.
+
+---
+
+### 9. Dead Letter Process: Retry Failed Processes
+
+**Purpose:** Retry failed processes by type and name.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| POST | `/internal-api/dead_letter_process/_retry` | Standard headers (all optional) |
 
 **Request Body**
 
 ```json
 {
-  "processType": "TRANSACTION",
-  "processName": "outgoing-rest-call",
+  "processType": "iso_transaction",
+  "processName": "outbound_payment",
   "size": 10
 }
 ```
 
-| Field | Type | Mandatory | Length | Description |
-|---|---|---|---|---|
-| `processType` | String | M | - | Process category (e.g. `TRANSACTION`). Must not be blank. |
-| `processName` | String | M | - | Name of the process to retry. Must not be blank. |
-| `size` | Integer | M | - | Maximum records to retry in this batch. Minimum value: `1`. |
+| Field | Type | Mandatory | Description |
+|-------|------|-----------|-------------|
+| `processType` | String | M | Process type (must be non-blank) |
+| `processName` | String | M | Process name (must be non-blank) |
+| `size` | Integer | M | Batch size (must be ≥ 1) |
 
-**Response Body**
+**Response**
 
 ```json
 {
   "response": {
     "code": "000",
     "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
-  "data": true
+  "data": true,
+  "error": null
 }
 ```
 
-Response is returned immediately. Retry runs asynchronously after the response is sent.
-
-**List Response Code**
+**Response Codes**
 
 | Code | Description |
-|---|---|
-| `000` | Accepted — retry is running asynchronously |
-| `900` | Validation failure on `processType`, `processName`, or `size` |
-| `999` | Internal error |
+|------|-------------|
+| `000` | success (retry scheduled) |
+| `900` | invalid parameters (validation failed) |
+| `998` | bad request (malformed JSON) |
+| `999` | internal error |
 
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "DeadLetterProcessController" as Controller
-participant "ResponseHelper" as Helper
-participant "DeadLetterProcessService" as Service
-
-Client -> Controller : POST /internal-api/dead_letter_process/_retry
-
-alt validation failure (@Valid)
-    Controller --> Client : 400 {"response": {"code": "900"}, "error": {"violations": {...}}}
-else valid
-    Controller -> Helper : success(true)
-    Helper --> Controller : Response<Boolean>
-    Controller --> Client : 200 {"data": true}
-    note over Controller, Service : async — after response sent
-    Controller -> Service : retry(request)
-    Service --> Controller : (void subscription)
-end
-@enduml
-```
+**Note:** Retry runs asynchronously on `defaultAsyncTaskExecutor`.
 
 ---
 
-## 5. Purge Audit Log Records
+### 10. JSLT Admin: Get Templates
 
-| | |
-|---|---|
-| **HTTP Method** | `DELETE` |
-| **Path** | `/internal-api/event_log` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
+**Purpose:** Retrieve JSLT transformation templates for a selector.
 
-**Request** — no request body.
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| GET | `/internal-api/jslt/templates` | Standard headers (all optional) |
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `days` | Integer | No | Age threshold in days. Records older than this are deleted. Defaults to `30`. |
+**Request**
 
-**Response Body**
+Query parameters:
+
+| Parameter | Type | Mandatory | Description |
+|-----------|------|-----------|-------------|
+| `selector` | String | M | Selector identifier (e.g., `0200.000001.01`) |
+
+**Response**
 
 ```json
 {
   "response": {
     "code": "000",
     "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": true
-}
-```
-
-Response is returned immediately. Deletion runs asynchronously.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Accepted — deletion is running asynchronously |
-| `999` | Internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "EventLogController" as Controller
-participant "ResponseHelper" as Helper
-participant "EventLogService" as Service
-
-Client -> Controller : DELETE /internal-api/event_log?days=30
-Controller -> Helper : success(true)
-Helper --> Controller : Response<Boolean>
-Controller --> Client : 200 {"data": true}
-
-note over Controller, Service : async — after response sent
-Controller -> Service : remove(30)
-Service --> Controller : (void subscription)
-@enduml
-```
-
----
-
-## 6. ISO8583 Sign-On
-
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/internal-api/network/sign-on` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no body, no parameters.
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": true
-}
-```
-
-Response is returned immediately. The 0800/logon message is dispatched asynchronously in `doOnSuccess`.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Accepted — sign-on message dispatched |
-| `999` | Internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "NetworkController" as Controller
-participant "ResponseHelper" as Helper
-participant "NetworkService" as Service
-participant "ISO8583 Host" as ISO8583
-
-Client -> Controller : GET /internal-api/network/sign-on
-Controller -> Helper : success(true)
-Helper --> Controller : Response<Boolean>
-Controller --> Client : 200 {"data": true}
-
-note over Controller, ISO8583 : async — after response sent
-Controller -> Service : sendSignOn()
-Service -> ISO8583 : 0800 (logon)
-ISO8583 --> Service : 0810 (response)
-@enduml
-```
-
----
-
-## 7. ISO8583 Sign-Off
-
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/internal-api/network/sign-off` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no body, no parameters.
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": true
-}
-```
-
-The 0800/logoff message is dispatched in `doOnNext` — concurrent with response delivery.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Accepted — sign-off message dispatched |
-| `999` | Internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "NetworkController" as Controller
-participant "ResponseHelper" as Helper
-participant "NetworkService" as Service
-participant "ISO8583 Host" as ISO8583
-
-Client -> Controller : GET /internal-api/network/sign-off
-Controller -> Helper : success(true)
-Helper --> Controller : Response<Boolean>
-Controller --> Client : 200 {"data": true}
-
-note over Controller, ISO8583 : concurrent via doOnNext
-Controller -> Service : sendSignOff()
-Service -> ISO8583 : 0800 (logoff)
-ISO8583 --> Service : 0810 (response)
-@enduml
-```
-
----
-
-## 8. ISO8583 Echo / Health Check
-
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/internal-api/network/echo` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no body, no parameters.
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": true
-}
-```
-
-`data` reflects the actual boolean result from `NetworkService.sendEcho()` — unlike sign-on/off (which return a fixed `true` and fire the ISO message via `@Async`), this endpoint returns the real echo/health result.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Echo succeeded — channel is healthy |
-| `999` | Echo failed or internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "NetworkController" as Controller
-participant "NetworkService" as Service
-participant "ISO8583 Host" as ISO8583
-participant "ResponseHelper" as Helper
-
-Client -> Controller : GET /internal-api/network/echo
-Controller -> Service : sendEcho()
-Service -> ISO8583 : 0800 (echo test)
-ISO8583 --> Service : 0810 (response)
-Service --> Controller : boolean result
-Controller -> Helper : success(result)
-Helper --> Controller : Response<Boolean>
-Controller --> Client : 200 {"data": true}
-@enduml
-```
-
----
-
-## 9. Reload Configuration Group
-
-| | |
-|---|---|
-| **HTTP Method** | `PUT` |
-| **Path** | `/internal-api/configurations/_reload` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no request body.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `group` | ConfigGroup | Yes | Enum value identifying which group to reload from the database. See Shared Conventions for valid values. |
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": true
-}
-```
-
-Response is returned immediately. The database re-fetch and in-memory cache update run asynchronously in `doOnSuccess`.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Accepted — cache reload dispatched |
-| `900` | `group` is not a valid `ConfigGroup` enum value |
-| `999` | Internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "SystemPropertiesController" as Controller
-participant "ResponseHelper" as Helper
-participant "SystemPropertiesServiceImpl" as Service
-participant "SystemPropertiesRepository" as Repo
-
-Client -> Controller : PUT /internal-api/configurations/_reload?group=PATH_MAPPING
-
-alt invalid enum value
-    Controller --> Client : 400 {"response": {"code": "900"}}
-else valid
-    Controller -> Helper : success(true)
-    Helper --> Controller : Response<Boolean>
-    Controller --> Client : 200 {"data": true}
-    note over Controller, Repo : async — after response sent
-    Controller -> Service : reload(PATH_MAPPING)
-    Service -> Repo : findByGroupId("endpoint_path")
-    Repo --> Service : List<SystemProperties>
-    Service -> Service : update PROPERTY_COLLECTION_MAP
-end
-@enduml
-```
-
----
-
-## 10. Read Configuration Group
-
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/internal-api/configurations` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no request body.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `key` | ConfigGroup | Yes | Enum value identifying which in-memory group to read. See Shared Conventions for valid values. |
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
   "data": {
-    "10.97-E001": "/api/transaction"
+    "client_spec_request": ".clientId = .merchant.id | .amount = .txn.amount",
+    "client_spec_response": ".de39 = .response.responseCode | .amount = .response.amount"
+  },
+  "error": null
+}
+```
+
+**Response Codes**
+
+| Code | Description |
+|------|-------------|
+| `000` | success (returns templates or empty map) |
+| `998` | bad request |
+| `999` | internal error |
+
+---
+
+### 11. JSLT Admin: Reload Template Cache
+
+**Purpose:** Evict and re-fetch a selector's JSLT templates from the database.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| POST | `/internal-api/jslt/_reload` | Standard headers (all optional) |
+
+**Request**
+
+Query parameters:
+
+| Parameter | Type | Mandatory | Description |
+|-----------|------|-----------|-------------|
+| `selector` | String | M | Selector to reload |
+
+**Response (success — both directions compiled)**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": {
+    "client_spec_request": ".clientId = .merchant.id | ...",
+    "client_spec_response": ".de39 = .response.responseCode | ..."
+  },
+  "error": null
+}
+```
+
+**Response (failure — a direction has an invalid template)**
+
+```json
+{
+  "response": {
+    "code": "900",
+    "description": "invalid parameters",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": null,
+  "error": {
+    "violations": {
+      "template": ["NotValid"]
+    }
   }
 }
 ```
 
-`data` is the `Map<String, String>` held in the in-memory cache for the requested group. Returns an empty map if the group has not been loaded yet.
+**Note:** Prior to Phase 5 of `docs/POST_MIGRATION_REMEDIATION_PLAN.md`, an invalid template was silently cached as a pass-through and this endpoint returned `200 OK` with the broken template text, giving no signal that the reload failed. It now returns `400` (`InvalidTemplateException`). The broken template is still cached as a pass-through internally so live traffic for that selector keeps working — only the operator-facing reload call now fails loudly.
 
-**List Response Code**
+**Response Codes**
 
 | Code | Description |
-|---|---|
-| `000` | Success — in-memory map returned |
-| `900` | `key` is not a valid `ConfigGroup` enum value |
-| `999` | Internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "SystemPropertiesController" as Controller
-participant "SystemPropertiesServiceImpl" as Service
-participant "ResponseHelper" as Helper
-
-Client -> Controller : GET /internal-api/configurations?key=PATH_MAPPING
-
-alt invalid enum value
-    Controller --> Client : 400 {"response": {"code": "900"}}
-else valid
-    Controller -> Service : getProperty(PATH_MAPPING)
-    Service --> Controller : Map<String, String> (from in-memory cache)
-    Controller -> Helper : success(map)
-    Helper --> Controller : Response<Map>
-    Controller --> Client : 200 {"data": {"10.97-E001": "/api/transaction"}}
-end
-@enduml
-```
+|------|-------------|
+| `000` | success (both directions compiled) |
+| `900` | invalid parameters (a direction's template failed to compile) |
+| `998` | bad request |
+| `999` | internal error |
 
 ---
 
-## 11. Reload JSLT Templates for a Selector
+### 12. JSLT Admin: Reload All Templates
 
-| | |
-|---|---|
-| **HTTP Method** | `POST` |
-| **Path** | `/internal-api/jslt/_reload` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
+**Purpose:** Clear the entire JSLT template cache and re-fetch every configured selector.
 
-**Request** — no request body.
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| POST | `/internal-api/jslt/_reload-all` | Standard headers (all optional) |
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `selector` | String | Yes | Transaction selector key (e.g. `10.97-E001`). Both `client_spec_request` and `client_spec_response` compiled expressions for this selector are evicted, re-fetched, and recompiled. |
-
-**Response Body**
+**Response**
 
 ```json
 {
   "response": {
     "code": "000",
     "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "time": "2026-09-03T10:30:45.123Z"
   },
   "data": {
-    "client_spec_request": "{\"amount\": .amount, \"currency\": .currency}",
-    "client_spec_response": "{\"response\": {\"code\": .responseCode}}"
-  }
-}
-```
-
-If no template exists in the database for a direction, that key's value is an empty string `""`.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Success — cache evicted and rewarmed |
-| `900` | `selector` missing or blank |
-| `999` | Template compile error (malformed JSLT) or internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "JsltAdminController" as Controller
-participant "JsltTransformationHelper" as Helper
-participant "SystemPropertiesServiceImpl" as Service
-participant "SystemPropertiesRepository" as Repo
-
-Client -> Controller : POST /internal-api/jslt/_reload?selector=10.97-E001
-Controller -> Helper : evictAndReload("10.97-E001")
-Helper -> Helper : evict CLIENT_SPEC_REQUEST:10.97-E001
-Helper -> Helper : evict CLIENT_SPEC_RESPONSE:10.97-E001
-
-par fetch request template
-    Helper -> Service : getRawProperty(CLIENT_SPEC_REQUEST, "10.97-E001")
-    Service -> Repo : findByGroupIdAndPropertyId(...)
-    Repo --> Service : SystemProperties / empty
-    Service --> Helper : template string / ""
-    Helper -> Helper : compileAndCache(template)
-end
-par fetch response template
-    Helper -> Service : getRawProperty(CLIENT_SPEC_RESPONSE, "10.97-E001")
-    Service -> Repo : findByGroupIdAndPropertyId(...)
-    Repo --> Service : SystemProperties / empty
-    Service --> Helper : template string / ""
-    Helper -> Helper : compileAndCache(template)
-end
-
-Helper --> Controller : Map<String, String>
-Controller --> Client : 200 {"data": {"client_spec_request": "...", "client_spec_response": "..."}}
-@enduml
-```
-
----
-
-## 12. Get JSLT Template Text for a Selector
-
-| | |
-|---|---|
-| **HTTP Method** | `GET` |
-| **Path** | `/internal-api/jslt/templates` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no request body.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `selector` | String | Yes | Transaction selector key. Fetches raw template text from the database for both directions without recompiling. |
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
+    "client_spec_request:20.97-E001": true,
+    "client_spec_response:20.97-E001": true,
+    "client_spec_request:20.98-E002": false
   },
-  "data": {
-    "client_spec_request": "{\"amount\": .amount, \"currency\": .currency}",
-    "client_spec_response": "{\"response\": {\"code\": .responseCode}}"
-  }
-}
-```
-
-If no template exists for a direction, the value is `""`.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Success — template texts returned |
-| `900` | `selector` missing or blank |
-| `999` | Internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "JsltAdminController" as Controller
-participant "JsltTransformationHelper" as Helper
-participant "SystemPropertiesServiceImpl" as Service
-participant "SystemPropertiesRepository" as Repo
-
-Client -> Controller : GET /internal-api/jslt/templates?selector=10.97-E001
-Controller -> Helper : getTemplates("10.97-E001")
-
-par
-    Helper -> Service : getRawProperty(CLIENT_SPEC_REQUEST, "10.97-E001")
-    Service -> Repo : findByGroupIdAndPropertyId(...)
-    Repo --> Service : template / empty
-    Service --> Helper : String / ""
-end
-par
-    Helper -> Service : getRawProperty(CLIENT_SPEC_RESPONSE, "10.97-E001")
-    Service -> Repo : findByGroupIdAndPropertyId(...)
-    Repo --> Service : template / empty
-    Service --> Helper : String / ""
-end
-
-Helper --> Controller : Map<String, String>
-Controller --> Client : 200 {"data": {"client_spec_request": "...", "client_spec_response": "..."}}
-@enduml
-```
-
----
-
-## 13. Reload All JSLT Templates
-
-| | |
-|---|---|
-| **HTTP Method** | `POST` |
-| **Path** | `/internal-api/jslt/_reload-all` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — no body, no parameters.
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": true
-}
-```
-
-Clears the entire compiled expression cache, re-fetches all rows from both `client_spec_request` and `client_spec_response` groups, and recompiles every template before returning.
-
-**List Response Code**
-
-| Code | Description |
-|---|---|
-| `000` | Success — entire cache cleared and rewarmed |
-| `999` | Template compile error (malformed JSLT row) or internal error |
-
-**Sequence Flow**
-
-```plantuml
-@startuml
-participant Client
-participant "JsltAdminController" as Controller
-participant "JsltTransformationHelper" as Helper
-participant "SystemPropertiesServiceImpl" as Service
-participant "SystemPropertiesRepository" as Repo
-
-Client -> Controller : POST /internal-api/jslt/_reload-all
-Controller -> Helper : evictAll()
-Helper -> Helper : expressionCache.clear()
-
-Helper -> Service : getByGroupId(CLIENT_SPEC_REQUEST)
-Service -> Repo : findByGroupId("client_spec_request")
-Repo --> Service : List<SystemProperties>
-Service --> Helper : List<SystemProperties>
-
-Helper -> Service : getByGroupId(CLIENT_SPEC_RESPONSE)
-Service -> Repo : findByGroupId("client_spec_response")
-Repo --> Service : List<SystemProperties>
-Service --> Helper : List<SystemProperties>
-
-Helper -> Helper : compileAndCache(each template)
-Helper --> Controller : void
-Controller --> Client : 200 {"data": true}
-@enduml
-```
-
----
-
-## 14. Create or Update JSLT Template
-
-| | |
-|---|---|
-| **HTTP Method** | `PUT` |
-| **Path** | `/internal-api/jslt/template` |
-| **Content-Type** | `text/plain` |
-| **HTTP Headers** | Standard headers — see Shared Conventions |
-
-**Request** — plain text body (raw JSLT expression string).
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `selector` | String | Yes | Transaction selector key (e.g. `10.97-E001`). Becomes `property_id` in `system_properties`. |
-| `group` | TemplateGroup | Yes | Direction: `CLIENT_SPEC_REQUEST` to shape the outgoing REST body, `CLIENT_SPEC_RESPONSE` to normalise the REST reply. |
-
-Request body (raw, `text/plain`):
-```
-{"amount": .amount, "currency": .currency, "pan": .cardNo}
-```
-
-**Response Body**
-
-```json
-{
-  "response": {
-    "code": "000",
-    "description": "success",
-    "time": "2026-07-12T10:00:00.000+07:00"
-  },
-  "data": {
-    "id": 42,
-    "groupId": "client_spec_request",
-    "propertyId": "10.97-E001",
-    "propertyValue": "{\"amount\": .amount, \"currency\": .currency, \"pan\": .cardNo}"
-  }
+  "error": null
 }
 ```
 
 | Field | Type | Description |
-|---|---|---|
-| `data.id` | Long | Auto-assigned database row ID |
-| `data.groupId` | String | Resolved group string (e.g. `client_spec_request`) |
-| `data.propertyId` | String | Echoed `selector` value |
-| `data.propertyValue` | String | Echoed template text as stored |
+|-------|------|--------------|
+| `data` | Object | Map of `"<groupId>:<selector>"` → `true` (compiled) / `false` (compile failed, cached as pass-through) |
 
-After save, the compiled expression for `group:selector` is evicted from the cache. The next transform call recompiles from the new value.
+**Note:** Prior to Phase 5, this endpoint always returned `data: true` regardless of whether any selector's template actually compiled. It now reports per-selector compile status. Always returns `200` — one bad selector's template does not prevent the others from reloading.
 
-**List Response Code**
+---
+
+### 13. JSLT Admin: Save or Update Template
+
+**Purpose:** Create or update a JSLT template for a selector and direction.
+
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| PUT | `/internal-api/jslt/template` | Standard headers + `Content-Type: text/plain` |
+
+**Request**
+
+Query parameters:
+
+| Parameter | Type | Mandatory | Description |
+|-----------|------|-----------|-------------|
+| `selector` | String | M | Selector identifier |
+| `group` | String | M | Direction: `CLIENT_SPEC_REQUEST` or `CLIENT_SPEC_RESPONSE` |
+
+Request body (raw JSLT, `text/plain`):
+```
+.clientId = .merchant.id | .amount = .txn.amount | .currency = "IDR"
+```
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": {
+    "id": 12345,
+    "group": "CLIENT_SPEC_REQUEST",
+    "selector": "0200.000001.01",
+    "template": ".clientId = .merchant.id | .amount = .txn.amount | .currency = \"IDR\""
+  },
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data.id` | Long | Database record ID |
+| `data.group` | String | Template direction |
+| `data.selector` | String | Selector identifier |
+| `data.template` | String | JSLT template text |
+
+**Response Codes**
 
 | Code | Description |
-|---|---|
-| `000` | Success — row created or updated, compiled expression cache evicted |
-| `900` | `selector` or `group` missing / invalid enum value |
-| `999` | Database error or internal error |
+|------|-------------|
+| `000` | success (template saved) |
+| `998` | bad request (invalid JSLT, missing selector/group) |
+| `999` | internal error |
 
-**Sequence Flow**
+**Note:** After save, the compiled expression cache is evicted for this selector/direction.
 
-```plantuml
-@startuml
-participant Client
-participant "JsltAdminController" as Controller
-participant "SystemPropertiesServiceImpl" as Service
-participant "SystemPropertiesRepository" as Repo
-participant "JsltTransformationHelper" as Helper
+---
 
-Client -> Controller : PUT /internal-api/jslt/template?selector=10.97-E001&group=CLIENT_SPEC_REQUEST\n[body: plain-text JSLT template]
+### 14. Event Log: Remove Old Records
 
-alt missing/invalid selector or group
-    Controller --> Client : 400 {"response": {"code": "900"}}
-else valid
-    Controller -> Service : upsert(CLIENT_SPEC_REQUEST, "10.97-E001", template)
-    Service -> Repo : findByGroupIdAndPropertyId("client_spec_request", "10.97-E001")
+**Purpose:** Delete event log records older than a specified number of days.
 
-    alt row exists
-        Repo --> Service : SystemProperties (existing)
-        Service -> Service : existing.toBuilder().propertyValue(template).build()
-    else row not found
-        Repo --> Service : empty
-        Service -> Service : SystemProperties.builder()...build() (new)
-    end
+| HTTP Method | Path | Headers |
+|-------------|------|---------|
+| DELETE | `/internal-api/event_log` | Standard headers (all optional) |
 
-    Service -> Repo : save(entity)
-    Repo --> Service : saved SystemProperties
-    Service -> Service : loadSystemProperties(saved)
-    Service --> Controller : SystemProperties
-    Controller -> Helper : evictExpression(CLIENT_SPEC_REQUEST, "10.97-E001")
-    Helper -> Helper : expressionCache.remove("client_spec_request:10.97-E001")
-    Controller --> Client : 200 {"data": {"id": 42, "groupId": "client_spec_request", ...}}
-end
-@enduml
+**Request**
+
+Query parameters:
+
+| Parameter | Type | Mandatory | Default | Description |
+|-----------|------|-----------|---------|-------------|
+| `days` | Integer | O | `30` | Age threshold in days |
+
+**Response**
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123Z"
+  },
+  "data": true,
+  "error": null
+}
 ```
+
+**Note:** Deletion runs asynchronously on `defaultAsyncTaskExecutor`.
+
+---
+
+## Architecture Notes
+
+### ISO8583 Message Flow
+
+- **Inbound:** Upstream switch sends `0200` → Netty event loop → ISO transaction virtual-thread executor → REST client → downstream API → response → ISO `0210`
+- **Outbound:** API endpoints manage network configuration and JSLT templates; they do not construct ISO messages directly
+- **Dead-letter:** ISO errors are captured in the `dead_letter_process` table; retry endpoint allows manual replay
+
+### JSLT Transformation
+
+- Templates are cached on first use with a 10-minute TTL
+- Pass-through mode: if no template exists for a selector, request and response are passed through unchanged
+- Negative cache: selectors with no template are cached as a sentinel to avoid repeated DB queries
+
+### Async Operations
+
+These endpoints execute asynchronously and return immediately:
+
+- `DELETE /internal-api/dead_letter_process`
+- `POST /internal-api/dead_letter_process/_retry`
+- `DELETE /internal-api/event_log`
+
+Failures during async execution are logged but do not affect the HTTP response.
+
+---
+
+**Generated:** 2026-09-03 | **Runtime:** Spring Boot 3.5.16 · servlet + virtual threads

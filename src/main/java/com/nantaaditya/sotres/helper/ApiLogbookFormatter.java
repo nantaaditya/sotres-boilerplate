@@ -94,16 +94,7 @@ public class ApiLogbookFormatter implements HttpLogFormatter {
     if (headers == null || headers.isEmpty()) {
       return Optional.empty();
     }
-
-    final Map<String, List<String>> result = new LinkedHashMap<>();
-    for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-      result.put(entry.getKey(),
-          logProperties.isSensitiveFields(entry.getKey()) ?
-              entry.getValue().stream().map(MaskingHelper::masking).toList() :
-              entry.getValue()
-      );
-    }
-    return Optional.of(result);
+    return Optional.of(MaskingHelper.maskHeaders(headers, logProperties::isSensitiveFields));
   }
 
   private Optional<Object> prepareBody(final HttpMessage message) throws IOException {

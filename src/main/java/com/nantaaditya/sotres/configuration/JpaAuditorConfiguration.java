@@ -23,6 +23,7 @@ public class JpaAuditorConfiguration implements AuditorAware<String> {
   public Optional<String> getCurrentAuditor() {
     return Optional.of(
         Optional.ofNullable(tracerHelper.getBaggage(HeaderConstant.CLIENT_ID))
-            .orElse(applicationName));
+            .orElse(applicationName)
+    );
   }
 }

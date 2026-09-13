@@ -5,6 +5,7 @@ import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.TracerHelper;
+import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
 import com.nantaaditya.sotres.model.dto.CacheBodyRequest;
@@ -33,8 +34,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 @Log4j2
 @Component("appHeaderFilter")
-// Just after the framework's security / tracing filters (HIGHEST_PRECEDENCE, +1) so baggage and the
-// cached body are in place before anything downstream — including the audit interceptor — reads them.
 @Order(Ordered.HIGHEST_PRECEDENCE + 2)
 public class HeaderFilter extends OncePerRequestFilter {
 
@@ -88,7 +87,7 @@ public class HeaderFilter extends OncePerRequestFilter {
       filterChain.doFilter(cachedRequest, response);
     } catch (Exception exception) {
       log.error(AppLogMessage.message("#Observation - error").error(exception));
-      ObservationHelper.observeResponse(observation, null, exception);
+      ObservationHelper.observeResponse(observation, ApiResponseCode.INTERNAL_ERROR.getCode(), exception);
       throw exception;
     } finally {
       if (!observation.isNoop()) {

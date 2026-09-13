@@ -32,8 +32,9 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
   @Override
   public void remove(int days) {
     LocalDateTime now = LocalDateTime.now();
-    deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(
+    int deleted = deadLetterProcessRepository.deleteByCreatedDateBeforeAndStatus(
         now.minusDays(days), RetryStatus.EXHAUSTED.name());
+    log.info(AppLogMessage.message("#DeadLetter - removed {} exhausted dead letter(s) older than {} days", deleted, days));
   }
 
   @Async("defaultAsyncTaskExecutor")

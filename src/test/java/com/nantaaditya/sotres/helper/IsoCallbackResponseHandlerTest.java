@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.helper;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -92,9 +93,12 @@ class IsoCallbackResponseHandlerTest {
     when(msg.getType()).thenReturn(528);
     when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
     when(msg.getField(3)).thenReturn(isoValue("000000"));
-    when(msg.getField(11)).thenReturn(isoValue("123456"));
-    when(msg.getField(37)).thenReturn(isoValue("000000000001"));
-    when(msg.getField(7)).thenReturn(isoValue("0615103045"));
+    // DE11/DE37/DE7 are not read by channelRead0() itself (tracerHelper.createTraceContext is
+    // mocked here, so it never actually touches DE37) — kept lenient for readability of the
+    // full message shape rather than pruning them to whatever channelRead0() happens to touch.
+    lenient().when(msg.getField(11)).thenReturn(isoValue("123456"));
+    lenient().when(msg.getField(37)).thenReturn(isoValue("000000000001"));
+    lenient().when(msg.getField(7)).thenReturn(isoValue("0615103045"));
   }
 
   private void setupNonMatchingMessage() {
@@ -102,9 +106,10 @@ class IsoCallbackResponseHandlerTest {
     when(msg.getType()).thenReturn(512);
     when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
     when(msg.getField(3)).thenReturn(isoValue("000000"));
-    when(msg.getField(11)).thenReturn(isoValue("123456"));
-    when(msg.getField(37)).thenReturn(isoValue("000000000001"));
-    when(msg.getField(7)).thenReturn(isoValue("0615103045"));
+    // see setupMatchingMessage() — DE11/DE37/DE7 are not read by channelRead0() itself.
+    lenient().when(msg.getField(11)).thenReturn(isoValue("123456"));
+    lenient().when(msg.getField(37)).thenReturn(isoValue("000000000001"));
+    lenient().when(msg.getField(7)).thenReturn(isoValue("0615103045"));
   }
 
   @Nested

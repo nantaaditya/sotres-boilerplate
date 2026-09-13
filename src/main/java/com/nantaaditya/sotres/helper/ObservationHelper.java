@@ -21,7 +21,7 @@ public class ObservationHelper {
 
   private ObservationHelper() {}
 
-  public static void createIsoContext(Observation observation, String rrn, String feature) {
+  public static void createTransactionContext(Observation observation, String rrn, String feature) {
     if (observation == null)
       return;
 
@@ -72,14 +72,11 @@ public class ObservationHelper {
     Context observationContext = new Context();
 
     ApiFeatureConstant feature = ApiFeatureConstant.get(contextDTO.getMethod(), contextDTO.getPath());
-    if (feature != null) {
-      observationContext.addLowCardinalityKeyValue(KeyValue.of("feature", feature.name()));
-    } else {
-      observationContext.addLowCardinalityKeyValue(KeyValue.of("feature", contextDTO.getUnknownFeature()));
-    }
+    observationContext.addLowCardinalityKeyValue(KeyValue.of(FEATURE,
+        feature != null ? feature.name() : contextDTO.getUnknownFeature()));
 
     if (contextDTO.getRequestId() != null) {
-      observationContext.addHighCardinalityKeyValue(KeyValue.of("requestId", contextDTO.getRequestId()));
+      observationContext.addHighCardinalityKeyValue(KeyValue.of(REQUEST_ID, contextDTO.getRequestId()));
     }
 
     return observationContext;

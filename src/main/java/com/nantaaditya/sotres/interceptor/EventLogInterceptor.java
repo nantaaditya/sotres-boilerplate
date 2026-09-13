@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.nantaaditya.sotres.entity.EventLog;
 import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.helper.GsonHelper;
-import com.nantaaditya.sotres.model.dto.CacheBodyRequest;
 import com.nantaaditya.sotres.model.dto.ContextDTO;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.LogProperties;
@@ -60,7 +59,7 @@ public class EventLogInterceptor implements HandlerInterceptor {
   }
 
   private String readBody(HttpServletRequest request) throws IOException {
-    InputStream inputStream = new CacheBodyRequest(request).getInputStream();
+    InputStream inputStream = request.getInputStream();
     return new String(StreamUtils.copyToByteArray(inputStream), StandardCharsets.UTF_8);
   }
 

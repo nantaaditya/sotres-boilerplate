@@ -44,4 +44,9 @@ architecture-map.html
 # local-only working docs (not committed; review manually)
 docs/REFACTOR_PLAN.md
 docs/RETRY_REFACTOR_PLAN.md
+docs/POST_MIGRATION_REMEDIATION_PLAN.md
+docs/INTEGRATION_TEST_PLAN.md
 CLAUDE.md
+
+### macOS ###
+.DS_Store

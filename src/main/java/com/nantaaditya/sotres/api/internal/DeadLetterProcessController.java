@@ -26,9 +26,8 @@ public class DeadLetterProcessController extends BaseController {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<Response<Boolean>> remove(@RequestParam(required = false, defaultValue = "30") int days) {
-    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
     deadLetterProcessService.remove(days);
-    return response;
+    return toResponse(responseHelper.success(Boolean.TRUE));
   }
 
   @PostMapping(
@@ -37,8 +36,7 @@ public class DeadLetterProcessController extends BaseController {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<Response<Boolean>> retry(@RequestBody @Valid RetryDeadLetterProcessRequest request) {
-    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
     deadLetterProcessService.retry(request);
-    return response;
+    return toResponse(responseHelper.success(Boolean.TRUE));
   }
 }

@@ -17,6 +17,7 @@ public class E2eTestConfig {
 
   public static final String SELECTOR_JSLT = "20.97-E001";
   public static final String SELECTOR_PASSTHROUGH = "20.98-E002";
+  public static final String SELECTOR_DEAD_LETTER = "20.96-E003";
 
   @Bean
   AbstractTransactionHandler e2ePassThroughHandler() {
@@ -27,7 +28,7 @@ public class E2eTestConfig {
 
     @Override
     public Set<String> getSelectors() {
-      return Set.of(SELECTOR_JSLT, SELECTOR_PASSTHROUGH);
+      return Set.of(SELECTOR_JSLT, SELECTOR_PASSTHROUGH, SELECTOR_DEAD_LETTER);
     }
 
     @Override

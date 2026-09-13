@@ -2,6 +2,7 @@ package com.nantaaditya.sotres;
 
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.BulkheadProperties;
+import com.nantaaditya.sotres.properties.CacheProperties;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
 import com.nantaaditya.sotres.properties.LogProperties;
@@ -17,6 +18,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableConfigurationProperties(value = {
     AsyncTaskProperties.class,
     BulkheadProperties.class,
+    CacheProperties.class,
     ClientProperties.class,
     IsoMessageProperties.class,
     LogProperties.class,

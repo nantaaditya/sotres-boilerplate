@@ -81,6 +81,14 @@
       <groupId>org.springframework.retry</groupId>
       <artifactId>spring-retry</artifactId>
     </dependency>
+    <!-- Pooled outbound HTTP connections for BaseClient/RestClient (Phase 6 of
+         docs/POST_MIGRATION_REMEDIATION_PLAN.md) — the JDK HttpClient backing RestClient has no
+         per-destination connection cap; this restores one so a struggling downstream can't cause
+         unbounded fan-out. Version managed by the Spring Boot BOM. -->
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+    </dependency>
 
     <!-- External Dependency -->
     <dependency>
@@ -114,11 +122,6 @@
     <dependency>
       <groupId>org.zalando</groupId>
       <artifactId>logbook-spring-boot-starter</artifactId>
-      <version>${logbook.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.zalando</groupId>
-      <artifactId>logbook-spring</artifactId>
       <version>${logbook.version}</version>
     </dependency>
     <dependency>
@@ -285,6 +288,44 @@
             <goals>
               <goal>report</goal>
             </goals>
+          </execution>
+          <!--
+            Bundle-level floor, bound to verify, set to 85% across the board per explicit
+            decision (2026-09-05) even though actual coverage at that time was INSTRUCTION
+            83.57% and BRANCH 76.99%, both below 85 (LINE was 84.77%, just under). This is
+            deliberately a forcing function: verify fails until real coverage catches up, rather
+            than a floor calibrated to pass today. See docs/POST_MIGRATION_REMEDIATION_PLAN.md
+            Phase 7, "Coverage checkpoint" (D5); track the resulting gap as a Phase 7F.
+          -->
+          <execution>
+            <id>jacoco-check</id>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>INSTRUCTION</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.85</minimum>
+                    </limit>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.85</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.85</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
           </execution>
         </executions>
         <configuration>

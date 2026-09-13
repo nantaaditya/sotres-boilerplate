@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
 import com.nantaaditya.sotres.model.constant.BackoffPolicyConstant;
+import com.nantaaditya.sotres.properties.LogProperties;
 import com.nantaaditya.sotres.properties.RetryProperties;
 import com.nantaaditya.sotres.properties.embedded.RetryConfiguration;
 import com.nantaaditya.sotres.repository.DeadLetterProcessRepository;
@@ -32,10 +34,14 @@ class RetryTemplateConfigurationTest {
   @Mock
   private DeadLetterProcessRepository deadLetterProcessRepository;
 
+  private static final Gson GSON = new Gson();
+  private static final LogProperties LOG_PROPERTIES =
+      new LogProperties(true, true, true, "cardNo,password", "json", "");
+
   private RetryTemplate build(RetryConfiguration configuration) {
     RetryProperties properties = new RetryProperties(Map.of("test", configuration));
     RetryTemplateConfiguration configurationUnderTest = new RetryTemplateConfiguration(
-        properties, deadLetterProcessRepository, new ObjectMapper());
+        properties, deadLetterProcessRepository, new ObjectMapper(), GSON, LOG_PROPERTIES);
     return configurationUnderTest.retryTemplateHelperFactory().getObject().getRetryTemplate("test");
   }
 
@@ -167,7 +173,7 @@ class RetryTemplateConfigurationTest {
       RetryProperties properties = new RetryProperties(Map.of("test",
           config(BackoffPolicyConstant.FIXED, 2, "java.lang.IllegalStateException:true")));
       RetryTemplateConfiguration configuration = new RetryTemplateConfiguration(
-          properties, deadLetterProcessRepository, new ObjectMapper());
+          properties, deadLetterProcessRepository, new ObjectMapper(), GSON, LOG_PROPERTIES);
 
       assertThat(configuration.retryTemplateHelperFactory().getObject().getRetryTemplate("missing"))
           .isNull();
@@ -177,7 +183,7 @@ class RetryTemplateConfigurationTest {
     @DisplayName("no configurations -> empty factory, no templates")
     void noConfigurations() {
       RetryTemplateConfiguration configuration = new RetryTemplateConfiguration(
-          new RetryProperties(Map.of()), deadLetterProcessRepository, new ObjectMapper());
+          new RetryProperties(Map.of()), deadLetterProcessRepository, new ObjectMapper(), GSON, LOG_PROPERTIES);
 
       assertThat(configuration.retryTemplateHelperFactory().getObject().getRetryTemplate("test"))
           .isNull();

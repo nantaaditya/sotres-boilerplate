@@ -4,10 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
-import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import com.nantaaditya.sotres.properties.CacheProperties;
+import com.nantaaditya.sotres.properties.embedded.CacheConfiguration;
+import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
 import com.schibsted.spt.data.jslt.Expression;
 import com.schibsted.spt.data.jslt.JsltException;
 import com.schibsted.spt.data.jslt.Parser;
@@ -30,20 +34,26 @@ import org.springframework.stereotype.Component;
 @Component
 public class JsltTransformationHelper {
 
-  private static final Duration CACHE_TTL = Duration.ofMinutes(10);
+  private final Cache<String, Optional<Expression>> expressionCache;
 
-  private final Cache<String, Optional<Expression>> expressionCache = Caffeine.newBuilder()
-      .expireAfterWrite(CACHE_TTL)
-      .build();
-
-  private final SystemPropertiesService systemPropertiesService;
+  private final SystemPropertiesRepository systemPropertiesRepository;
   private final ObjectMapper objectMapper;
 
   public JsltTransformationHelper(
-      SystemPropertiesService systemPropertiesService,
-      ObjectMapper objectMapper) {
-    this.systemPropertiesService = systemPropertiesService;
+      SystemPropertiesRepository systemPropertiesRepository,
+      ObjectMapper objectMapper,
+      CaffeineCacheHelper caffeineCacheHelper) {
+    this.systemPropertiesRepository = systemPropertiesRepository;
     this.objectMapper = objectMapper;
+
+    this.expressionCache = caffeineCacheHelper.createCache(
+        "jslt",
+        caffeine -> caffeine.removalListener(((key, value, cause) -> {
+          if (cause == RemovalCause.SIZE) {
+            log.warn(AppLogMessage.message("#JSLT - evicted cache for key={} due to size limit", key));
+          }
+        }))
+    );
   }
 
   public JsonNode transform(TemplateGroup group, String selector, Object input) {
@@ -73,16 +83,28 @@ public class JsltTransformationHelper {
     return templates;
   }
 
-  public void evictAll() {
+  /**
+   * Rewarms the cache for every configured selector. A template that fails to compile is still
+   * cached as a pass-through (so live traffic degrades gracefully rather than throwing on every
+   * message for that selector) but is reported as {@code false} in the returned map, keyed
+   * {@code "<groupId>:<selector>"} — unlike the old behaviour, a broken template no longer looks
+   * identical to a successful reload.
+   */
+  public Map<String, Boolean> evictAll() {
     expressionCache.invalidateAll();
     log.info(AppLogMessage.message("#JSLT - evicted all cached expressions"));
 
+    Map<String, Boolean> results = new LinkedHashMap<>();
     for (TemplateGroup group : new TemplateGroup[]{
         TemplateGroup.CLIENT_SPEC_REQUEST, TemplateGroup.CLIENT_SPEC_RESPONSE}) {
-      systemPropertiesService.getByGroupId(group).forEach(sp ->
-          expressionCache.put(cacheKey(sp.getGroupId(), sp.getPropertyId()),
-              compileQuietly(sp.getGroupId(), sp.getPropertyId(), sp.getPropertyValue())));
+      systemPropertiesRepository.findByGroupId(group.getGroup())
+          .forEach(sp -> {
+            Optional<Expression> compiled = compileQuietly(sp.getGroupId(), sp.getPropertyId(), sp.getPropertyValue());
+            expressionCache.put(cacheKey(sp.getGroupId(), sp.getPropertyId()), compiled);
+            results.put(cacheKey(sp.getGroupId(), sp.getPropertyId()), compiled.isPresent());
+          });
     }
+    return results;
   }
 
   public void validateTemplate(String template) {
@@ -115,13 +137,24 @@ public class JsltTransformationHelper {
     return Optional.of(compile(group.getGroup(), selector, template));
   }
 
+  /**
+   * Reloads one direction's template. A compile failure is still cached as a pass-through (so
+   * this reload attempt doesn't make live traffic for the selector any worse than it already
+   * was) but is thrown here as {@link InvalidTemplateException} so the caller — an operator
+   * hitting the reload endpoint — is told loudly that the reload did not actually take effect,
+   * instead of getting a {@code 200 OK} echoing the broken template text as if it succeeded.
+   */
   private String reloadOne(TemplateGroup group, String selector) {
     String template = rawTemplate(group, selector);
     if (template == null || template.isBlank()) {
       return "";
     }
-    expressionCache.put(cacheKey(group, selector),
-        compileQuietly(group.getGroup(), selector, template));
+    Optional<Expression> compiled = compileQuietly(group.getGroup(), selector, template);
+    expressionCache.put(cacheKey(group, selector), compiled);
+    if (compiled.isEmpty()) {
+      throw new InvalidTemplateException(
+          "template for group=" + group.getGroup() + " selector=" + selector + " failed to compile");
+    }
     return template;
   }
 
@@ -153,7 +186,10 @@ public class JsltTransformationHelper {
   }
 
   private String rawTemplate(TemplateGroup group, String selector) {
-    return systemPropertiesService.getRawProperty(group, selector);
+    return systemPropertiesRepository
+        .findByGroupIdAndPropertyId(group.getGroup(), selector)
+        .map(SystemProperties::getPropertyValue)
+        .orElse(null);
   }
 
   private String cacheKey(TemplateGroup group, String selector) {

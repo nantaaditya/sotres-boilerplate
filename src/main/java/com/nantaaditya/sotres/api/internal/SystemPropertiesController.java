@@ -26,9 +26,8 @@ public class SystemPropertiesController extends BaseController {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<Response<Boolean>> reload(@RequestParam ConfigGroup group) {
-    ResponseEntity<Response<Boolean>> response = toResponse(responseHelper.success(Boolean.TRUE));
     systemPropertiesService.reload(group);
-    return response;
+    return toResponse(responseHelper.success(Boolean.TRUE));
   }
 
   @GetMapping(

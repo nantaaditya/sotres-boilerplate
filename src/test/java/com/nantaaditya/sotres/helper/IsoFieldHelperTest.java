@@ -12,7 +12,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.kpavlov.jreactive8583.iso.J8583MessageFactory;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
-import com.nantaaditya.sotres.model.dto.RequestContext;
 import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
 import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.model.dto.TransactionException;
@@ -410,8 +409,8 @@ class IsoFieldHelperTest {
   }
 
   @Nested
-  @DisplayName("logAndObserve(IsoMessage, RequestContext, Observation)")
-  class LogAndObserve {
+  @DisplayName("publishIsoEvent(Observation, IsoMessage, String)")
+  class PublishIsoEvent {
 
     @Mock
     private MessageFactoryHelper messageFactoryHelper;
@@ -425,15 +424,10 @@ class IsoFieldHelperTest {
     private JsonProcessingException serializationError;
 
     private IsoFieldHelper isoFieldHelper;
-    private RequestContext requestContext;
 
     @BeforeEach
     void setUp() throws Exception {
       isoFieldHelper = new IsoFieldHelper(messageFactoryHelper, isoMessageLoggerHelper, objectMapper);
-
-      requestContext = new RequestContext();
-      requestContext.setRrn("000000000001");
-      requestContext.setIsoFeatureConstant("20.00-QR");
 
       lenient().when(isoMessageLoggerHelper.toLogMessage(isoMessage))
           .thenReturn(new JsonLogIsoMessage("outgoing", "0200", Map.of()));
@@ -443,50 +437,24 @@ class IsoFieldHelperTest {
     }
 
     @Test
-    @DisplayName("sets highCardinality requestId and lowCardinality feature on the observation")
-    void logAndObserve_populatesObservationKeyValues() {
-      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
-
-      verify(observation).highCardinalityKeyValue("requestId", "000000000001");
-      verify(observation).lowCardinalityKeyValue("feature", "20.00-QR");
-    }
-
-    @Test
-    @DisplayName("publishes an 'iso_request' event with the serialized ISO message")
-    void logAndObserve_publishesIsoRequestEvent() {
-      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+    @DisplayName("publishes an event with the given name and the serialized ISO message as value")
+    void publishIsoEvent_publishesEventWithSerializedMessage() {
+      isoFieldHelper.publishIsoEvent(observation, isoMessage, "iso_request");
 
       ArgumentCaptor<Observation.Event> eventCaptor = ArgumentCaptor.forClass(Observation.Event.class);
       verify(observation).event(eventCaptor.capture());
       assertThat(eventCaptor.getValue().getName()).isEqualTo("iso_request");
+      assertThat(eventCaptor.getValue().getContextualName()).isEqualTo("{\"mti\":\"0200\"}");
     }
 
     @Test
-    @DisplayName("logs the ISO message via IsoMessageLoggerHelper")
-    void logAndObserve_logsIsoMessage() {
-      isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
-
-      verify(isoMessageLoggerHelper).logIsoMessage(isoMessage);
-    }
-
-    @Test
-    @DisplayName("returns the same RequestContext instance unchanged")
-    void logAndObserve_returnsSameRequestContext() {
-      RequestContext result = isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
-
-      assertThat(result).isSameAs(requestContext);
-    }
-
-    @Test
-    @DisplayName("swallows serialization failure, skips the event, but still logs the message")
-    void logAndObserve_serializationFails_swallowsErrorAndSkipsEvent() throws Exception {
+    @DisplayName("swallows serialization failure and skips the event")
+    void publishIsoEvent_serializationFails_swallowsErrorAndSkipsEvent() throws Exception {
       when(objectMapper.writeValueAsString(any())).thenThrow(serializationError);
 
-      RequestContext result = isoFieldHelper.logAndObserve(isoMessage, requestContext, observation);
+      isoFieldHelper.publishIsoEvent(observation, isoMessage, "iso_request");
 
-      assertThat(result).isSameAs(requestContext);
       verify(observation, never()).event(any());
-      verify(isoMessageLoggerHelper).logIsoMessage(isoMessage);
     }
   }
 

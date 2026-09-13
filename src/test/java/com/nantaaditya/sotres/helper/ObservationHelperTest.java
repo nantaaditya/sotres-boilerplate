@@ -31,13 +31,13 @@ class ObservationHelperTest {
     @Test
     @DisplayName("does nothing when observation is null")
     void observeIsoRequest_nullObservation_doesNotThrow() {
-      ObservationHelper.createIsoContext(null, "rrn-001", "feature-A");
+      ObservationHelper.createTransactionContext(null, "rrn-001", "feature-A");
     }
 
     @Test
     @DisplayName("sets highCardinality requestId when rrn is present")
     void observeIsoRequest_withRrn_setsHighCardinalityRequestId() {
-      ObservationHelper.createIsoContext(observation, "rrn-001", null);
+      ObservationHelper.createTransactionContext(observation, "rrn-001", null);
 
       verify(observation).highCardinalityKeyValue("requestId", "rrn-001");
     }
@@ -45,7 +45,7 @@ class ObservationHelperTest {
     @Test
     @DisplayName("sets lowCardinality feature when feature is present")
     void observeIsoRequest_withFeature_setsLowCardinalityFeature() {
-      ObservationHelper.createIsoContext(observation, null, "purchase");
+      ObservationHelper.createTransactionContext(observation, null, "purchase");
 
       verify(observation).lowCardinalityKeyValue("feature", "purchase");
     }
@@ -53,7 +53,7 @@ class ObservationHelperTest {
     @Test
     @DisplayName("sets both highCardinality and lowCardinality when both are present")
     void observeIsoRequest_bothPresent_setsBothKeyValues() {
-      ObservationHelper.createIsoContext(observation, "rrn-001", "purchase");
+      ObservationHelper.createTransactionContext(observation, "rrn-001", "purchase");
 
       verify(observation).highCardinalityKeyValue("requestId", "rrn-001");
       verify(observation).lowCardinalityKeyValue("feature", "purchase");
@@ -62,7 +62,7 @@ class ObservationHelperTest {
     @Test
     @DisplayName("does not set highCardinality requestId when rrn is null")
     void observeIsoRequest_nullRrn_doesNotSetRequestId() {
-      ObservationHelper.createIsoContext(observation, null, "purchase");
+      ObservationHelper.createTransactionContext(observation, null, "purchase");
 
       verify(observation, never()).highCardinalityKeyValue(eq("requestId"), any());
     }

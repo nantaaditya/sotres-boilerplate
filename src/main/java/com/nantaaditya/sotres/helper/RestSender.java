@@ -31,14 +31,20 @@ import org.springframework.web.client.RestClientResponseException;
 @Log4j2
 public final class RestSender {
 
+  private static final int DEFAULT_MAX_ATTEMPTS = 1;
+
   private final String name;
   private final RestClient restClient;
   private final RetryTemplate retryTemplate;
+  private final int maxAttempts;
+  private final boolean deadLetterEnabled;
 
   private RestSender(Builder builder) {
     this.name = builder.name;
     this.restClient = builder.restClient;
     this.retryTemplate = builder.retryTemplate;
+    this.maxAttempts = builder.maxAttempts;
+    this.deadLetterEnabled = builder.deadLetterEnabled;
   }
 
   public <S, T> ResponseEntity<T> execute(HttpMethod method, String apiPath, HttpHeaders headers,
@@ -78,6 +84,8 @@ public final class RestSender {
     context.setAttribute(RetryConstant.HEADERS.key(), headers);
     context.setAttribute(RetryConstant.PROCESS_TYPE.key(), "client");
     context.setAttribute(RetryConstant.PROCESS_NAME.key(), processName);
+    context.setAttribute(RetryConstant.MAX_ATTEMPTS.key(), maxAttempts);
+    context.setAttribute(RetryConstant.DEAD_LETTER_ENABLED.key(), deadLetterEnabled);
     if (body != null) {
       context.setAttribute(RetryConstant.REQUEST.key(), body);
     }
@@ -120,6 +128,8 @@ public final class RestSender {
     private final String name;
     private final RestClient restClient;
     private RetryTemplate retryTemplate;
+    private int maxAttempts = DEFAULT_MAX_ATTEMPTS;
+    private boolean deadLetterEnabled;
 
     public Builder(String name, RestClient restClient) {
       if (name == null || name.isBlank()) {
@@ -134,6 +144,21 @@ public final class RestSender {
 
     public Builder retryTemplate(RetryTemplate retryTemplate) {
       this.retryTemplate = retryTemplate;
+      return this;
+    }
+
+    /**
+     * @param maxAttempts total execution count backing the retry-listener's exhaustion check;
+     *     stamped onto the {@link RetryContext} on every attempt.
+     */
+    public Builder maxAttempts(int maxAttempts) {
+      this.maxAttempts = maxAttempts;
+      return this;
+    }
+
+    /** Whether an exhausted call should be dead-lettered rather than only logged. */
+    public Builder deadLetterEnabled(boolean deadLetterEnabled) {
+      this.deadLetterEnabled = deadLetterEnabled;
       return this;
     }
 

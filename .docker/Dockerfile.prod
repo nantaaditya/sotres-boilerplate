@@ -40,6 +40,7 @@ ENV JAVA_TOOL_OPTIONS="-XX:InitialRAMPercentage=60.0 -XX:MaxRAMPercentage=85.0 -
 LABEL org.opencontainers.image.authors="nantaaditya"
 
 RUN apk update && apk add --no-cache procps tzdata && \
+    addgroup -S app && adduser -S -G app app && \
     mkdir -p app/logs app/lib app/patch app/resources app/resources-patch
 
 WORKDIR /app
@@ -49,6 +50,9 @@ COPY target/dependency/*.jar lib/
 COPY src/main/resources resources/
 COPY target/*.jar lib/
 COPY pom.xml pom.xml
+
+RUN chown -R app:app /app
+USER app
 
 # Using the exec form to ensure SIGTERM reaches the JVM
 ENTRYPOINT ["java", "-cp", ".:resources:patch/*:lib/*", "com.nantaaditya.sotres.SoTResApplication"]

@@ -39,7 +39,6 @@ public class IsoCallbackResponseHandler
 
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, IsoMessage msg) {
-    String correlationId = IsoFieldHelper.getCorrelationId(msg);
     String selector = IsoFieldHelper.createSelector(msg);
     IsoCategory isoCategory = null;
 

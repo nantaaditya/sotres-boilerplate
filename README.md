@@ -521,7 +521,8 @@ All values are injectable via environment variable. Full reference: [`docs/ENVIR
 |---|---|---|
 | `LOG_PATH` | `logs/` | Log file directory |
 | `APPS_LOG_LEVEL` | `json` | Log format: `json` or `text` |
-| `APPS_API_ENABLED` | `true` | Enable HTTP request/response logging |
+| `APPS_API_ENABLED` | `true` | Logbook logging of outbound RestClient calls |
+| `APPS_INBOUND_API_ENABLED` | `true` | Logbook logging of inbound requests to this app's endpoints |
 | `SENSITIVE_FIELD` | `cardNo` | Comma-separated JSON fields to mask in logs |
 
 ### Observability

@@ -1,6 +1,7 @@
 package com.nantaaditya.sotres.service.impl;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
+import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
   private final SystemPropertiesRepository systemPropertiesRepository;
+  private final JsltTransformationHelper jsltTransformationHelper;
 
   // [ConfigGroup: [propertyId: propertyValue]]
   private final Map<ConfigGroup, Map<String, String>> PROPERTY_COLLECTION_MAP = new ConcurrentHashMap<>();
@@ -72,6 +74,8 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
 
   @Override
   public SystemProperties upsert(TemplateGroup group, String selector, String value) {
+    jsltTransformationHelper.validateTemplate(value);
+
     SystemProperties entity = systemPropertiesRepository
         .findByGroupIdAndPropertyId(group.getGroup(), selector)
         .map(existing -> existing.toBuilder().propertyValue(value).build())
@@ -79,8 +83,11 @@ public class SystemPropertiesServiceImpl implements SystemPropertiesService {
             .groupId(group.getGroup())
             .propertyId(selector)
             .propertyValue(value)
-            .build());
-    return systemPropertiesRepository.save(entity);
+            .build()
+        );
+    SystemProperties result = systemPropertiesRepository.save(entity);
+    jsltTransformationHelper.evictExpression(group, selector);
+    return result;
   }
 
   private void loadSystemProperties(SystemProperties sp) {

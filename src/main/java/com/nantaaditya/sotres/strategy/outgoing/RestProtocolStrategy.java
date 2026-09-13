@@ -22,7 +22,6 @@ import java.net.http.HttpTimeoutException;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import lombok.extern.log4j.Log4j2;
-import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -83,18 +82,19 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     log.debug(AppLogMessage.message("#Transaction - response from external").additionalData(response));
 
     try {
-      // override response before sending ISO message when necessary
-      ctx.getTransactionHandler().populateResponse(ctx);
-
       if (response == null) {
         log.error(AppLogMessage.message("#Transaction - no response from host"));
         isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
       } else {
+        // override response before sending ISO message when necessary
+        ctx.getTransactionHandler().populateResponse(ctx);
         String responseCode = response.getResponseCode();
-        log.info(AppLogMessage.message("#Transaction - response code from host: {}", responseCode));
-        isoFieldHelper.sendResponse(ctx.getChannelHandlerContext(), ctx.getIsoMessage(), msg -> {
+        String mappedResponseCode = mappingResponseCode(responseCode);
+        log.info(AppLogMessage.message("#Transaction - response code from host: {} to internal response code: {}", responseCode, mappedResponseCode));
+
+        isoFieldHelper.sendResponseWithObservation(ctx, mappedResponseCode, null, msg -> {
           IsoFieldHelper.setApprovalCode(msg, response.getApprovalCode());
-          msg.setField(39, IsoType.ALPHA.value(mappingResponseCode(responseCode), 2));
+          msg.setField(39, IsoType.ALPHA.value(mappedResponseCode, 2));
         });
       }
 
@@ -102,9 +102,6 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
       log.error(AppLogMessage.message("#Transaction - failed write and flush transaction").error(e));
       String responseCode = IsoResponseCode.SYSTEM_MALFUNCTION.getCode();
       isoFieldHelper.sendResponseWithObservation(ctx, responseCode, e);
-    } finally {
-      ctx.getObservation().stop();
-      MDC.clear();
     }
   }
 
@@ -119,8 +116,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     }
 
     if (isTimeout(e.getOriginalError())) {
-      // no ISO response on timeout: the downstream may have processed the request, so the
-      // acquirer must reverse rather than us guessing a decline
+      // no ISO response on timeout: the downstream may have processed the request, so the acquirer must reverse rather than us guessing a decline
       log.error(AppLogMessage.message(
           "#Transaction - timeout for RRN {}, no ISO response sent (acquirer reverses)",
           IsoFieldHelper.getField(ctx.getIsoMessage(), 37)).error(throwable));

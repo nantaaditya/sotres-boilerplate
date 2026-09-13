@@ -46,11 +46,11 @@ public class ApiLogbookWriter implements HttpLogWriter {
       additionalData.put("correlation", precorrelation.getId());
       additionalData.put("protocol", content.get("protocol"));
 
-      log.info(AppLogMessage.message("#API: incoming request")
+      log.info(AppLogMessage.message("#API: request")
           .httpRequest(jsonLogHttpRequest)
           .additionalData(additionalData));
     } catch (Exception e) {
-      log.error(AppLogMessage.message("#API: incoming request").error(e));
+      log.error(AppLogMessage.message("#API: request").error(e));
     }
   }
 
@@ -76,11 +76,11 @@ public class ApiLogbookWriter implements HttpLogWriter {
       additionalData.put("correlation", correlation.getId());
       additionalData.put("protocol", content.get("protocol"));
 
-      log.info(AppLogMessage.message("#API: outgoing response")
+      log.info(AppLogMessage.message("#API: response")
           .httpResponse(jsonLogHttpResponse)
           .additionalData(additionalData));
     } catch (Exception e) {
-      log.error(AppLogMessage.message("#API: outgoing response").error(e));
+      log.error(AppLogMessage.message("#API: response").error(e));
     }
   }
 

@@ -21,7 +21,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     generate-ddl: false
-    show-sql: ${JPA_SHOW_SQL:true}
+    show-sql: ${JPA_SHOW_SQL:false}
     hibernate:
       ddl-auto: none
     properties:
@@ -130,15 +130,32 @@ apps:
       keep-alive-seconds: ${ASYNC_KEEP_ALIVE_SECONDS:30}
       thread-name-prefix: ${ASYNC_THREAD_NAME_PREFIX:default-async-}
       virtual-thread-enabled: ${ASYNC_VIRTUAL_THREAD_ENABLED:true}
+      rejection-policy: ${ASYNC_REJECTION_POLICY:CALLER_RUNS}
     isoTransaction:
       core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
-      max-pool-size: ${TRANSACTION_MESSAGE_POOL:200}
-      queue-capacity: ${TRANSACTION_QUEUE_SIZE:50}
+      max-pool-size: ${TRANSACTION_MESSAGE_POOL:90}
+      queue-capacity: ${TRANSACTION_QUEUE_SIZE:10}
       keep-alive-seconds: ${TRANSACTION_KEEP_ALIVE_SECONDS:60}
       thread-name-prefix: ${TRANSACTION_PREFIX:iso-transaction-}
       virtual-thread-enabled: ${ISO_TRANSACTION_VIRTUAL_THREAD_ENABLED:true}
+      rejection-policy: ${ISO_TRANSACTION_REJECTION_POLICY:ABORT}
+    isoTransactionResponse:
+      core-pool-size: ${TRANSACTION_RESPONSE_CORE_POOL_SIZE:5}
+      max-pool-size: ${TRANSACTION_RESPONSE_MESSAGE_POOL:20}
+      queue-capacity: ${TRANSACTION_RESPONSE_QUEUE_SIZE:5}
+      keep-alive-seconds: ${TRANSACTION_RESPONSE_KEEP_ALIVE_SECONDS:60}
+      thread-name-prefix: ${TRANSACTION_RESPONSE_PREFIX:iso-transaction-response-}
+      virtual-thread-enabled: ${ISO_TRANSACTION_RESPONSE_VIRTUAL_THREAD_ENABLED:true}
+      rejection-policy: ${ISO_TRANSACTION_RESPONSE_REJECTION_POLICY:ABORT}
   bulkhead.configurations:
     isoTransaction:
-      permits: ${ISO_TRANSACTION_INFLIGHT_PERMITS:100}
+      headroom: ${ISO_TRANSACTION_INFLIGHT_HEADROOM:10}
       fair: ${ISO_TRANSACTION_INFLIGHT_FAIR:false}
+  cache.configurations:
+    context:
+      expire-after-write-seconds: ${CONTEXT_CACHE_TTL_SECONDS:60}
+    additionalContext:
+      expire-after-write-seconds: ${ADDITIONAL_CONTEXT_CACHE_TTL_SECONDS:60}
+    jslt:
+      maximum-size: ${JSLT_CACHE_SIZE:100}
 

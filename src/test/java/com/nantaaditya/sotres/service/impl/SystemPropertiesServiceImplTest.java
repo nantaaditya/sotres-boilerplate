@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
+import com.nantaaditya.sotres.helper.JsltTransformationHelper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
@@ -24,6 +25,8 @@ class SystemPropertiesServiceImplTest {
 
   @Mock
   private SystemPropertiesRepository systemPropertiesRepository;
+  @Mock
+  private JsltTransformationHelper jsltTransformationHelper;
 
   private SystemPropertiesServiceImpl service;
 
@@ -38,7 +41,7 @@ class SystemPropertiesServiceImplTest {
   @BeforeEach
   void setUp() {
     when(systemPropertiesRepository.findAll()).thenReturn(List.of());
-    service = new SystemPropertiesServiceImpl(systemPropertiesRepository);
+    service = new SystemPropertiesServiceImpl(systemPropertiesRepository, jsltTransformationHelper);
     service.onStart();
   }
 
@@ -110,7 +113,7 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(List.of(prop("currency", "fractions", "360:2")));
 
       SystemPropertiesServiceImpl freshService =
-          new SystemPropertiesServiceImpl(systemPropertiesRepository);
+          new SystemPropertiesServiceImpl(systemPropertiesRepository, jsltTransformationHelper);
       freshService.onStart();
 
       assertThat(freshService.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
@@ -124,7 +127,7 @@ class SystemPropertiesServiceImplTest {
           .thenReturn(List.of(prop("unknown_group", "key", "value")));
 
       SystemPropertiesServiceImpl freshService =
-          new SystemPropertiesServiceImpl(systemPropertiesRepository);
+          new SystemPropertiesServiceImpl(systemPropertiesRepository, jsltTransformationHelper);
       freshService.onStart();
 
       assertThat(freshService.getProperty(ConfigGroup.CURRENCY_FRACTIONS)).isEmpty();

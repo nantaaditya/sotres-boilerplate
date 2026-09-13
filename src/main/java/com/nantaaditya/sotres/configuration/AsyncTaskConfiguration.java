@@ -1,10 +1,12 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.nantaaditya.sotres.helper.AsyncMDCTaskDecorator;
+import com.nantaaditya.sotres.model.constant.RejectionPolicy;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor.AbortPolicy;
 import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +47,7 @@ public class AsyncTaskConfiguration {
     log.debug(AppLogMessage.message("#AsyncExecutor - bean {} created", asyncProperties.getBeanNames(POSTFIX_BEAN_NAME)));
   }
 
-  private ThreadPoolTaskExecutor createAsyncExecutor(AsyncConfiguration configuration,
+  ThreadPoolTaskExecutor createAsyncExecutor(AsyncConfiguration configuration,
       AsyncMDCTaskDecorator asyncMDCTaskDecorator) {
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
     executor.setCorePoolSize(configuration.corePoolSize());
@@ -55,9 +57,16 @@ public class AsyncTaskConfiguration {
     executor.setKeepAliveSeconds(configuration.keepAliveSeconds());
     executor.setTaskDecorator(asyncMDCTaskDecorator);
     executor.setVirtualThreads(configuration.virtualThreadEnabled());
-    executor.setRejectedExecutionHandler(new CallerRunsPolicy());
+    executor.setRejectedExecutionHandler(resolveRejectionHandler(configuration.rejectionPolicy()));
     executor.setWaitForTasksToCompleteOnShutdown(true);
     executor.initialize();
     return executor;
+  }
+
+  RejectedExecutionHandler resolveRejectionHandler(RejectionPolicy policy) {
+    return switch (policy) {
+      case ABORT -> new AbortPolicy();
+      case CALLER_RUNS -> new CallerRunsPolicy();
+    };
   }
 }

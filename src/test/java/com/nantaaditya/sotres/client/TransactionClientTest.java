@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +37,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -389,8 +393,8 @@ class TransactionClientTest {
     }
 
     @Test
-    @DisplayName("read timeout does not throw and records the timeout as the observation error")
-    void send_readTimeout_recordsTimeoutErrorWithoutThrowing() throws Exception {
+    @DisplayName("read timeout throws ResourceAccessException and records the timeout as the observation error")
+    void send_readTimeout_throwsAndRecordsTimeoutError() throws Exception {
       wireMockServer.stubFor(
           post(urlPathEqualTo("/api/payment"))
               .willReturn(aResponse()
@@ -498,6 +502,65 @@ class TransactionClientTest {
         assertThat(event.getName()).isEqualTo("response");
         assertThat(event.getContextualName()).contains("downstream_response");
       });
+    }
+  }
+
+  @Nested
+  @DisplayName("connection pool (Phase 6: Apache HttpClient 5)")
+  class ConnectionPool {
+
+    @Test
+    @DisplayName("maxConnections=1 serializes two concurrent calls instead of running them in parallel")
+    void maxConnectionsOne_serializesConcurrentCalls() throws Exception {
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withFixedDelay(300)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(objectMapper.createObjectNode());
+      lenient().when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenAnswer(inv -> objectMapper.readTree("{\"response\":{\"code\":\"00\"}}"));
+
+      ClientConfiguration singleConnectionConfig = new ClientConfiguration(
+          "http://localhost:" + wireMockServer.port(),
+          1, 60000, 60000, 60000, 30000,
+          5000, 5000, 5000,
+          TimeUnit.MILLISECONDS
+      );
+      ClientProperties singleConnectionProperties = new ClientProperties();
+      Map<String, ClientConfiguration> configs = new HashMap<>();
+      configs.put("transaction", singleConnectionConfig);
+      singleConnectionProperties.setConfigurations(configs);
+
+      TransactionClient singleConnectionClient = new TransactionClient(
+          systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
+          singleConnectionProperties, retryTemplateHelper, observationRegistry);
+      ReflectionTestUtils.setField(singleConnectionClient, "applicationName", "test-app");
+
+      ExecutorService executor = Executors.newFixedThreadPool(2);
+      try {
+        long start = System.nanoTime();
+        List<Future<?>> futures = List.of(
+            executor.submit(() -> singleConnectionClient.send(buildRequest())),
+            executor.submit(() -> singleConnectionClient.send(buildRequest())));
+        for (Future<?> future : futures) {
+          future.get(5, TimeUnit.SECONDS);
+        }
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        // two 300ms calls serialized through a 1-connection pool take ~600ms; if they ran in
+        // parallel (pool cap not actually enforced) it would be ~300ms
+        assertThat(elapsedMs).isGreaterThanOrEqualTo(550);
+      } finally {
+        executor.shutdownNow();
+      }
     }
   }
 

@@ -18,6 +18,7 @@ import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.embedded.IsoMessageConnectionConfiguration;
 import com.nantaaditya.sotres.properties.embedded.IsoMessageNetworkConfiguration;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import io.micrometer.observation.ObservationRegistry;
 import java.net.InetSocketAddress;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -44,6 +45,7 @@ public class CoreConfiguration {
   private final NetworkProcessorParticipant networkProcessorParticipant;
   private final TransactionProcessorParticipant transactionProcessorParticipant;
   private final TransactionResponseParticipant transactionResponseParticipant;
+  private final ObservationRegistry observationRegistry;
 
   @Bean
   public EnhancedIsoClient client() throws InterruptedException {
@@ -96,7 +98,8 @@ public class CoreConfiguration {
         systemPropertiesService,
         tracerHelper,
         participantConfigurationProperties,
-        clientProperties
+        clientProperties,
+        observationRegistry
     );
   }
 

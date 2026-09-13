@@ -1,7 +1,9 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
+import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.BulkheadProperties;
+import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
 import com.nantaaditya.sotres.properties.embedded.BulkheadPoolConfiguration;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
@@ -50,15 +52,45 @@ public class BulkheadConfiguration
       return;
     }
 
+    AsyncTaskProperties asyncProperties = Binder.get(environment)
+        .bind(AsyncTaskProperties.PREFIX, AsyncTaskProperties.class)
+        .orElseGet(() -> new AsyncTaskProperties(Map.of()));
+
     properties.configurations().forEach((key, config) ->
-        registry.registerBeanDefinition(key + POSTFIX_BEAN_NAME, bulkheadDefinition(config)));
+        registry.registerBeanDefinition(
+            key + POSTFIX_BEAN_NAME,
+            bulkheadDefinition(
+                resolvePermits(key, config, asyncProperties),
+                config.fair()
+            )
+        )
+    );
 
     log.debug(AppLogMessage.message("#Bulkhead - bean {} created",
         properties.getBeanNames(POSTFIX_BEAN_NAME)));
   }
 
-  private RootBeanDefinition bulkheadDefinition(BulkheadPoolConfiguration config) {
-    return new RootBeanDefinition(Semaphore.class,
-        () -> new Semaphore(config.permits(), config.fair()));
+  /**
+   * Explicit {@code permits} wins. Otherwise derive from the {@link AsyncConfiguration} sharing
+   * this bulkhead's key: {@code maxPoolSize + queueCapacity + headroom}. This keeps the bulkhead
+   * from ever becoming its own out-of-sync bottleneck ahead of the executor's own admission
+   * control — resizing the pool automatically resizes the bulkhead with it.
+   */
+  int resolvePermits(String key, BulkheadPoolConfiguration config, AsyncTaskProperties asyncProperties) {
+    if (config.permits() != null) {
+      return config.permits();
+    }
+
+    AsyncConfiguration matching = asyncProperties.getConfiguration(key);
+    if (matching == null) {
+      throw new IllegalStateException(
+          "Bulkhead '" + key + "' has no explicit permits and no matching "
+              + "apps.async.configurations." + key + " entry to derive them from");
+    }
+    return matching.maxPoolSize() + matching.queueCapacity() + config.headroom();
+  }
+
+  private RootBeanDefinition bulkheadDefinition(int permits, boolean fair) {
+    return new RootBeanDefinition(Semaphore.class, () -> new Semaphore(permits, fair));
   }
 }

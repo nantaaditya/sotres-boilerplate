@@ -2,14 +2,18 @@ package com.nantaaditya.sotres.helper;
 
 import com.github.f4b6a3.tsid.TsidCreator;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
+import com.nantaaditya.sotres.model.constant.ObservationConstant;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Baggage;
 import io.micrometer.tracing.BaggageManager;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.internal.EncodingUtils;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import lombok.Getter;
@@ -45,12 +49,19 @@ public class TracerHelper {
       });
   }
 
-  public Map<String, String> getBaggages() {
-    return baggageManager.getAllBaggage();
-  }
-
+  /**
+   * Reads back a value set by {@link #setBaggage}. Deliberately reads MDC, not
+   * {@code baggageManager.getAllBaggage()}: {@code BaggageManager.getBaggage(name)} builds a
+   * fresh, unregistered baggage handle on every call, bound to whatever span happens to be
+   * current at that instant — a value written through one such handle is not reliably visible to
+   * a different handle created later for the same name, even within the same thread and request
+   * (confirmed empirically; see docs/POST_MIGRATION_REMEDIATION_PLAN.md Phase 7). MDC has no such
+   * per-call rebinding and is what every caller of {@link #setBaggage} already gets populated for
+   * free, so it is the one channel proven to round-trip correctly for this codebase's
+   * one-thread-per-request-or-message model.
+   */
   public String getBaggage(HeaderConstant header) {
-    return getBaggages().getOrDefault(header.getHeader(), null);
+    return MDC.get(header.getHeader());
   }
 
   public void setBaggage(String key, String value) {
@@ -79,5 +90,32 @@ public class TracerHelper {
     createTraceContext(isoMessage);
     mdc.putAll(MDC.getCopyOfContextMap());
     MDC.setContextMap(mdc);
+  }
+
+  /**
+   * Starts the {@code iso.message} observation + span, and snapshots the calling thread's MDC
+   * <em>before</em> {@link #initiateSpan} mutates it. Callers on a thread that must never leak
+   * context to the next message it handles (e.g. the Netty event loop) must call
+   * {@link #restoreCallerMdc(IsoObservationContext)} with the returned context once the handoff
+   * that follows (success or failure) is resolved.
+   */
+  public IsoObservationContext startIsoObservation(IsoMessage isoMessage, ObservationRegistry registry) {
+    Map<String, String> callerMdc = MDC.getCopyOfContextMap();
+
+    Observation observation = Observation.start(ObservationConstant.ISO_MESSAGE.getName(), registry);
+
+    Span span = startSpan(tracer, ObservationConstant.ISO_MESSAGE.getName());
+    Map<String, String> mdc = new HashMap<>();
+    initiateSpan(isoMessage, mdc);
+    return new IsoObservationContext(observation, span, mdc, callerMdc);
+  }
+
+  /** Restores the calling thread's MDC to what {@link #startIsoObservation} captured. */
+  public void restoreCallerMdc(IsoObservationContext context) {
+    if (context.callerMdc() == null) {
+      MDC.clear();
+    } else {
+      MDC.setContextMap(context.callerMdc());
+    }
   }
 }

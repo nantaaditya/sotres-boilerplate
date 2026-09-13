@@ -11,6 +11,11 @@ import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.Tracer.SpanInScope;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
@@ -30,6 +35,9 @@ public class EnhancedIsoClient
   private final IsoFieldHelper isoFieldHelper;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
   private final RegistryType registryType;
+  private final ObservationRegistry observationRegistry;
+  private final TracerHelper tracerHelper;
+  private final Tracer tracer;
 
   public EnhancedIsoClient(IsoClientConfigurationRequest clientConfiguration) {
 
@@ -38,6 +46,9 @@ public class EnhancedIsoClient
     this.isoFieldHelper = clientConfiguration.isoFieldHelper();
     this.isoMessageLoggerHelper = clientConfiguration.isoMessageLoggerHelper();
     this.registryType = clientConfiguration.clientProperties().getRegistryType();
+    this.observationRegistry = clientConfiguration.observationRegistry();
+    this.tracerHelper = clientConfiguration.tracerHelper();
+    this.tracer = tracerHelper.getTracer();
     this.setConfigurer(new ConnectorConfigurer<ClientConfiguration, Bootstrap>() {
       @Override
       public void configurePipeline(ChannelPipeline pipeline, ClientConfiguration configuration) {
@@ -101,28 +112,47 @@ public class EnhancedIsoClient
     String correlationId = IsoFieldHelper.getCorrelationId(request);
     CompletableFuture<IsoMessage> pending = correlationRegistry.register(correlationId);
 
-    try {
+    IsoObservationContext isoContext = tracerHelper.startIsoObservation(request, observationRegistry);
+    Observation observation = isoContext.observation();
+    Span span = isoContext.span();
+
+    try (SpanInScope spanInScope = tracer.withSpan(span);
+        Observation.Scope scope = observation.openScope()) {
+
+      String de37 = IsoFieldHelper.getField(request, 37);
+      ObservationHelper.createTransactionContext(observation, de37, IsoFieldHelper.getIsoFeature(request));
+      isoFieldHelper.publishIsoEvent(observation, request, IsoFieldHelper.ISO_REQUEST_EVENT);
+
       sendAsync(request).sync();
-      return pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      IsoMessage response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      return response;
     } catch (TimeoutException e) {
       correlationRegistry.cancel(correlationId);
       log.error(AppLogMessage.message("#API - no response within {} for key {}", timeout, correlationId).error(e));
+      ObservationHelper.observeResponse(observation, IsoResponseCode.SUSPEND_TRANSACTION.getCode(), e);
       return constructErrorResponse(request, IsoResponseCode.SUSPEND_TRANSACTION);
     } catch (ExecutionException e) {
       correlationRegistry.cancel(correlationId);
       IsoResponseCode code = e.getCause() instanceof TimeoutException
           ? IsoResponseCode.SUSPEND_TRANSACTION : IsoResponseCode.SYSTEM_MALFUNCTION;
       log.error(AppLogMessage.message("#API - response failed for key {}", correlationId).error(e));
+      ObservationHelper.observeResponse(observation, code.getCode(), e);
       return constructErrorResponse(request, code);
     } catch (InterruptedException e) {
       correlationRegistry.cancel(correlationId);
       Thread.currentThread().interrupt();
       log.error(AppLogMessage.message("#API - interrupted awaiting response for key {}", correlationId).error(e));
+      ObservationHelper.observeResponse(observation, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
       return constructErrorResponse(request, IsoResponseCode.SYSTEM_MALFUNCTION);
     } catch (Exception e) {
       correlationRegistry.cancel(correlationId);
       log.error(AppLogMessage.message("#API - send/response error for key {}", correlationId).error(e));
+      ObservationHelper.observeResponse(observation, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
       return constructErrorResponse(request, IsoResponseCode.SYSTEM_MALFUNCTION);
+    } finally {
+      span.end();
+      observation.stop();
+      tracerHelper.restoreCallerMdc(isoContext);
     }
   }
 
