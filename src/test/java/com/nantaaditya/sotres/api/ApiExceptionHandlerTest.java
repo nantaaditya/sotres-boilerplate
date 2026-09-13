@@ -1,7 +1,10 @@
 package com.nantaaditya.sotres.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.helper.ContextHelper;
@@ -34,11 +37,13 @@ class ApiExceptionHandlerTest {
       Validation.buildDefaultValidatorFactory().getValidator();
 
   private ApiExceptionHandler exceptionHandler;
+  private ContextHelper contextHelper;
 
   @BeforeEach
   void setUp() {
+    contextHelper = mock(ContextHelper.class);
     ResponseHelper responseHelper =
-        new ResponseHelper(mock(TracerHelper.class), mock(ContextHelper.class));
+        new ResponseHelper(mock(TracerHelper.class), contextHelper);
     exceptionHandler = new ApiExceptionHandler(new ObjectMapper(), responseHelper,
         mock(ObservationWrapper.class), mock(HttpServletRequest.class));
   }
@@ -127,13 +132,16 @@ class ApiExceptionHandlerTest {
   }
 
   @Test
-  @DisplayName("any other Throwable -> code 999, exception message captured")
-  void throwable_returnsInternalErrorWithExceptionMessage() {
+  @DisplayName("any other Throwable -> code 999, exception message NOT exposed in the response")
+  void throwable_returnsInternalErrorWithoutExceptionMessage() {
     RuntimeException ex = new RuntimeException("unexpected failure");
 
     Response<Object> response = exceptionHandler.throwable(ex);
 
     assertThat(response.getResponse().getCode()).isEqualTo(ApiResponseCode.INTERNAL_ERROR.getCode());
-    assertThat(response.getError().getViolations().get("exception")).containsExactly("unexpected failure");
+    assertThat(response.getError()).isNotNull();
+    assertThat(response.getError().getViolations()).isEmpty();
+    // the message must still reach the internal audit trail, just never the client
+    verify(contextHelper).put(isNull(), contains("unexpected failure"));
   }
 }

@@ -137,8 +137,13 @@ public class TransactionProcessorParticipant
       RequestContext requestContext = RequestContextHelper.create(isoMessage, systemPropertiesService, isoCategory);
 
       // in response-registry mode this inbound message is the response to one of our own
-      // requests — leave it for TransactionResponseParticipant, do not process it as a new txn
+      // requests — leave it for TransactionResponseParticipant, do not process it as a new txn.
+      // TransactionResponseParticipant starts its own, independent observation for it, so this
+      // one (started at the top of this method) must be stopped here or it leaks — an unstopped
+      // Observation never fires onStop and its Span is never reported.
       if (isResponseRegistryEnabled(requestContext)) {
+        observation.stop();
+        span.end();
         return true;
       }
 

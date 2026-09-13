@@ -51,7 +51,6 @@ public class ApiExceptionHandler {
 
   private static final String ERROR_LOG = "#ApiError - got error";
   private static final String EXCEPTION_KEY = "exception";
-  private static final String EXCEPTION_DETAIL = "exception_detail";
   private static final int START_INDEX = 0;
 
   private record ErrorResult(Map<String, List<String>> errors, Response<Object> response) {}
@@ -174,7 +173,7 @@ public class ApiExceptionHandler {
   public Response<Object> throwable(Throwable ex) {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of(EXCEPTION_KEY, List.of(ex.getMessage()));
-      Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, errors);
+      Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, Collections.emptyMap());
       return new ErrorResult(errors, response);
     });
   }

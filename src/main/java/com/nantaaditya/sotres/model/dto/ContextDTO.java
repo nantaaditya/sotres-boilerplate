@@ -9,7 +9,6 @@ import java.beans.Transient;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import lombok.Data;
-import org.springframework.http.server.reactive.ServerHttpRequest;
 
 @Data
 public class ContextDTO {
@@ -21,15 +20,6 @@ public class ContextDTO {
   private String receivedTime;
   private String responseCode;
   private String responseDescription;
-
-  public void decorateContext(ServerHttpRequest request, String contextPath) {
-    this.clientId = request.getHeaders().getFirst(HeaderConstant.CLIENT_ID.getHeader());
-    this.requestId = request.getHeaders().getFirst(HeaderConstant.REQUEST_ID.getHeader());
-    this.method = request.getMethod().name();
-    this.path = request.getURI().getPath().replace(contextPath, "");
-    this.requestTime = request.getHeaders().getFirst(HeaderConstant.REQUEST_TIME.getHeader());
-    this.receivedTime = DateTimeHelper.getDateInFormat(ZonedDateTime.now(), DateTimeHelper.ISO_8601_GMT7_FORMAT);
-  }
 
   public void decorateContext(HttpServletRequest request, String contextPath) {
     this.clientId = request.getHeader(HeaderConstant.CLIENT_ID.getHeader());

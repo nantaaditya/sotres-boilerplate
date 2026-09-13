@@ -275,6 +275,7 @@ class TransactionProcessorParticipantTest {
       boolean result = participant.onMessage(ctx, msg);
 
       assertThat(result).isTrue();
+      verify(span).end();
     }
   }
 
@@ -484,6 +485,22 @@ class TransactionProcessorParticipantTest {
           .hasObservationWithNameEqualTo(ObservationConstant.ISO_MESSAGE.getName())
           .that()
           .hasBeenStopped();
+    }
+
+    @Test
+    @DisplayName("response-registry-enabled early return")
+    @SuppressWarnings("unchecked")
+    void onMessage_responseRegistryEarlyReturn_stopsObservation() {
+      // type=528 (0x0210) → selector "21.00-QR", matches the stubbed REGISTRY_RESPONSE_SELECTOR
+      when(msg.getType()).thenReturn(528);
+      when(clientProperties.getRegistryType()).thenReturn(RegistryType.RESPONSE);
+      TransactionProcessorParticipant p =
+          buildParticipant(List.of(), new Semaphore(1), Runnable::run, testRegistry);
+
+      boolean result = p.onMessage(ctx, msg);
+
+      assertThat(result).isTrue();
+      assertObservationStoppedExactlyOnce();
     }
 
     @Test

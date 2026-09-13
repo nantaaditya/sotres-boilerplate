@@ -8,8 +8,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * headroom} — so the bulkhead can never itself be the bottleneck ahead of the executor's own
  * admission control, and the two never need to be hand-tuned in sync.
  *
- * <p>{@code headroom}: extra permits added on top of the derived pool capacity. Ignored when
- * {@code permits} is set explicitly.
+ * <p>{@code headroom}: extra permits added on top of the derived pool capacity. Its value is
+ * ignored when {@code permits} is set explicitly, but it is still validated (must be {@code >= 0})
+ * regardless — see {@link com.nantaaditya.sotres.configuration.BulkheadConfiguration#resolvePermits}.
  */
 public record BulkheadPoolConfiguration(
     Integer permits,

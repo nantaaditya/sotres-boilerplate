@@ -92,8 +92,6 @@ public class DeadLetterProcessServiceImpl implements DeadLetterProcessService {
   private void handleNotEligibleToBeRetried(DeadLetterProcess deadLetterProcess,
       AbstractRetryProcessorService processor) {
     deadLetterProcess.setStatus(RetryStatus.SUCCESS.name());
-    deadLetterProcess.setUpdatedBy("internal-retry-process");
-    deadLetterProcess.setUpdatedDate(LocalDateTime.now());
     deadLetterProcessRepository.save(deadLetterProcess);
     processor.getNotEligibleCounter().incrementAndGet();
     log.warn(AppLogMessage.message("#DeadLetterProccess - {} is not eligible to be retried", deadLetterProcess.getId()));

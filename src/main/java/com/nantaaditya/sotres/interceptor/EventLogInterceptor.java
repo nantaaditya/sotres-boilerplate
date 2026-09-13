@@ -13,7 +13,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
@@ -73,7 +72,6 @@ public class EventLogInterceptor implements HandlerInterceptor {
         .responseDescription(context.getResponseDescription())
         .payload(payload.getBytes(StandardCharsets.UTF_8))
         .additionalData(additionalData)
-        .createdDate(LocalDateTime.now())
         .build();
   }
 }

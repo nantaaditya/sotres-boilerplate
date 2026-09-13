@@ -77,17 +77,31 @@ public class BulkheadConfiguration
    * control — resizing the pool automatically resizes the bulkhead with it.
    */
   int resolvePermits(String key, BulkheadPoolConfiguration config, AsyncTaskProperties asyncProperties) {
-    if (config.permits() != null) {
-      return config.permits();
+    if (config.headroom() < 0) {
+      throw new IllegalStateException(
+          "Bulkhead '" + key + "' has a negative headroom (" + config.headroom() + "); it must be >= 0");
     }
 
-    AsyncConfiguration matching = asyncProperties.getConfiguration(key);
-    if (matching == null) {
-      throw new IllegalStateException(
-          "Bulkhead '" + key + "' has no explicit permits and no matching "
-              + "apps.async.configurations." + key + " entry to derive them from");
+    int permits;
+    if (config.permits() != null) {
+      permits = config.permits();
+    } else {
+      AsyncConfiguration matching = asyncProperties.getConfiguration(key);
+      if (matching == null) {
+        throw new IllegalStateException(
+            "Bulkhead '" + key + "' has no explicit permits and no matching "
+                + "apps.async.configurations." + key + " entry to derive them from");
+      }
+      permits = matching.maxPoolSize() + matching.queueCapacity() + config.headroom();
     }
-    return matching.maxPoolSize() + matching.queueCapacity() + config.headroom();
+
+    // a resolved permit count <= 0 means every tryAcquire() times out silently — every ISO8583
+    // transaction would be shed with no startup signal that anything is wrong.
+    if (permits <= 0) {
+      throw new IllegalStateException(
+          "Bulkhead '" + key + "' resolved to " + permits + " permit(s); must be > 0");
+    }
+    return permits;
   }
 
   private RootBeanDefinition bulkheadDefinition(int permits, boolean fair) {

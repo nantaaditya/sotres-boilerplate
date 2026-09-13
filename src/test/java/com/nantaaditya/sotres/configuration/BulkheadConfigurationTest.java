@@ -10,6 +10,8 @@ import com.nantaaditya.sotres.properties.embedded.BulkheadPoolConfiguration;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("BulkheadConfiguration")
 class BulkheadConfigurationTest {
@@ -45,6 +47,57 @@ class BulkheadConfigurationTest {
   void resolvePermits_permitsNullAndNoMatchingAsyncConfig_throws() {
     BulkheadPoolConfiguration bulkheadConfig = new BulkheadPoolConfiguration(null, 10, false);
     AsyncTaskProperties asyncProperties = new AsyncTaskProperties(Map.of());
+
+    assertThatThrownBy(() ->
+        configuration.resolvePermits("isoTransaction", bulkheadConfig, asyncProperties))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("isoTransaction");
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, -1})
+  @DisplayName("explicit permits <= 0 throws — every tryAcquire would time out silently")
+  void resolvePermits_explicitPermitsNotPositive_throws(int explicitPermits) {
+    BulkheadPoolConfiguration bulkheadConfig = new BulkheadPoolConfiguration(explicitPermits, 0, false);
+    AsyncTaskProperties asyncProperties = new AsyncTaskProperties(Map.of());
+
+    assertThatThrownBy(() ->
+        configuration.resolvePermits("isoTransaction", bulkheadConfig, asyncProperties))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("isoTransaction");
+  }
+
+  @Test
+  @DisplayName("negative headroom throws, even when deriving permits from the matching async config")
+  void resolvePermits_negativeHeadroom_throws() {
+    BulkheadPoolConfiguration bulkheadConfig = new BulkheadPoolConfiguration(null, -1, false);
+    AsyncTaskProperties asyncProperties = new AsyncTaskProperties(Map.of(
+        "isoTransaction", asyncConfig(90, 10)));
+
+    assertThatThrownBy(() ->
+        configuration.resolvePermits("isoTransaction", bulkheadConfig, asyncProperties))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("isoTransaction");
+  }
+
+  @Test
+  @DisplayName("negative headroom throws even when permits is set explicitly (unused, but still validated)")
+  void resolvePermits_negativeHeadroomWithExplicitPermits_throws() {
+    BulkheadPoolConfiguration bulkheadConfig = new BulkheadPoolConfiguration(100, -1, false);
+    AsyncTaskProperties asyncProperties = new AsyncTaskProperties(Map.of());
+
+    assertThatThrownBy(() ->
+        configuration.resolvePermits("isoTransaction", bulkheadConfig, asyncProperties))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("isoTransaction");
+  }
+
+  @Test
+  @DisplayName("a derived permit count of 0 throws — pool + queue + headroom summing to zero is a misconfiguration")
+  void resolvePermits_derivedPermitsZero_throws() {
+    BulkheadPoolConfiguration bulkheadConfig = new BulkheadPoolConfiguration(null, 0, false);
+    AsyncTaskProperties asyncProperties = new AsyncTaskProperties(Map.of(
+        "isoTransaction", asyncConfig(0, 0)));
 
     assertThatThrownBy(() ->
         configuration.resolvePermits("isoTransaction", bulkheadConfig, asyncProperties))
