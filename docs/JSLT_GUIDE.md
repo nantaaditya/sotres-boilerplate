@@ -50,11 +50,11 @@ Every transaction is identified by a **selector** string computed from three ISO
 {MTI[1..2]}.{processingCode[0..2]}-{DE48_PI}
 ```
 
-| Part | Source | Example |
-|------|--------|---------|
-| `MTI[1..2]` | Characters 1–2 of the 4-digit hex MTI string | MTI `0x0100` → `"0100"` → `"10"` |
-| `processingCode[0..2]` | First 2 digits of DE3 | `"970000"` → `"97"` |
-| `DE48_PI` | TLV tag `"PI"` from DE48 | `"E001"` |
+| Part                   | Source                                       | Example                          |
+|------------------------|----------------------------------------------|----------------------------------|
+| `MTI[1..2]`            | Characters 1–2 of the 4-digit hex MTI string | MTI `0x0100` → `"0100"` → `"10"` |
+| `processingCode[0..2]` | First 2 digits of DE3                        | `"970000"` → `"97"`              |
+| `DE48_PI`              | TLV tag `"PI"` from DE48                     | `"E001"`                         |
 
 **Example:** an authorization request (`0x0100`) for a product indicator `E001` transaction with processing code `97xxxx` produces:
 
@@ -207,15 +207,15 @@ Full JSLT language reference: https://github.com/schibsted/jslt
 `JsltTransformationHelper` keeps a Caffeine `Cache<String, Optional<Expression>>` keyed by
 `groupId:selector` (e.g. `client_spec_request:10.97-E001`), `expireAfterWrite(10m)`.
 
-| Event | What happens |
-|-------|-------------|
-| First `transform` call for a key | DB fetch → compile → `Optional.of(expression)` cached |
-| Subsequent calls for the same key | Cached `Expression` applied — no DB round-trip |
-| Template not found in DB | Pass-through result returned; **`Optional.empty()` cached** (negative cache) so the next call does *not* hit the DB again until the entry expires |
-| Compilation error (`JsltException`) | Error propagated to caller; **nothing cached** so the next call retries the DB |
-| `evictExpression(group, selector)` | Specific entry removed; next call recompiles from DB |
-| `evictAndReload(selector)` | Both directions evicted, then immediately re-fetched and recompiled |
-| `evictAll()` | Entire cache cleared, then rewarm by fetching all rows for both groups |
+| Event                               | What happens                                                                                                                                      |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| First `transform` call for a key    | DB fetch → compile → `Optional.of(expression)` cached                                                                                             |
+| Subsequent calls for the same key   | Cached `Expression` applied — no DB round-trip                                                                                                    |
+| Template not found in DB            | Pass-through result returned; **`Optional.empty()` cached** (negative cache) so the next call does *not* hit the DB again until the entry expires |
+| Compilation error (`JsltException`) | Error propagated to caller; **nothing cached** so the next call retries the DB                                                                    |
+| `evictExpression(group, selector)`  | Specific entry removed; next call recompiles from DB                                                                                              |
+| `evictAndReload(selector)`          | Both directions evicted, then immediately re-fetched and recompiled                                                                               |
+| `evictAll()`                        | Entire cache cleared, then rewarm by fetching all rows for both groups                                                                            |
 
 Negative caching (empty templates) is bounded by the 10-minute write TTL; compilation errors are
 never cached, so a transient DB blip or a missing template at startup does not permanently poison

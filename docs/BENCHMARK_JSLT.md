@@ -11,9 +11,9 @@
 
 ## What Is Being Measured
 
-| Method | Description |
-|---|---|
-| `directSerialization` | `ObjectMapper.writeValueAsString(pojo)` — one pass, no mapping |
+| Method                               | Description                                                                                                                  |
+|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| `directSerialization`                | `ObjectMapper.writeValueAsString(pojo)` — one pass, no mapping                                                               |
 | `jsltTransformationAndSerialization` | `valueToTree(pojo)` → `expression.apply(node)` → `writeValueAsString(result)` — two ObjectMapper calls + JSLT tree traversal |
 
 **Important:** the two benchmarks are not direct alternatives. Direct serialization writes all POJO fields as-is. JSLT serialization selects and renames fields at runtime from configuration. Comparing them shows the overhead JSLT adds to achieve that flexibility — not a reason to replace JSLT with raw serialization.
@@ -24,43 +24,43 @@
 
 ### Throughput (ops/ms — higher is better)
 
-| Benchmark | Score | Error (99.9% CI) | Relative |
-|---|---|---|---|
-| `directSerialization` | 1 575.9 ops/ms | ± 932.4 | baseline |
-| `jsltTransformationAndSerialization` | 544.7 ops/ms | ± 86.7 | **~2.9× lower** |
+| Benchmark                            | Score          | Error (99.9% CI) | Relative        |
+|--------------------------------------|----------------|------------------|-----------------|
+| `directSerialization`                | 1 575.9 ops/ms | ± 932.4          | baseline        |
+| `jsltTransformationAndSerialization` | 544.7 ops/ms   | ± 86.7           | **~2.9× lower** |
 
 > Note: direct has extremely wide variance (±59%). JSLT is more stable (±16%).  
 > The CI for direct spans 643–2 508 ops/ms, suggesting it runs in a JIT-oscillation regime at sub-microsecond timescales.
 
 ### Average Time (ms/op — lower is better)
 
-| Benchmark | Score | Error (99.9% CI) |
-|---|---|---|
-| `directSerialization` | 0.001 ms | ± 0.001 ms |
-| `jsltTransformationAndSerialization` | 0.002 ms | ± 0.001 ms |
+| Benchmark                            | Score    | Error (99.9% CI) |
+|--------------------------------------|----------|------------------|
+| `directSerialization`                | 0.001 ms | ± 0.001 ms       |
+| `jsltTransformationAndSerialization` | 0.002 ms | ± 0.001 ms       |
 
 Both measure in the microsecond range. JSLT averages **~2 µs vs ~1 µs** for direct.
 
 ### Sampling — Latency Percentiles (ms/op)
 
-| Percentile | direct | JSLT | Ratio |
-|---|---|---|---|
-| p50 | 0.001 ms | 0.002 ms | 2× |
-| p90 | 0.001 ms | 0.002 ms | 2× |
-| p95 | 0.001 ms | 0.002 ms | 2× |
-| p99 | 0.002 ms | 0.007 ms | 3.5× |
-| p99.9 | 0.032 ms | 0.095 ms | 3× |
-| p99.99 | 0.564 ms | 0.786 ms | 1.4× |
-| p100 | 4.850 ms | 13.877 ms | 2.9× |
+| Percentile | direct   | JSLT      | Ratio |
+|------------|----------|-----------|-------|
+| p50        | 0.001 ms | 0.002 ms  | 2×    |
+| p90        | 0.001 ms | 0.002 ms  | 2×    |
+| p95        | 0.001 ms | 0.002 ms  | 2×    |
+| p99        | 0.002 ms | 0.007 ms  | 3.5×  |
+| p99.9      | 0.032 ms | 0.095 ms  | 3×    |
+| p99.99     | 0.564 ms | 0.786 ms  | 1.4×  |
+| p100       | 4.850 ms | 13.877 ms | 2.9×  |
 
 p50–p95 differ by only 1 µs. Tail divergence starts at p99 (2 µs vs 7 µs) and peaks at the absolute worst case (4.85 ms vs 13.9 ms) — both are GC pause artifacts, not JSLT itself.
 
 ### Single Shot (cold-start, no JIT — ms/op)
 
-| Benchmark | Mean | Error (99.9% CI) |
-|---|---|---|
-| `directSerialization` | 0.100 ms | ± 0.060 ms |
-| `jsltTransformationAndSerialization` | 0.155 ms | ± 0.067 ms |
+| Benchmark                            | Mean     | Error (99.9% CI) |
+|--------------------------------------|----------|------------------|
+| `directSerialization`                | 0.100 ms | ± 0.060 ms       |
+| `jsltTransformationAndSerialization` | 0.155 ms | ± 0.067 ms       |
 
 Cold first-call overhead is 55 µs — negligible. JIT brings both to steady state within the first warmup iteration.
 
@@ -117,13 +117,13 @@ Results were measured on JDK 25. If production runs JDK 21 LTS, numbers will dif
 
 **The JSLT overhead is acceptable for payment gateway workloads.**
 
-| Concern | Finding |
-|---|---|
+| Concern               | Finding                           |
+|-----------------------|-----------------------------------|
 | Average latency added | ~1 µs (negligible vs network RTT) |
-| Throughput ceiling | 544 M ops/s per core |
-| Tail latency (p99) | 7 µs — within SLO |
-| Cold start | 55 µs additional — not a concern |
-| CPU cost at 1 000 TPS | < 0.01% of a single core |
+| Throughput ceiling    | 544 M ops/s per core              |
+| Tail latency (p99)    | 7 µs — within SLO                 |
+| Cold start            | 55 µs additional — not a concern  |
+| CPU cost at 1 000 TPS | < 0.01% of a single core          |
 
 JSLT buys runtime-configurable field mapping without redeployment. The measured overhead is ~2.9× in throughput and ~1 µs in average latency versus bare serialization. That tradeoff is worth taking.
 

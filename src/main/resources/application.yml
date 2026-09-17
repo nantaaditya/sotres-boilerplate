@@ -51,7 +51,7 @@ iso8583.configuration:
     reconnect-interval: ${RECONNECT_INTERVAL:60000}
     time-out: ${TIME_OUT_SECOND:15000}
     scheduled-echo-enabled: ${SCHEDULED_ECHO_ENABLED:true}
-    echo-interval: ${ECHO_INTERVAL_SECOND:30000}
+    echo-interval: ${ECHO_INTERVAL:30000}
 
 # Participant Pool Configurations
 participant.configuration.pool:
