@@ -90,6 +90,7 @@ Secondary responsibilities:
                             ▼
                        PostgreSQL
 ```
+![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_architecture.png)
 
 ### Key design decisions
 
@@ -112,157 +113,17 @@ When `RestSenderRetryListener` exhausts the retry budget for an outbound call, i
 
 #### 1. Inbound transaction (switch-initiated)
 
-```plantuml
-@startuml
-title Inbound ISO 8583 transaction -> downstream REST -> ISO 8583 reply
-
-participant "ISO Switch" as Switch
-participant "Netty\nEventLoop" as Netty
-participant "TransactionProcessor-\nParticipant" as TPP
-participant "AbstractTransaction-\nHandler" as Handler
-participant "SenderProtocolStrategy\n(RestProtocolStrategy)" as Strategy
-participant TransactionClient as Client
-participant JsltTransformationHelper as Jslt
-participant "Downstream REST API" as REST
-
-Switch -> Netty: 0200 authorization
-Netty -> TPP: onMessage() [applies()=true, not network MTI]
-TPP -> TPP: start Observation/Span,\nbuild RequestContext
-TPP -> TPP: isoTransactionExecutor.execute(...)
-note right of TPP: handoff onto a virtual thread —\nnever block the event loop
-activate TPP
-TPP -> Handler: execute() [validate() then process()]
-Handler -> Strategy: send(ctx, isoMessage, requestContext)
-Strategy -> Client: send(requestContext)
-Client -> Jslt: transform(CLIENT_SPEC_REQUEST)
-Jslt --> Client: mapped JSON body
-Client -> REST: POST /api/...
-REST --> Client: 200 OK
-Client -> Jslt: transform(CLIENT_SPEC_RESPONSE)
-Jslt --> Client: ResponseContext
-Client --> Strategy: ResponseContext
-Strategy --> Handler: (via ParticipantContext)
-Handler -> Strategy: handleResponse(ctx)
-Strategy -> Switch: writeAndFlush 0210 (approved)
-deactivate TPP
-
-== Negative: downstream read timeout ==
-Client -> REST: POST /api/...
-REST --x Client: no response (ReadTimeoutException)
-Client --> Strategy: throws (wrapped in TransactionException)
-Strategy -> Strategy: handleError(ctx, throwable)
-alt throwable is ReadTimeoutException
-  note right of Strategy: no ISO reply sent —\nthe acquirer times out and\ndrives its own reversal
-else any other exception
-  Strategy -> Switch: writeAndFlush 0210 DE39=SYSTEM_MALFUNCTION
-end
-
-== Negative: executor/bulkhead saturated ==
-TPP -> TPP: isoTransactionExecutor.execute(...)
-TPP -x TPP: RejectedExecutionException
-TPP -> Switch: writeAndFlush 0210 DE39=SYSTEM_MALFUNCTION
-note right of TPP: shed on the event loop itself —\nno handoff possible
-@enduml
-```
+![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_inbound.png)
 
 #### 2. Outbound CALLBACK mode — no reply-to-a-reply
 
-```plantuml
-@startuml
-title CALLBACK mode: EnhancedIsoClient.sendWithCallback() and its correlated reply
-
-participant "Our App" as App
-participant EnhancedIsoClient as Client
-participant CorrelationRegistry as Registry
-participant "ISO Server\n(switch/host)" as Server
-participant IsoCallbackResponseHandler as CallbackHandler
-participant "TransactionProcessor-\nParticipant" as TPP
-participant IsoFieldHelper as Helper
-
-App -> Client: sendWithCallback(request)
-Client -> Registry: register(correlationId)
-Client -> Server: writeAndFlush (outgoing ISO 8583 request)
-Client --> App: returns immediately (fire-and-forget)
-
-... later, on the same connection ...
-
-Server -> CallbackHandler: incoming ISO 8583 (the correlated reply)
-note over CallbackHandler, TPP #CCFFCC
-  **Pipeline ordering (fixed)**
-  EnhancedIsoClient wires this handler with
-  pipeline.addAfter("iso8583Decoder", ...) rather than
-  addLast(...), so classification always runs BEFORE the
-  framework's message-listener dispatcher (TPP et al.) sees
-  the message — not after, which previously left TPP reading
-  a stale/empty channel attribute for the current message.
-end note
-CallbackHandler -> Registry: complete(msg) [selector in registryCallbackSelectors]
-Registry --> CallbackHandler: IsoCategory.SUCCESS
-CallbackHandler -> CallbackHandler: tag channel attribute = SUCCESS
-CallbackHandler -> TPP: ctx.fireChannelRead(msg)
-
-TPP -> TPP: RequestContextHelper.create(isoMessage, ..., isoCategory)\n-> RequestContext.callbackResponse = true\n(isoCategory is SUCCESS/LATE_RESPONSE/ORPHAN, not EXTERNAL_REQUEST)
-TPP -> TPP: findTransactionHandler(selector) -> empty\n(this selector belongs to a reply,\nnot a registered inbound request)
-TPP -> Helper: sendResponseWithObservation(ctx, UNABLE_TO_ROUTE_TRANSACTION, null)
-Helper -> Helper: requestContext.isCallbackResponse() == true
-note right of Helper #CCFFCC
-  skip writeAndFlush entirely — record the
-  observation outcome only. There is nobody on
-  the switch side waiting for a reply-to-a-reply.
-end note
-@enduml
-```
+![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_outbound_callback.png)
 
 Covered end-to-end by `CallbackModeE2eTest` (asserts no second ISO message is written back to the switch for the correlated reply) and at the unit level by `IsoFieldHelperTest.SendResponseWithObservation`, `RequestContextHelperTest`, and `EnhancedIsoClientTest.PipelineWiring` (locks in the handler ordering).
 
 #### 3. Outbound RESPONSE mode
 
-```plantuml
-@startuml
-title RESPONSE mode: EnhancedIsoClient.send() blocks for its correlated reply
-
-participant "Our App" as App
-participant EnhancedIsoClient as Client
-participant CorrelationRegistry as Registry
-participant "ISO Server\n(switch/host)" as Server
-participant IsoCallbackResponseHandler as CallbackHandler
-participant "TransactionProcessor-\nParticipant" as TPP
-participant "TransactionResponse-\nParticipant" as TRP
-
-App -> Client: send(request, timeout)
-Client -> Registry: register(correlationId) -> pending future
-Client -> Server: writeAndFlush (outgoing ISO 8583 request)
-activate Client
-Client -> Client: pending.get(timeout)\n[blocks the calling virtual thread]
-
-... later, on the same connection ...
-
-Server -> CallbackHandler: incoming ISO 8583 (the correlated reply)
-CallbackHandler -> TPP: ctx.fireChannelRead(msg)
-TPP -> TPP: isResponseRegistryEnabled(requestContext)\n[RegistryType.RESPONSE + selector match] -> true
-TPP -> TPP: stop own Observation/Span, return true (yield)
-TPP -> TRP: (same message continues down the listener chain)
-TRP -> TRP: completeCorrelation(isoMessage)
-TRP -> Registry: complete(isoMessage)
-Registry --> Client: resolves the pending CompletableFuture
-Client --> App: returns the correlated IsoMessage
-deactivate Client
-TRP -> TRP: completeResponse() on isoTransactionResponseExecutor\n(observation/logging only — no ISO reply)
-
-== Negative: no response within timeout ==
-Client -> Client: pending.get(timeout) throws TimeoutException
-Client -> Registry: cancel(correlationId)
-Client --> App: synthetic IsoMessage, DE39=SUSPEND_TRANSACTION\n(never sent to the ISO Server)
-
-== Negative: reply arrives after the timeout already fired ==
-Server -> CallbackHandler: incoming ISO 8583 (late reply)
-CallbackHandler -> TPP: ctx.fireChannelRead(msg)
-TPP -> TRP: (yielded, same as happy path)
-TRP -> Registry: complete(isoMessage)
-Registry --> TRP: IsoCategory.ORPHAN\n(both correlation windows already cleared by cancel())
-note right of TRP: logged as an orphan reply —\nno caller left waiting to receive it
-@enduml
-```
+![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_outbound_response.png)
 
 ---
 
