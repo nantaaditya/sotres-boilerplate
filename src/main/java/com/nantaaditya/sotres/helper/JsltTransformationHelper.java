@@ -1,7 +1,5 @@
 package com.nantaaditya.sotres.helper;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -21,6 +19,11 @@ import java.util.Map;
 import java.util.Optional;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.JsonNodeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Synchronous JSLT transform with a compile-once cache.
@@ -177,12 +180,68 @@ public class JsltTransformationHelper {
     }
   }
 
+  /**
+   * JSLT ({@code com.schibsted.spt.data.jslt}) only understands Jackson 2
+   * {@code com.fasterxml.jackson.databind.JsonNode} - it has no Jackson 3 release (tracked at
+   * schibsted/jslt#380). The app's native JSON type is Jackson 3 ({@link JsonNode} here is
+   * {@code tools.jackson.databind.JsonNode}); this is the one conversion boundary where the two
+   * meet, via a byte round-trip through a private, non-Spring-managed Jackson 2 {@code
+   * ObjectMapper}. Remove this boundary once JSLT ships Jackson 3 support.
+   */
+  private static final com.fasterxml.jackson.databind.ObjectMapper JACKSON2_MAPPER =
+      buildJackson2Mapper();
+
+  /**
+   * Both settings are required to preserve exact BigDecimal scale on decimal literals (e.g.
+   * "1234.50") through this boundary - verified empirically, neither alone is sufficient:
+   * {@code USE_BIG_DECIMAL_FOR_FLOATS} makes the tree parser produce a DecimalNode instead of a
+   * DoubleNode, but Jackson 2's default {@code JsonNodeFactory} still normalizes
+   * (strips trailing zeroes from) the BigDecimal inside that DecimalNode unless
+   * {@code withExactBigDecimals(true)} is also set.
+   */
+  private static com.fasterxml.jackson.databind.ObjectMapper buildJackson2Mapper() {
+    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+        .configure(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, true);
+    mapper.setNodeFactory(com.fasterxml.jackson.databind.node.JsonNodeFactory.withExactBigDecimals(true));
+    return mapper;
+  }
+
+  /**
+   * The shared, Spring-managed {@link #objectMapper} (Jackson 3) also strips trailing BigDecimal
+   * zeroes by default on {@code readTree} - same class of bug as {@link #JACKSON2_MAPPER}, just on
+   * the Jackson 3 side. Rather than reconfigure the app-wide bean, this is a separate, locally-scoped
+   * reader used only for the final re-parse in {@link #toJackson3}, verified empirically to need
+   * both settings together (neither alone is sufficient, mirroring the Jackson 2 side).
+   */
+  private static final ObjectMapper JACKSON3_EXACT_READER = JsonMapper.builder()
+      .disable(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES)
+      .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+      .build();
+
   private JsonNode apply(Expression expression, Object input) {
-    return expression.apply(toJsonNode(input));
+    com.fasterxml.jackson.databind.JsonNode jackson2Input = toJackson2(toJsonNode(input));
+    com.fasterxml.jackson.databind.JsonNode jackson2Result = expression.apply(jackson2Input);
+    return toJackson3(jackson2Result);
   }
 
   private JsonNode toJsonNode(Object input) {
     return (input instanceof JsonNode jsonNode) ? jsonNode : objectMapper.valueToTree(input);
+  }
+
+  private com.fasterxml.jackson.databind.JsonNode toJackson2(JsonNode jackson3Node) {
+    try {
+      return JACKSON2_MAPPER.readTree(objectMapper.writeValueAsBytes(jackson3Node));
+    } catch (java.io.IOException e) {
+      throw new java.io.UncheckedIOException("failed to convert Jackson 3 -> Jackson 2 for JSLT", e);
+    }
+  }
+
+  private JsonNode toJackson3(com.fasterxml.jackson.databind.JsonNode jackson2Node) {
+    try {
+      return JACKSON3_EXACT_READER.readTree(JACKSON2_MAPPER.writeValueAsBytes(jackson2Node));
+    } catch (java.io.IOException e) {
+      throw new java.io.UncheckedIOException("failed to convert Jackson 2 -> Jackson 3 after JSLT", e);
+    }
   }
 
   private String rawTemplate(TemplateGroup group, String selector) {

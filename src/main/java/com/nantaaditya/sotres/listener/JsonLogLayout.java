@@ -1,11 +1,5 @@
 package com.nantaaditya.sotres.listener;
 
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.StringHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
@@ -20,6 +14,8 @@ import org.apache.logging.log4j.core.config.plugins.Plugin;
 import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.apache.logging.log4j.core.layout.AbstractStringLayout;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @Plugin(
     name = "JsonLogLayout",
@@ -29,11 +25,7 @@ import org.apache.logging.log4j.core.layout.AbstractStringLayout;
 )
 public class JsonLogLayout extends AbstractStringLayout {
 
-  private final ObjectMapper objectMapper = new ObjectMapper()
-      .registerModule(new JavaTimeModule())
-      .setSerializationInclusion(Include.NON_NULL)
-      .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
-      .disable(MapperFeature.USE_ANNOTATIONS);
+  private final ObjectMapper objectMapper = LogObjectMapperFactory.create();
   private final String version;
 
   protected JsonLogLayout(String version) {

@@ -6,7 +6,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.helper.ContextHelper;
 import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
@@ -51,7 +51,8 @@ class ApiExceptionHandlerTest {
   @Test
   @DisplayName("NoResourceFoundException -> code 900, endpoint violation")
   void noResourceFoundException_returnsInvalidParamsWithEndpointViolation() {
-    NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/no/such/path");
+    NoResourceFoundException ex =
+        new NoResourceFoundException(HttpMethod.GET, "/no/such/path", "No static resource.");
 
     Response<Object> response = exceptionHandler.noResourceFoundException(ex);
 

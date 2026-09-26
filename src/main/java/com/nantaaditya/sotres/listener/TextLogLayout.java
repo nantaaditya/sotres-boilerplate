@@ -1,10 +1,5 @@
 package com.nantaaditya.sotres.listener;
 
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.StringHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
@@ -18,6 +13,7 @@ import org.apache.logging.log4j.core.config.plugins.Plugin;
 import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.apache.logging.log4j.core.layout.AbstractStringLayout;
+import tools.jackson.databind.ObjectMapper;
 
 @Plugin(
     name = "TextLogLayout",
@@ -27,11 +23,7 @@ import org.apache.logging.log4j.core.layout.AbstractStringLayout;
 )
 public class TextLogLayout extends AbstractStringLayout {
 
-  private final ObjectMapper mapper = new ObjectMapper()
-      .registerModule(new JavaTimeModule())
-      .setSerializationInclusion(Include.NON_NULL)
-      .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
-      .disable(MapperFeature.USE_ANNOTATIONS);
+  private final ObjectMapper mapper = LogObjectMapperFactory.create();
   private final String application;
 
   protected TextLogLayout(String application) {

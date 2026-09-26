@@ -1,6 +1,5 @@
 package com.nantaaditya.sotres.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.factory.RetryTemplateHelperFactory;
 import com.nantaaditya.sotres.listener.RestSenderRetryListener;
@@ -24,6 +23,7 @@ import org.springframework.retry.backoff.FixedBackOffPolicy;
 import org.springframework.retry.backoff.UniformRandomBackOffPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Builds one {@link RetryTemplate} per {@code apps.retry.configurations.<name>} entry and exposes

@@ -8,8 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.github.kpavlov.jreactive8583.iso.J8583MessageFactory;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
@@ -422,7 +422,7 @@ class IsoFieldHelperTest {
     @Mock
     private Observation observation;
     @Mock
-    private JsonProcessingException serializationError;
+    private JacksonException serializationError;
 
     private IsoFieldHelper isoFieldHelper;
 

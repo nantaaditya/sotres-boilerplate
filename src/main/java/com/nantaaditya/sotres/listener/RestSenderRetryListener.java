@@ -1,6 +1,5 @@
 package com.nantaaditya.sotres.listener;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
 import com.nantaaditya.sotres.model.constant.RetryConstant;
@@ -18,6 +17,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.retry.RetryCallback;
 import org.springframework.retry.RetryContext;
 import org.springframework.retry.RetryListener;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Handles an outbound call that has exhausted its retry budget. When
@@ -113,7 +113,10 @@ public class RestSenderRetryListener implements RetryListener {
       return null;
     }
     try {
-      Map<String, List<String>> flat = new LinkedHashMap<>(httpHeaders);
+      Map<String, List<String>> flat = new LinkedHashMap<>();
+      for (String headerName : httpHeaders.headerNames()) {
+        flat.computeIfAbsent(headerName, k -> httpHeaders.get(headerName));
+      }
       return objectMapper.writeValueAsString(flat);
     } catch (Exception e) {
       log.warn(AppLogMessage.message("#Retry - [{}] could not serialise headers", name).error(e));

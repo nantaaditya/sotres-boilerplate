@@ -1,6 +1,5 @@
 package com.nantaaditya.sotres.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.helper.ApiLogbookFormatter;
 import com.nantaaditya.sotres.helper.ApiLogbookWriter;
@@ -16,6 +15,7 @@ import org.zalando.logbook.Logbook;
 import org.zalando.logbook.LogbookCreator;
 import org.zalando.logbook.core.DefaultSink;
 import org.zalando.logbook.core.HeaderFilters;
+import tools.jackson.databind.ObjectMapper;
 
 @Log4j2
 @Configuration

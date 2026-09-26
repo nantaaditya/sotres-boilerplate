@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.16</version>
+    <version>4.1.1</version>
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
 
@@ -25,16 +25,32 @@
     <commons-codec.version>1.19.0</commons-codec.version>
     <disruptor.version>3.4.4</disruptor.version>
     <gson.version>2.13.2</gson.version>
+    <jackson2.version>2.21.5</jackson2.version>
+    <jackson3-jsr310.version>3.0.0-rc2</jackson3-jsr310.version>
     <jreactive8583.version>1.5.1</jreactive8583.version>
-    <logbook.version>3.12.3</logbook.version>
+    <logbook.version>4.2.0</logbook.version>
     <lombok.version>1.18.42</lombok.version>
     <jacoco.version>0.8.13</jacoco.version>
-    <springdoc.version>2.8.13</springdoc.version>
+    <springdoc.version>3.1.1</springdoc.version>
+    <spring-retry.version>2.0.13</spring-retry.version>
+    <testcontainers.version>1.21.4</testcontainers.version>
     <tsid.version>5.2.6</tsid.version>
-    <wiremock.version>3.10.6</wiremock.version>
+    <wiremock.version>4.4.2</wiremock.version>
     <sonar.coverage.jacoco.xmlReportPath>target/site/jacoco/jacoco.xml
     </sonar.coverage.jacoco.xmlReportPath>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <!-- Spring Dependency -->
@@ -53,7 +69,11 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-aop</artifactId>
+      <artifactId>spring-boot-starter-restclient</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aspectj</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -80,11 +100,8 @@
     <dependency>
       <groupId>org.springframework.retry</groupId>
       <artifactId>spring-retry</artifactId>
+      <version>${spring-retry.version}</version>
     </dependency>
-    <!-- Pooled outbound HTTP connections for BaseClient/RestClient (Phase 6 of
-         docs/POST_MIGRATION_REMEDIATION_PLAN.md) — the JDK HttpClient backing RestClient has no
-         per-destination connection cap; this restores one so a struggling downstream can't cause
-         unbounded fan-out. Version managed by the Spring Boot BOM. -->
     <dependency>
       <groupId>org.apache.httpcomponents.client5</groupId>
       <artifactId>httpclient5</artifactId>
@@ -113,6 +130,10 @@
     <dependency>
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-tracing-bridge-brave</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-micrometer-tracing-brave</artifactId>
     </dependency>
     <dependency>
       <groupId>io.micrometer</groupId>
@@ -164,11 +185,52 @@
       <artifactId>jslt</artifactId>
       <version>0.1.14</version>
     </dependency>
+    <!-- JSLT only supports Jackson 2 (no 3.x release yet - schibsted/jslt#380). App-wide JSON
+         uses Boot 4's native Jackson 3; jackson-databind 2.x here is isolated to
+         JsltTransformationHelper's Jackson-2/3 conversion boundary. Coexists safely because
+         Jackson 3 uses a different groupId/package (tools.jackson vs com.fasterxml.jackson).
+         Remove once JSLT ships Jackson 3 support. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson2.version}</version>
+    </dependency>
+    <!-- Jackson 3 JavaTimeModule, for the standalone ObjectMapper builders in log4j2 plugins
+         (TextLogLayout/JsonLogLayout) that aren't Spring-managed. -->
+    <dependency>
+      <groupId>tools.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+      <version>${jackson3-jsr310.version}</version>
+    </dependency>
 
     <!-- Test Dependency -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Boot 4 split TestRestTemplate (spring-boot-resttestclient), AutoConfigureTestDatabase
+         (spring-boot-jdbc-test) and TestEntityManager (spring-boot-jpa-test) out of
+         spring-boot-starter-test into dedicated modules; @DataJpaTest itself lives in the
+         spring-boot-starter-data-jpa-test starter. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-resttestclient</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-jdbc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-jpa-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa-test</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -185,11 +247,13 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>junit-jupiter</artifactId>
+      <version>${testcontainers.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>postgresql</artifactId>
+      <version>${testcontainers.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>

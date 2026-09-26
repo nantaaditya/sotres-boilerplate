@@ -7,7 +7,7 @@ import java.time.Duration;
 import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.retry.support.RetryTemplate;
@@ -48,7 +48,7 @@ public class BaseClient {
   }
 
   protected RestClient createRestClient(Logbook logbook, ClientConfiguration clientConfiguration) {
-    ClientHttpRequestFactorySettings settings = getSettings(clientConfiguration);
+    HttpClientSettings settings = getSettings(clientConfiguration);
 
     ClientHttpRequestFactory requestFactory = getRequestFactory(clientConfiguration, settings);
 
@@ -60,7 +60,7 @@ public class BaseClient {
   }
 
   private HttpComponentsClientHttpRequestFactory getRequestFactory(
-      ClientConfiguration clientConfiguration, ClientHttpRequestFactorySettings settings) {
+      ClientConfiguration clientConfiguration, HttpClientSettings settings) {
     return ClientHttpRequestFactoryBuilder.httpComponents()
         .withConnectionManagerCustomizer(manager -> manager
             .setMaxConnTotal(clientConfiguration.maxConnections())
@@ -82,9 +82,9 @@ public class BaseClient {
         .build(settings);
   }
 
-  private ClientHttpRequestFactorySettings getSettings(
+  private HttpClientSettings getSettings(
       ClientConfiguration clientConfiguration) {
-    return ClientHttpRequestFactorySettings.defaults()
+    return HttpClientSettings.defaults()
         .withConnectTimeout(Duration.ofMillis(clientConfiguration.clientConnectTimeOut()))
         .withReadTimeout(Duration.ofMillis(clientConfiguration.clientReadTimeOut()));
   }

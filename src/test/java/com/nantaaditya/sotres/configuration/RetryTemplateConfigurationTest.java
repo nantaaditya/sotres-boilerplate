@@ -3,7 +3,7 @@ package com.nantaaditya.sotres.configuration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.model.constant.BackoffPolicyConstant;
 import com.nantaaditya.sotres.properties.LogProperties;

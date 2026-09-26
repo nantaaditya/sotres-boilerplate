@@ -11,8 +11,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.entity.SystemProperties;
 import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.error.InvalidTemplateException;
@@ -20,6 +20,7 @@ import com.nantaaditya.sotres.properties.CacheProperties;
 import com.nantaaditya.sotres.properties.embedded.CacheConfiguration;
 import com.nantaaditya.sotres.repository.SystemPropertiesRepository;
 import com.schibsted.spt.data.jslt.JsltException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -110,6 +111,21 @@ class JsltTransformationHelperTest {
 
       assertThat(json.get("cardNo").asText()).isEqualTo("4111111111111111");
       assertThat(json.get("amount").asText()).isEqualTo("10000");
+    }
+
+    @Test
+    @DisplayName("preserves exact BigDecimal scale through the Jackson3->Jackson2->JSLT->Jackson3 boundary")
+    void cacheMiss_bigDecimalAmount_preservesExactScale() {
+      when(systemPropertiesRepository.findByGroupIdAndPropertyId(TemplateGroup.CLIENT_SPEC_REQUEST.getGroup(), SELECTOR))
+          .thenReturn(spOpt(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, REQ_TEMPLATE));
+
+      Map<String, Object> input = Map.of("input", new BigDecimal("1234.50"));
+
+      JsonNode json = helper.transform(TemplateGroup.CLIENT_SPEC_REQUEST, SELECTOR, input);
+
+      // a double-precision fallback in the internal Jackson 2 boundary would render this as
+      // "1234.5", silently dropping the trailing zero/exact scale of the original BigDecimal.
+      assertThat(json.get("result").asText()).isEqualTo("1234.50");
     }
 
     @Test
