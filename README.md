@@ -2,7 +2,7 @@
 
 ISO 8583 to REST Api
 
-![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/img.png)
+![](.diagram/img.png)
 
 ---
 
@@ -90,7 +90,7 @@ Secondary responsibilities:
                             ▼
                        PostgreSQL
 ```
-![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_architecture.png)
+![](.diagram/sotres_architecture.png)
 
 ### Key design decisions
 
@@ -113,17 +113,17 @@ When `RestSenderRetryListener` exhausts the retry budget for an outbound call, i
 
 #### 1. Inbound transaction (switch-initiated)
 
-![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_inbound.png)
+![](.diagram/sotres_inbound.png)
 
 #### 2. Outbound CALLBACK mode — no reply-to-a-reply
 
-![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_outbound_callback.png)
+![](.diagram/sotres_outbound_callback.png)
 
 Covered end-to-end by `CallbackModeE2eTest` (asserts no second ISO message is written back to the switch for the correlated reply) and at the unit level by `IsoFieldHelperTest.SendResponseWithObservation`, `RequestContextHelperTest`, and `EnhancedIsoClientTest.PipelineWiring` (locks in the handler ordering).
 
 #### 3. Outbound RESPONSE mode
 
-![](/Users/nantaaditya/projects/mine/sotres-boilerplate/.diagram/sotres_outbound_response.png)
+![](.diagram/sotres_outbound_response.png)
 
 ---
 
