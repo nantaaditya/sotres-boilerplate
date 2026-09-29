@@ -146,9 +146,9 @@ Query parameters:
 
 Query parameters:
 
-| Parameter | Type   | Mandatory | Description                                                                                                                                                                                                       |
-|-----------|--------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `key`     | String | M         | `ConfigGroup` enum name: `ISO8583_MASK_FIELDS`, `ACQUIRERS`, `INCOMING_MTI`, `OUTGOING_MTI`, `CURRENCY_FRACTIONS`, `PATH_MAPPING`, `RESPONSE_MAPPING`, `REGISTRY_RESPONSE_SELECTOR`, `REGISTRY_CALLBACK_SELECTOR` |
+| Parameter | Type   | Mandatory | Description                                                                                                                                                                       |
+|-----------|--------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `key`     | String | M         | `ConfigGroup` enum name: `ISO8583_MASK_FIELDS`, `ACQUIRERS`, `CURRENCY_FRACTIONS`, `PATH_MAPPING`, `RESPONSE_MAPPING`, `REGISTRY_RESPONSE_SELECTOR`, `REGISTRY_CALLBACK_SELECTOR` |
 
 **Response**
 

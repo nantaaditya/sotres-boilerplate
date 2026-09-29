@@ -12,8 +12,6 @@ import lombok.Getter;
 public enum ConfigGroup {
   ISO8583_MASK_FIELDS("mask_fields", "iso8583"),
   ACQUIRERS("acquirers", "acquirers"),
-  INCOMING_MTI("mti", "incoming"),
-  OUTGOING_MTI("mti", "outgoing"),
   CURRENCY_FRACTIONS("currency", "fractions"),
   PATH_MAPPING("endpoint_path", "mapping"),
   RESPONSE_MAPPING("response", "incoming_outgoing_mapping"),

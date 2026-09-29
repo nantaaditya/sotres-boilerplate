@@ -39,10 +39,6 @@ class IsoMessageLoggerHelperTest {
   }
 
   private void setupDefaultMocks() {
-    lenient().when(systemPropertiesService.getProperty(ConfigGroup.INCOMING_MTI, ConfigGroup.INCOMING_MTI.getPropertyId()))
-        .thenReturn("256,512,1056,1057,1058,1059,2048");
-    lenient().when(systemPropertiesService.getProperty(ConfigGroup.OUTGOING_MTI, ConfigGroup.OUTGOING_MTI.getPropertyId()))
-        .thenReturn("272,528,1072,1073,1074,1075,2064");
     lenient().when(systemPropertiesService.getProperty(ConfigGroup.ISO8583_MASK_FIELDS, ConfigGroup.ISO8583_MASK_FIELDS.getPropertyId()))
         .thenReturn("2");
   }

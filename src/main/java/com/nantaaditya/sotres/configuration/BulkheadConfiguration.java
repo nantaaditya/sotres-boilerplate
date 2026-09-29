@@ -33,6 +33,9 @@ public class BulkheadConfiguration
     implements BeanDefinitionRegistryPostProcessor, EnvironmentAware {
 
   private static final String POSTFIX_BEAN_NAME = "Bulkhead";
+  private static final String ERROR_BULKHEAD_NEGATIVE_MESSAGE = "Bulkhead '%s' has a negative headroom ('%s'); it must be >= 0";
+  private static final String ERROR_BULKHEAD_NO_MATCH_MESSAGE = "Bulkhead '%s' has no explicit permits and no matching 'apps.async.configurations'. '%s' entry to derive them from";
+  private static final String ERROR_BULKHEAD_MUST_POSITIVE = "Bulkhead '%s' resolved to '%s' permit(s); must be > 0";
 
   private Environment environment;
 
@@ -79,7 +82,7 @@ public class BulkheadConfiguration
   int resolvePermits(String key, BulkheadPoolConfiguration config, AsyncTaskProperties asyncProperties) {
     if (config.headroom() < 0) {
       throw new IllegalStateException(
-          "Bulkhead '" + key + "' has a negative headroom (" + config.headroom() + "); it must be >= 0");
+          String.format(ERROR_BULKHEAD_NEGATIVE_MESSAGE, key, config.headroom()));
     }
 
     int permits;
@@ -89,8 +92,7 @@ public class BulkheadConfiguration
       AsyncConfiguration matching = asyncProperties.getConfiguration(key);
       if (matching == null) {
         throw new IllegalStateException(
-            "Bulkhead '" + key + "' has no explicit permits and no matching "
-                + "apps.async.configurations." + key + " entry to derive them from");
+            String.format(ERROR_BULKHEAD_NO_MATCH_MESSAGE, key, key));
       }
       permits = matching.maxPoolSize() + matching.queueCapacity() + config.headroom();
     }
@@ -98,8 +100,7 @@ public class BulkheadConfiguration
     // a resolved permit count <= 0 means every tryAcquire() times out silently — every ISO8583
     // transaction would be shed with no startup signal that anything is wrong.
     if (permits <= 0) {
-      throw new IllegalStateException(
-          "Bulkhead '" + key + "' resolved to " + permits + " permit(s); must be > 0");
+      throw new IllegalStateException(String.format(ERROR_BULKHEAD_MUST_POSITIVE, key, permits));
     }
     return permits;
   }
