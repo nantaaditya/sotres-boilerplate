@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.nantaaditya.sotres.e2e.support.E2eTestConfig;
+import com.nantaaditya.sotres.BaseIntegrationTest;
 import com.nantaaditya.sotres.e2e.support.FakeIsoHost;
 import com.nantaaditya.sotres.e2e.support.IsoMessages;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
@@ -19,14 +19,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Case 2 (CALLBACK mode) regression test: {@link EnhancedIsoClient#sendWithCallback} sends an
@@ -35,7 +29,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * {@code TransactionProcessorParticipant}.
  *
  * <p>Locks in the fix for the "reply-to-a-reply" bug: a callback-mode correlated response must
- * never receive an ISO reply of its own from {@code IsoFieldHelper.sendResponseWithObservation}
+ * never receive an ISO reply of its own from {@code IsoResponseSender.sendResponseWithObservation}
  * ({@code RequestContext.callbackResponse}), since there is nobody on the switch side waiting for
  * one.
  *
@@ -44,17 +38,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * that selector list once, at client-connect time during context startup -- a
  * {@code systemPropertiesService.reload(...)} call from within the test would not reach the
  * already-constructed handler on the live connection.
+ *
+ * <p>Declares its own {@code ISO_HOST}/{@code DOWNSTREAM} rather than reusing
+ * {@code SharedInfraE2eTestBase}'s: this test forces an ISO reconnect mid-run
+ * ({@code ISO_HOST.disconnectClient()}), which -- when merged into a shared Spring context with
+ * other e2e classes -- was found to leave the shared HikariCP connection pool broken for whichever
+ * class runs next (observed: {@code HikariPool total=0}, cascading into ~50s
+ * {@code systemPropertiesService.reload()} stalls in the following class). Keeping its own context
+ * avoids that entirely.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(E2eTestConfig.class)
-@Testcontainers
-class CallbackModeE2eTest {
-
-  @Container
-  @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16-alpine")
-          .withInitScript("e2e/callback-mode-init.sql");
+class CallbackModeE2eTest extends BaseIntegrationTest {
 
   static final FakeIsoHost ISO_HOST = new FakeIsoHost();
   static final WireMockServer DOWNSTREAM = new WireMockServer(0);
@@ -138,7 +131,7 @@ class CallbackModeE2eTest {
 
     // TransactionProcessorParticipant finds no AbstractTransactionHandler for selector
     // "21.97-E001" and falls into its "no handler" branch, calling
-    // IsoFieldHelper.sendResponseWithObservation -- which must now skip the write because
+    // IsoResponseSender.sendResponseWithObservation -- which must now skip the write because
     // RequestContext.callbackResponse is true for this message.
     boolean noReplyWrittenBack = ISO_HOST.noMessage(
         m -> rrn.equals(str(m, 37)), Duration.ofSeconds(3));

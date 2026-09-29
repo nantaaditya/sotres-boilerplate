@@ -9,7 +9,7 @@ import static org.awaitility.Awaitility.await;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.nantaaditya.sotres.e2e.support.E2eTestConfig;
+import com.nantaaditya.sotres.BaseIntegrationTest;
 import com.nantaaditya.sotres.e2e.support.FakeIsoHost;
 import com.nantaaditya.sotres.e2e.support.IsoMessages;
 import com.nantaaditya.sotres.listener.JsonLogLayout;
@@ -35,17 +35,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Phase 7D — proves the observability contract the migration depends on actually holds
@@ -59,17 +54,18 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Log verification runs the real {@link JsonLogLayout} against captured {@link LogEvent}s —
  * the same serialization the app's file/console appenders use — rather than re-implementing the
  * field extraction, so a regression in the layout itself would also fail this test.
+ *
+ * <p>Declares its own {@code ISO_HOST}/{@code DOWNSTREAM} (shadowing {@link BaseIntegrationTest}'s
+ * shared instances) because {@link TestObservationConfig} swaps in a {@code @Primary}
+ * {@link TestObservationRegistry} -- sharing that across every other e2e class would make their
+ * observation assertions depend on execution order, so this class necessarily keeps its own
+ * Spring context, and therefore its own {@code EnhancedIsoClient} bean: sharing the JVM-static
+ * shared FakeIsoHost/WireMock with another, concurrently-cached Spring context would mean two app
+ * instances connecting to the one fake switch, corrupting its single-client-channel/message-queue
+ * model.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({E2eTestConfig.class, ObservabilityE2eTest.TestObservationConfig.class})
-@Testcontainers
-class ObservabilityE2eTest {
-
-  @Container
-  @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16-alpine")
-          .withInitScript("e2e/init.sql");
+@Import(ObservabilityE2eTest.TestObservationConfig.class)
+class ObservabilityE2eTest extends BaseIntegrationTest {
 
   static final FakeIsoHost ISO_HOST = new FakeIsoHost();
   static final WireMockServer DOWNSTREAM = new WireMockServer(0);

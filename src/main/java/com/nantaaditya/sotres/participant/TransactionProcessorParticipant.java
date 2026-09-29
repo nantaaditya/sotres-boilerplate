@@ -4,6 +4,7 @@ import com.github.kpavlov.jreactive8583.IsoMessageListener;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.helper.IsoObservationContext;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.RequestContextHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
@@ -67,7 +68,7 @@ public class TransactionProcessorParticipant
   private final List<AbstractTransactionHandler> transactionHandlers;
   private final ObservationRegistry observationRegistry;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
-  private final IsoFieldHelper isoFieldHelper;
+  private final IsoResponseSender isoResponseSender;
   private final TracerHelper tracerHelper;
   private final Tracer tracer;
   private final Executor isoTransactionExecutor;
@@ -82,7 +83,7 @@ public class TransactionProcessorParticipant
 
   public TransactionProcessorParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler> transactionHandlers,
-      IsoMessageLoggerHelper isoMessageLoggerHelper, IsoFieldHelper isoFieldHelper,
+      IsoMessageLoggerHelper isoMessageLoggerHelper, IsoResponseSender isoResponseSender,
       ObservationRegistry observationRegistry, TracerHelper tracerHelper, Tracer tracer,
       List<SenderProtocolStrategy> senderProtocolStrategies,
       ParticipantConfigurationProperties participantConfigurationProperties,
@@ -94,7 +95,7 @@ public class TransactionProcessorParticipant
     this.transactionHandlers = transactionHandlers;
     this.isoMessageLoggerHelper = isoMessageLoggerHelper;
     this.observationRegistry = observationRegistry;
-    this.isoFieldHelper = isoFieldHelper;
+    this.isoResponseSender = isoResponseSender;
     this.tracerHelper = tracerHelper;
     this.tracer = tracer;
     this.isoMessageProperties = isoMessageProperties;
@@ -148,10 +149,15 @@ public class TransactionProcessorParticipant
       }
 
       ObservationHelper.createTransactionContext(observation, requestContext.getRrn(), requestContext.getIsoFeatureConstant());
-      isoFieldHelper.publishIsoEvent(observation, isoMessage, IsoFieldHelper.ISO_REQUEST_EVENT);
+      isoResponseSender.publishIsoEvent(observation, isoMessage, IsoResponseSender.ISO_REQUEST_EVENT, IsoMessageLoggerHelper.INCOMING_ISO);
 
       // hand the transaction off the Netty event loop onto a (virtual) worker thread
       isoTransactionExecutor.execute(() -> handleTransaction(ctx, isoMessage, requestContext, observation, span, mdc));
+
+      // logged here, still inside the span scope -- logging after the try block runs after
+      // restoreCallerMdc() below has already wiped trace_id/span_id from MDC back to the
+      // caller's pre-message state, so it would always log with a null trace/span context.
+      log.info(AppLogMessage.message("#Transaction - message with RRN {} received", IsoFieldHelper.getField(isoMessage, 37)));
     } catch (RejectedExecutionException rejected) {
       handleRejectedTransaction(ctx, isoMessage, rejected, observation, span);
       return false;
@@ -159,7 +165,6 @@ public class TransactionProcessorParticipant
       tracerHelper.restoreCallerMdc(isoContext);
     }
 
-    log.info(AppLogMessage.message("#Transaction - message with RRN {} received", IsoFieldHelper.getField(isoMessage, 37)));
     return false;
   }
 
@@ -178,14 +183,14 @@ public class TransactionProcessorParticipant
     try (SpanInScope spanInScope = tracer.withSpan(span);
         Observation.Scope scope = observation.openScope()) {
 
-      isoMessageLoggerHelper.logIsoMessage(isoMessage);
+      isoMessageLoggerHelper.logIsoMessage(isoMessage, IsoMessageLoggerHelper.INCOMING_ISO);
 
       Optional<AbstractTransactionHandler> maybeHandler = findTransactionHandler(requestContext);
 
       if (maybeHandler.isEmpty()) {
         log.warn(AppLogMessage.message("#Transaction - skipping unknown transaction handler {}", requestContext.getSelector()));
         participantContext.onUpdate(ctx, isoMessage, null, requestContext, observation);
-        isoFieldHelper.sendResponseWithObservation(participantContext, IsoResponseCode.UNABLE_TO_ROUTE_TRANSACTION.getCode(), null);
+        isoResponseSender.sendResponseWithObservation(participantContext, IsoResponseCode.UNABLE_TO_ROUTE_TRANSACTION.getCode(), null);
         return;
       }
 
@@ -195,7 +200,7 @@ public class TransactionProcessorParticipant
       acquired = inFlightBulkhead.tryAcquire(inFlightAcquireTimeoutMs, TimeUnit.MILLISECONDS);
       if (!acquired) {
         log.error(AppLogMessage.message("#Transaction - in-flight bulkhead saturated, shedding RRN {}", requestContext.getRrn()));
-        isoFieldHelper.sendResponseWithObservation(participantContext, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
+        isoResponseSender.sendResponseWithObservation(participantContext, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
         return;
       }
 
@@ -233,7 +238,7 @@ public class TransactionProcessorParticipant
         IsoFieldHelper.getField(isoMessage, 37)).error(rejected));
     ParticipantContext participantContext = new ParticipantContext();
     participantContext.onUpdate(ctx, isoMessage, null, null, observation);
-    isoFieldHelper.sendResponseWithObservation(
+    isoResponseSender.sendResponseWithObservation(
         participantContext, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), rejected);
     observation.stop();
     span.end();

@@ -66,7 +66,7 @@ class IsoMessageLoggerHelperTest {
     IsoMessage message = factory.newMessage(0x200);
     message.setValue(2, "4111111111111111", IsoType.LLVAR, 19);
 
-    JsonLogIsoMessage result = helper.toLogMessage(message);
+    JsonLogIsoMessage result = helper.toLogMessage(message, "incoming");
 
     assertThat(result)
         .isNotNull()
@@ -82,7 +82,7 @@ class IsoMessageLoggerHelperTest {
     IsoMessage message = factory.newMessage(0x210);
     message.setValue(2, "4111111111111111", IsoType.LLVAR, 19);
 
-    JsonLogIsoMessage result = helper.toLogMessage(message);
+    JsonLogIsoMessage result = helper.toLogMessage(message, "outgoing");
 
     assertThat(result)
         .isNotNull()
@@ -98,7 +98,7 @@ class IsoMessageLoggerHelperTest {
     IsoMessage message = factory.newMessage(0x200);
     message.setValue(2, "4111111111111111", IsoType.LLVAR, 19);
 
-    JsonLogIsoMessage result = helper.toLogMessage(message);
+    JsonLogIsoMessage result = helper.toLogMessage(message, "incoming");
 
     assertThat(result)
         .isNotNull()
@@ -115,12 +115,11 @@ class IsoMessageLoggerHelperTest {
     IsoMessage message = factory.newMessage(0x999);
     message.setValue(2, "4111111111111111", IsoType.LLVAR, 19);
 
-    JsonLogIsoMessage result = helper.toLogMessage(message);
+    JsonLogIsoMessage result = helper.toLogMessage(message, "incoming");
 
     assertThat(result)
         .isNotNull()
         .satisfies(msg -> {
-          assertThat(msg.direction()).isEqualTo("unknown");
           assertThat(msg.mti()).isEqualTo("0999");
         });
   }

@@ -18,19 +18,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class IsoMessageLoggerHelper {
 
+  public static final String INCOMING_ISO = "incoming";
+  public static final String OUTGOING_ISO = "outgoing";
+
   private final SystemPropertiesService systemPropertiesService;
 
   public IsoMessageLoggerHelper(SystemPropertiesService systemPropertiesService) {
     this.systemPropertiesService = systemPropertiesService;
   }
 
-  public void logIsoMessage(IsoMessage isoMessage) {
-    JsonLogIsoMessage logIsoMessage = toLogMessage(isoMessage);
+  public void logIsoMessage(IsoMessage isoMessage, String direction) {
+    JsonLogIsoMessage logIsoMessage = toLogMessage(isoMessage, direction);
     log.info(AppLogMessage.message("#ISO").isoMessage(logIsoMessage));
   }
 
-  public JsonLogIsoMessage toLogMessage(IsoMessage message) {
-    String direction = getDirection(message);
+  public JsonLogIsoMessage toLogMessage(IsoMessage message, String direction) {
     String mti = String.format("%04x", message.getType());
 
     try {
@@ -50,17 +52,6 @@ public class IsoMessageLoggerHelper {
     }
   }
 
-  private String getDirection(IsoMessage message) {
-    String direction;
-    if (getMTI(ConfigGroup.INCOMING_MTI).contains(message.getType())) {
-      return "incoming";
-    } else if (getMTI(ConfigGroup.OUTGOING_MTI).contains(message.getType())) {
-      return "outgoing";
-    } else {
-      return "unknown";
-    }
-  }
-
   private static String maskingValue(String value, int field) {
     if (field == 2) {
       return MaskingHelper.masking(value, 6, 4);
@@ -70,14 +61,10 @@ public class IsoMessageLoggerHelper {
 
   @NotNull
   private Set<Integer> getMaskedFields() {
-    return ConfigGroup.getList(systemPropertiesService, ConfigGroup.ISO8583_MASK_FIELDS)
-      .stream()
-      .map(String::trim)
-      .map(Integer::parseInt)
-      .collect(Collectors.toSet());
+    return getConfiguredIntSet(ConfigGroup.ISO8583_MASK_FIELDS);
   }
 
-  private Set<Integer> getMTI(ConfigGroup group) {
+  private Set<Integer> getConfiguredIntSet(ConfigGroup group) {
     return ConfigGroup.getList(systemPropertiesService, group)
       .stream()
       .map(String::trim)

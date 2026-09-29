@@ -7,8 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.helper.HealthCheckHelper;
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
@@ -28,7 +28,7 @@ class NetworkProcessorParticipantTest {
   @Mock
   private IsoMessageLoggerHelper isoMessageLoggerHelper;
   @Mock
-  private IsoFieldHelper isoFieldHelper;
+  private IsoResponseSender isoResponseSender;
   @Mock
   private IsoMessage msg;
   @Mock
@@ -41,7 +41,7 @@ class NetworkProcessorParticipantTest {
   void setUp() {
     healthCheckHelper = new HealthCheckHelper();
     participant = new NetworkProcessorParticipant(healthCheckHelper, isoMessageLoggerHelper,
-        isoFieldHelper);
+        isoResponseSender);
   }
 
   @Test
@@ -114,7 +114,7 @@ class NetworkProcessorParticipantTest {
 
       assertThat(healthCheckHelper.isSignedOn()).isTrue();
       assertThat(healthCheckHelper.isHealthy()).isTrue();
-      verify(isoFieldHelper).sendResponse(ctx, msg, "00");
+      verify(isoResponseSender).sendResponse(ctx, msg, "00");
     }
 
     @Test
@@ -174,7 +174,7 @@ class NetworkProcessorParticipantTest {
       participant.onMessage(ctx, msg);
 
       assertThat(healthCheckHelper.isSignedOn()).isFalse();
-      verify(isoFieldHelper).sendResponse(ctx, msg, "00");
+      verify(isoResponseSender).sendResponse(ctx, msg, "00");
     }
 
     @Test
@@ -188,7 +188,7 @@ class NetworkProcessorParticipantTest {
       participant.onMessage(ctx, msg);
 
       assertThat(healthCheckHelper.isSignedOn()).isFalse();
-      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class),
+      verify(isoResponseSender, never()).sendResponse(any(ChannelHandlerContext.class),
           any(IsoMessage.class), any(String.class));
     }
   }
@@ -205,7 +205,7 @@ class NetworkProcessorParticipantTest {
 
       participant.onMessage(ctx, msg);
 
-      verify(isoFieldHelper).sendResponse(ctx, msg, "00");
+      verify(isoResponseSender).sendResponse(ctx, msg, "00");
     }
 
     @Test
@@ -216,7 +216,7 @@ class NetworkProcessorParticipantTest {
 
       participant.onMessage(ctx, msg);
 
-      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class),
+      verify(isoResponseSender, never()).sendResponse(any(ChannelHandlerContext.class),
           any(IsoMessage.class), any(String.class));
     }
   }
@@ -233,7 +233,7 @@ class NetworkProcessorParticipantTest {
 
       participant.onMessage(ctx, msg);
 
-      verify(isoFieldHelper).sendResponse(ctx, msg, "00");
+      verify(isoResponseSender).sendResponse(ctx, msg, "00");
     }
 
     @Test
@@ -244,7 +244,7 @@ class NetworkProcessorParticipantTest {
 
       participant.onMessage(ctx, msg);
 
-      verify(isoFieldHelper, never()).sendResponse(any(ChannelHandlerContext.class),
+      verify(isoResponseSender, never()).sendResponse(any(ChannelHandlerContext.class),
           any(IsoMessage.class), any(String.class));
     }
   }

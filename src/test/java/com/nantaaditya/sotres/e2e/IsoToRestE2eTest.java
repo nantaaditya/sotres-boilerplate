@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.nantaaditya.sotres.e2e.support.E2eTestConfig;
+import com.nantaaditya.sotres.BaseIntegrationTest;
 import com.nantaaditya.sotres.e2e.support.FakeIsoHost;
 import com.nantaaditya.sotres.e2e.support.IsoMessages;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
@@ -24,14 +24,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Phase 0 regression oracle for the reactive -> servlet/blocking refactor.
@@ -40,17 +34,19 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * downstream, drives real ISO8583 traffic through an embedded upstream host
  * ({@link FakeIsoHost}), and freezes the current end-to-end behaviour of the
  * transaction-forwarding pipeline.
+ *
+ * <p>Declares its own {@code ISO_HOST}/{@code DOWNSTREAM} rather than reusing
+ * {@code SharedInfraE2eTestBase}'s: merging this class into a shared Spring context with other
+ * e2e classes (even lightweight ones with no ISO/REST traffic of their own) was found to leave
+ * the shared HikariCP connection pool broken by the time this class's tests ran (observed:
+ * {@code HikariPool total=0, active=0, idle=0, waiting=0} -- the pool fails to establish any
+ * connection at all, not a classic held-too-long leak; leak-detection-threshold never fires),
+ * cascading into multi-minute {@code systemPropertiesService.reload()} stalls and downstream
+ * calls failing with DE39=96. Root cause not fully isolated -- suspected interaction between
+ * {@code @ServiceConnection}'s Postgres binding and 3+ merged Spring contexts sharing one
+ * Testcontainers instance. Keeping its own context avoids the problem entirely.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(E2eTestConfig.class)
-@Testcontainers
-class IsoToRestE2eTest {
-
-  @Container
-  @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16-alpine")
-          .withInitScript("e2e/init.sql");
+class IsoToRestE2eTest extends BaseIntegrationTest {
 
   static final FakeIsoHost ISO_HOST = new FakeIsoHost();
   static final WireMockServer DOWNSTREAM = new WireMockServer(0);

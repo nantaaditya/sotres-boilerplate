@@ -9,12 +9,9 @@ import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.MessageFactory;
 import com.solab.iso8583.impl.SimpleTraceGenerator;
 import com.solab.iso8583.parse.ConfigParser;
-import com.solab.iso8583.parse.FieldParseInfo;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 import lombok.extern.log4j.Log4j2;
 import org.xml.sax.InputSource;
 
@@ -26,36 +23,18 @@ public class MessageFactoryHelper {
 
   private static final int STAN = 1_000_000;
 
-  private MessageFactoryHelper() { }
-
   public MessageFactoryHelper(PackagerConstant packager) {
     try {
       this.customMessageFactory = getMessageFactory(packager);
-      this.customMessageFactory.setCharacterEncoding(StandardCharsets.US_ASCII.name());
-      this.customMessageFactory.setUseBinaryMessages(false);
-      this.customMessageFactory.setForceSecondaryBitmap(true);
-      this.customMessageFactory.setAssignDate(true);
-      this.customMessageFactory.setTraceNumberGenerator(
-          new SimpleTraceGenerator((int) (System.currentTimeMillis() % STAN))
-      );
+      configureFactory(this.customMessageFactory);
       this.j8583MessageFactory = new J8583MessageFactory<>(this.customMessageFactory, ISO8583Version.V1987, MessageOrigin.OTHER);
     } catch (IOException e) {
-      log.error(AppLogMessage.message("could not initialize packager").error(e));
+      throw new IllegalStateException("could not initialize packager: " + packager, e);
     }
   }
 
   public J8583MessageFactory getDefaultMessageFactory() {
     return this.j8583MessageFactory;
-  }
-
-  public Map<Integer, Map<Integer, FieldParseInfo>> getDefaultParseMap() {
-    return this.customMessageFactory.getParseMap();
-  }
-
-  public FieldParseInfo getDefaultParseMap(Integer mti, Integer de) {
-    return this.getDefaultParseMap()
-        .getOrDefault(mti, new HashMap<>())
-        .getOrDefault(de, null);
   }
 
   private CustomMessageFactory<IsoMessage> getMessageFactory(
@@ -66,27 +45,27 @@ public class MessageFactoryHelper {
         : CustomConfigParser.createFromClasspathConfig(packagerKey.getPath());
   }
 
+  private void configureFactory(com.solab.iso8583.MessageFactory<IsoMessage> factory) {
+    factory.setCharacterEncoding(StandardCharsets.US_ASCII.name());
+    factory.setUseBinaryMessages(false);
+    factory.setForceSecondaryBitmap(true);
+    factory.setAssignDate(true);
+    factory.setTraceNumberGenerator(
+        new SimpleTraceGenerator((int) (System.currentTimeMillis() % STAN))
+    );
+  }
+
   public com.github.kpavlov.jreactive8583.iso.MessageFactory<IsoMessage> createMessageFactory(PackagerConstant packagerKey) {
     try {
       com.solab.iso8583.MessageFactory<IsoMessage> factory = getMessageFactory(packagerKey);
-      factory.setCharacterEncoding(StandardCharsets.US_ASCII.name());
-      factory.setUseBinaryMessages(false);
-      factory.setForceSecondaryBitmap(true);
-      factory.setAssignDate(true);
-      factory.setTraceNumberGenerator(
-          new SimpleTraceGenerator((int) (System.currentTimeMillis() % STAN))
-      );
+      configureFactory(factory);
       return new J8583MessageFactory<>(factory, ISO8583Version.V1987, MessageOrigin.OTHER);
     } catch (IOException e) {
       throw new IllegalArgumentException("Invalid packager config file: " + packagerKey, e);
     }
   }
 
-  static class CustomMessageFactory<T extends IsoMessage> extends MessageFactory<T> {
-    public Map<Integer, Map<Integer, FieldParseInfo>> getParseMap() {
-      return super.parseMap;
-    }
-  }
+  static class CustomMessageFactory<T extends IsoMessage> extends MessageFactory<T> { }
 
   static class CustomConfigParser extends ConfigParser {
     public static CustomMessageFactory createFromClasspathConfig(String path) throws IOException {

@@ -2,6 +2,7 @@ package com.nantaaditya.sotres.strategy.outgoing;
 
 import com.nantaaditya.sotres.client.TransactionClient;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
@@ -47,16 +48,16 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
 
   private final SystemPropertiesService systemPropertiesService;
   private final TransactionClient transactionClient;
-  private final IsoFieldHelper isoFieldHelper;
+  private final IsoResponseSender isoResponseSender;
   private final TracerHelper tracerHelper;
 
   public RestProtocolStrategy(
       SystemPropertiesService systemPropertiesService,
-      TransactionClient transactionClient, IsoFieldHelper isoFieldHelper,
+      TransactionClient transactionClient, IsoResponseSender isoResponseSender,
       TracerHelper tracerHelper) {
     this.systemPropertiesService = systemPropertiesService;
     this.transactionClient = transactionClient;
-    this.isoFieldHelper = isoFieldHelper;
+    this.isoResponseSender = isoResponseSender;
     this.tracerHelper = tracerHelper;
   }
 
@@ -84,7 +85,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     try {
       if (response == null) {
         log.error(AppLogMessage.message("#Transaction - no response from host"));
-        isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
+        isoResponseSender.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), null);
       } else {
         // override response before sending ISO message when necessary
         ctx.getTransactionHandler().populateResponse(ctx);
@@ -92,7 +93,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
         String mappedResponseCode = mappingResponseCode(responseCode);
         log.info(AppLogMessage.message("#Transaction - response code from host: {} to internal response code: {}", responseCode, mappedResponseCode));
 
-        isoFieldHelper.sendResponseWithObservation(ctx, mappedResponseCode, null, msg -> {
+        isoResponseSender.sendResponseWithObservation(ctx, mappedResponseCode, null, msg -> {
           IsoFieldHelper.setApprovalCode(msg, response.getApprovalCode());
           msg.setField(39, IsoType.ALPHA.value(mappedResponseCode, 2));
         });
@@ -101,7 +102,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
     } catch (Exception e) {
       log.error(AppLogMessage.message("#Transaction - failed write and flush transaction").error(e));
       String responseCode = IsoResponseCode.SYSTEM_MALFUNCTION.getCode();
-      isoFieldHelper.sendResponseWithObservation(ctx, responseCode, e);
+      isoResponseSender.sendResponseWithObservation(ctx, responseCode, e);
     }
   }
 
@@ -123,7 +124,7 @@ public class RestProtocolStrategy implements SenderProtocolStrategy {
       return;
     }
 
-    isoFieldHelper.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
+    isoResponseSender.sendResponseWithObservation(ctx, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), e);
   }
 
   /**

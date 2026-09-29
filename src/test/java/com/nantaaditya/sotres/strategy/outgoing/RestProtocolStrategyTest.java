@@ -13,7 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.client.TransactionClient;
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
@@ -44,7 +44,7 @@ class RestProtocolStrategyTest {
   @Mock
   private TransactionClient transactionClient;
   @Mock
-  private IsoFieldHelper isoFieldHelper;
+  private IsoResponseSender isoResponseSender;
   @Mock
   private TracerHelper tracerHelper;
   @Mock
@@ -66,7 +66,7 @@ class RestProtocolStrategyTest {
   @BeforeEach
   void setUp() {
     strategy = new RestProtocolStrategy(
-        systemPropertiesService, transactionClient, isoFieldHelper, tracerHelper);
+        systemPropertiesService, transactionClient, isoResponseSender, tracerHelper);
 
     requestContext = new RequestContext();
     requestContext.setRrn("rrn-001");
@@ -111,7 +111,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponseWithObservation(participantCtx, "96", null);
+    verify(isoResponseSender).sendResponseWithObservation(participantCtx, "96", null);
     verify(observation, never()).stop();
   }
 
@@ -123,7 +123,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponseWithObservation(eq(participantCtx), eq("96"), isNull(),
+    verify(isoResponseSender).sendResponseWithObservation(eq(participantCtx), eq("96"), isNull(),
         any(Consumer.class));
     verify(observation, never()).stop();
   }
@@ -137,7 +137,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponseWithObservation(eq(participantCtx), eq("96"), any(RuntimeException.class));
+    verify(isoResponseSender).sendResponseWithObservation(eq(participantCtx), eq("96"), any(RuntimeException.class));
     verify(observation, never()).stop();
   }
 
@@ -149,7 +149,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleError(participantCtx, ex);
 
-    verify(isoFieldHelper, never()).sendResponse(any(), any(), anyString());
+    verify(isoResponseSender, never()).sendResponse(any(), any(), anyString());
   }
 
   @Test
@@ -162,8 +162,8 @@ class RestProtocolStrategyTest {
 
     strategy.handleError(participantCtx, ex);
 
-    verify(isoFieldHelper, never()).sendResponse(any(), any(), anyString());
-    verify(isoFieldHelper, never()).sendResponseWithObservation(any(), anyString(), any());
+    verify(isoResponseSender, never()).sendResponse(any(), any(), anyString());
+    verify(isoResponseSender, never()).sendResponseWithObservation(any(), anyString(), any());
   }
 
   @Test
@@ -174,7 +174,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleError(participantCtx, ex);
 
-    verify(isoFieldHelper).sendResponseWithObservation(participantCtx, "96", ex);
+    verify(isoResponseSender).sendResponseWithObservation(participantCtx, "96", ex);
   }
 
   @Test
@@ -182,6 +182,6 @@ class RestProtocolStrategyTest {
   void handleError_withUnknownException_doesNotSendResponse() {
     strategy.handleError(participantCtx, new IllegalStateException("unknown"));
 
-    verify(isoFieldHelper, never()).sendResponse(any(), any(), anyString());
+    verify(isoResponseSender, never()).sendResponse(any(), any(), anyString());
   }
 }

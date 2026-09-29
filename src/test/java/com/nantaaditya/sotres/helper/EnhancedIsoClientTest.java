@@ -61,7 +61,7 @@ class EnhancedIsoClientTest {
   @Mock
   private CorrelationRegistry correlationRegistry;
   @Mock
-  private IsoFieldHelper isoFieldHelper;
+  private IsoResponseSender isoResponseSender;
   @Mock
   private IsoMessageLoggerHelper isoMessageLoggerHelper;
   @Mock
@@ -114,7 +114,7 @@ class EnhancedIsoClientTest {
         ClientConfiguration.newBuilder().build(),
         messageFactory,
         correlationRegistry,
-        isoFieldHelper,
+        isoResponseSender,
         isoMessageLoggerHelper,
         systemPropertiesService,
         tracerHelper,
@@ -127,7 +127,7 @@ class EnhancedIsoClientTest {
   @BeforeEach
   void setUp() {
     lenient().when(correlationRegistry.register(any())).thenReturn(new CompletableFuture<>());
-    lenient().when(isoFieldHelper.createResponse(request)).thenReturn(errorResponse);
+    lenient().when(isoResponseSender.createResponse(request)).thenReturn(errorResponse);
     // send() calls the static IsoFieldHelper.getIsoFeature(request), which unpacks DE48 (TLV) —
     // an unstubbed getField(48) returns null and NPEs inside unpackTLV's raw.length() call.
     lenient().when(request.getField(48)).thenReturn(isoValue("PI02QR"));
@@ -288,7 +288,7 @@ class EnhancedIsoClientTest {
       TestClient c = new TestClient(new IsoClientConfigurationRequest(
           new InetSocketAddress("localhost", 5000),
           ClientConfiguration.newBuilder().build(),
-          messageFactory, registry, isoFieldHelper, isoMessageLoggerHelper,
+          messageFactory, registry, isoResponseSender, isoMessageLoggerHelper,
           systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
           observationRegistry));
       when(channel.isWritable()).thenReturn(true);
@@ -332,7 +332,7 @@ class EnhancedIsoClientTest {
 
       IsoMessage req = isoMsg("770002");
       IsoMessage synthetic = mock(IsoMessage.class);
-      when(isoFieldHelper.createResponse(req)).thenReturn(synthetic);
+      when(isoResponseSender.createResponse(req)).thenReturn(synthetic);
 
       IsoMessage returned = client.send(req, Duration.ofMillis(120));
 
@@ -347,7 +347,7 @@ class EnhancedIsoClientTest {
       CorrelationRegistry registry = realRegistry(5000, 5000);
       TestClient client = responseClient(registry);
       lenient().when(channelFuture.sync()).thenReturn(channelFuture);
-      lenient().when(isoFieldHelper.createResponse(any())).thenReturn(mock(IsoMessage.class));
+      lenient().when(isoResponseSender.createResponse(any())).thenReturn(mock(IsoMessage.class));
 
       IsoMessage req = isoMsg("770003");
       IsoMessage resp = isoMsg("770003");
@@ -369,7 +369,7 @@ class EnhancedIsoClientTest {
       TestClient client = new TestClient(new IsoClientConfigurationRequest(
           new InetSocketAddress("localhost", 5000),
           ClientConfiguration.newBuilder().build(),
-          messageFactory, registry, isoFieldHelper, isoMessageLoggerHelper,
+          messageFactory, registry, isoResponseSender, isoMessageLoggerHelper,
           systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
           observationRegistry));
       when(channel.isWritable()).thenReturn(true);
@@ -400,7 +400,7 @@ class EnhancedIsoClientTest {
       TestClient c = new TestClient(new IsoClientConfigurationRequest(
           new InetSocketAddress("localhost", 5000),
           ClientConfiguration.newBuilder().build(),
-          messageFactory, registry, isoFieldHelper, isoMessageLoggerHelper,
+          messageFactory, registry, isoResponseSender, isoMessageLoggerHelper,
           systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
           testObservationRegistry));
       when(channel.isWritable()).thenReturn(true);
@@ -444,7 +444,7 @@ class EnhancedIsoClientTest {
       TestClient client = observedClient(registry);
       when(channel.writeAndFlush(any())).thenReturn(channelFuture);
       lenient().when(channelFuture.sync()).thenReturn(channelFuture);
-      lenient().when(isoFieldHelper.createResponse(any())).thenReturn(mock(IsoMessage.class));
+      lenient().when(isoResponseSender.createResponse(any())).thenReturn(mock(IsoMessage.class));
 
       IsoMessage req = isoMsg("990002");
 
@@ -464,7 +464,7 @@ class EnhancedIsoClientTest {
       TestClient client = observedClient(registry);
       when(channel.writeAndFlush(any())).thenReturn(channelFuture);
       when(channelFuture.sync()).thenThrow(new RuntimeException("boom"));
-      lenient().when(isoFieldHelper.createResponse(any())).thenReturn(mock(IsoMessage.class));
+      lenient().when(isoResponseSender.createResponse(any())).thenReturn(mock(IsoMessage.class));
 
       client.send(isoMsg("990003"), Duration.ofMillis(80));
 
@@ -495,7 +495,7 @@ class EnhancedIsoClientTest {
       TestClient client = new TestClient(new IsoClientConfigurationRequest(
           new InetSocketAddress("localhost", 5000),
           ClientConfiguration.newBuilder().build(),
-          messageFactory, correlation, isoFieldHelper, isoMessageLoggerHelper,
+          messageFactory, correlation, isoResponseSender, isoMessageLoggerHelper,
           systemPropertiesService, tracerHelper, participantConfigurationProperties, clientProperties,
           sharedRegistry));
       when(channel.isWritable()).thenReturn(true);
@@ -505,7 +505,7 @@ class EnhancedIsoClientTest {
 
       TransactionResponseParticipant participant = new TransactionResponseParticipant(
           systemPropertiesService, correlation, sharedRegistry, isoMessageLoggerHelper,
-          isoFieldHelper, tracerHelper, tracer, clientProperties, Runnable::run);
+          isoResponseSender, tracerHelper, tracer, clientProperties, Runnable::run);
 
       IsoMessage req = isoMsgWithRrn(RRN);
       IsoMessage resp = isoMsgWithRrn(RRN);

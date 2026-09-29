@@ -68,7 +68,7 @@ INSERT INTO system_properties (id, group_id, property_id, property_value) VALUES
     -- IsoMessages.callbackReply(request, "E001", ...) -- MTI 0210 -> substring(1,3)="21",
     -- DE3 "970000" -> "97", DE48 PI "E001". No AbstractTransactionHandler registers this
     -- selector, so TransactionProcessorParticipant hits its "no handler" branch and calls
-    -- IsoFieldHelper.sendResponseWithObservation -- exactly where the callbackResponse guard
+    -- IsoResponseSender.sendResponseWithObservation -- exactly where the callbackResponse guard
     -- must suppress writing a second ISO reply back to the switch.
     (8, 'registry',      'callback_selector',          '21.97-E001'),
     (9, 'registry',      'response_selector',          '');

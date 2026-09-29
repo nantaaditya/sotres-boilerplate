@@ -32,7 +32,7 @@ public class EnhancedIsoClient
     implements IsoCallbackConstant {
 
   private final CorrelationRegistry correlationRegistry;
-  private final IsoFieldHelper isoFieldHelper;
+  private final IsoResponseSender isoResponseSender;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
   private final RegistryType registryType;
   private final ObservationRegistry observationRegistry;
@@ -43,7 +43,7 @@ public class EnhancedIsoClient
 
     super(clientConfiguration.socketAddress(), clientConfiguration.clientConfiguration(), clientConfiguration.messageFactory());
     this.correlationRegistry = clientConfiguration.correlationRegistry();
-    this.isoFieldHelper = clientConfiguration.isoFieldHelper();
+    this.isoResponseSender = clientConfiguration.isoResponseSender();
     this.isoMessageLoggerHelper = clientConfiguration.isoMessageLoggerHelper();
     this.registryType = clientConfiguration.clientProperties().getRegistryType();
     this.observationRegistry = clientConfiguration.observationRegistry();
@@ -129,7 +129,8 @@ public class EnhancedIsoClient
 
       String de37 = IsoFieldHelper.getField(request, 37);
       ObservationHelper.createTransactionContext(observation, de37, IsoFieldHelper.getIsoFeature(request));
-      isoFieldHelper.publishIsoEvent(observation, request, IsoFieldHelper.ISO_REQUEST_EVENT);
+      isoResponseSender.publishIsoEvent(observation, request,
+          IsoResponseSender.ISO_REQUEST_EVENT, IsoMessageLoggerHelper.OUTGOING_ISO);
 
       sendAsync(request).sync();
       IsoMessage response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -172,7 +173,7 @@ public class EnhancedIsoClient
   }
 
   private IsoMessage constructErrorResponse(IsoMessage request, IsoResponseCode responseCode) {
-    IsoMessage result = isoFieldHelper.createResponse(request);
+    IsoMessage result = isoResponseSender.createResponse(request);
     result.setField(39, new IsoValue<>(IsoType.ALPHA, responseCode.getCode(), 2));
     return result;
   }

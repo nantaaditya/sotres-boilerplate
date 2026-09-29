@@ -3,30 +3,19 @@ package com.nantaaditya.sotres.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.nantaaditya.sotres.e2e.support.FakeIsoHost;
 import com.nantaaditya.sotres.entity.EventLog;
 import com.nantaaditya.sotres.repository.EventLogRepository;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
-import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Proves the servlet-migration wiring — {@code HeaderFilter} -> {@code CacheBodyRequest} ->
@@ -36,43 +25,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * persisted (async, off the request thread) with the fields {@code HeaderFilter} derived from the
  * inbound headers.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureTestRestTemplate
-@Testcontainers
 @DisplayName("Event log wiring (HeaderFilter -> EventLogInterceptor)")
-class EventLogWiringE2eTest {
-
-  @Container
-  @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16-alpine")
-          .withInitScript("e2e/init.sql");
-
-  static final FakeIsoHost ISO_HOST = new FakeIsoHost();
+class EventLogWiringE2eTest extends SharedInfraE2eTestBase {
 
   @Autowired
   TestRestTemplate rest;
 
   @Autowired
   EventLogRepository eventLogRepository;
-
-  @BeforeAll
-  static void startIso() throws InterruptedException {
-    ISO_HOST.start();
-  }
-
-  @AfterAll
-  static void stopIso() {
-    ISO_HOST.stop();
-  }
-
-  @DynamicPropertySource
-  static void isoProperties(DynamicPropertyRegistry registry) {
-    registry.add("iso8583.configuration.connection.host", () -> "127.0.0.1");
-    registry.add("iso8583.configuration.connection.port", ISO_HOST::getPort);
-    registry.add("iso8583.configuration.network.reconnect-interval", () -> 2000);
-    registry.add("iso8583.configuration.network.scheduled-echo-enabled", () -> false);
-  }
 
   @Test
   @DisplayName("a request through the DispatcherServlet produces a matching event_logs row")

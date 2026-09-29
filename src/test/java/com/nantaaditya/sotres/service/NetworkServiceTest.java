@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
@@ -77,7 +78,7 @@ class NetworkServiceTest {
 
       assertThat(result).isTrue();
       ArgumentCaptor<IsoMessage> captor = ArgumentCaptor.forClass(IsoMessage.class);
-      verify(isoMessageLoggerHelper).logIsoMessage(captor.capture());
+      verify(isoMessageLoggerHelper).logIsoMessage(captor.capture(), anyString());
       assertThat(IsoFieldHelper.getField(captor.getValue(), 70)).isEqualTo("301");
       verify(enhancedIsoClient).send(any(IsoMessage.class), eq(TIME_OUT_MS), eq(TimeUnit.MILLISECONDS));
     }
@@ -131,7 +132,7 @@ class NetworkServiceTest {
       service.sendSignOn();
 
       ArgumentCaptor<IsoMessage> captor = ArgumentCaptor.forClass(IsoMessage.class);
-      verify(isoMessageLoggerHelper).logIsoMessage(captor.capture());
+      verify(isoMessageLoggerHelper).logIsoMessage(captor.capture(), anyString());
       assertThat(IsoFieldHelper.getField(captor.getValue(), 70)).isEqualTo("001");
       assertThat(captor.getValue().hasField(48)).as("DE48 network management data present").isTrue();
       verify(enhancedIsoClient).send(any(IsoMessage.class), eq(TIME_OUT_MS), eq(TimeUnit.MILLISECONDS));
@@ -156,7 +157,7 @@ class NetworkServiceTest {
       service.sendSignOff();
 
       ArgumentCaptor<IsoMessage> captor = ArgumentCaptor.forClass(IsoMessage.class);
-      verify(isoMessageLoggerHelper).logIsoMessage(captor.capture());
+      verify(isoMessageLoggerHelper).logIsoMessage(captor.capture(), anyString());
       assertThat(IsoFieldHelper.getField(captor.getValue(), 70)).isEqualTo("002");
       verify(enhancedIsoClient).send(any(IsoMessage.class), eq(TIME_OUT_MS), eq(TimeUnit.MILLISECONDS));
     }

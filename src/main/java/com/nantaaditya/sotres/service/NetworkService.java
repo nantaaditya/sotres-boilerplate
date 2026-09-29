@@ -3,9 +3,9 @@ package com.nantaaditya.sotres.service;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
 import com.nantaaditya.sotres.helper.HealthCheckHelper;
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.helper.MessageFactoryHelper;
+import com.nantaaditya.sotres.helper.StringHelper;
 import com.nantaaditya.sotres.model.constant.NetworkInformationCode;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.IsoMessageProperties;
@@ -72,7 +72,7 @@ public class NetworkService {
     try {
       if (enhancedIsoClient.isConnected() && healthCheckHelper.isSignedOn()) {
         IsoMessage request = constructMessage(NetworkInformationCode.ECHO, "Echo");
-        isoMessageLoggerHelper.logIsoMessage(request);
+        isoMessageLoggerHelper.logIsoMessage(request, IsoMessageLoggerHelper.OUTGOING_ISO);
         enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
         return true;
       }
@@ -88,7 +88,7 @@ public class NetworkService {
     try {
       if (enhancedIsoClient.isConnected()) {
         IsoMessage request = constructMessage(nic, message);
-        isoMessageLoggerHelper.logIsoMessage(request);
+        isoMessageLoggerHelper.logIsoMessage(request, IsoMessageLoggerHelper.OUTGOING_ISO);
         enhancedIsoClient.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
       }
     } catch (InterruptedException e) {
@@ -103,7 +103,7 @@ public class NetworkService {
     isoMessage.setValue(7, DateTimeHelper.getDateInFormat(
             ZonedDateTime.now(DateTimeHelper.GMT_ZONE), DateTimeHelper.TRANSMISSION_DATE_TIME_FORMAT),
         IsoType.NUMERIC, 10);
-    isoMessage.setValue(11, IsoFieldHelper.generateNumeric(6), IsoType.NUMERIC, 6);
+    isoMessage.setValue(11, StringHelper.generateNumeric(6), IsoType.NUMERIC, 6);
 
     if (NetworkInformationCode.LOGON.equals(nic)) {
       constructNetworkManagementData(isoMessage);

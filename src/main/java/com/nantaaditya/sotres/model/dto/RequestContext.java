@@ -80,7 +80,7 @@ public class RequestContext {
   private boolean externalRequest;
   // true when this inbound message is our own callback-mode request's correlated reply
   // (IsoCategory SUCCESS/LATE_RESPONSE/ORPHAN) rather than a switch-initiated request — see
-  // IsoFieldHelper.sendResponseWithObservation, which never writes an ISO reply when this is set.
+  // IsoResponseSender.sendResponseWithObservation, which never writes an ISO reply when this is set.
   private boolean callbackResponse;
 
   private Transaction transaction;

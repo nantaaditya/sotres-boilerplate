@@ -5,6 +5,7 @@ import com.nantaaditya.sotres.helper.CorrelationRegistry;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
 import com.nantaaditya.sotres.helper.IsoObservationContext;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.ObservationHelper;
 import com.nantaaditya.sotres.helper.RequestContextHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
@@ -66,7 +67,7 @@ public class TransactionResponseParticipant
   private final CorrelationRegistry correlationRegistry;
   private final ObservationRegistry observationRegistry;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
-  private final IsoFieldHelper isoFieldHelper;
+  private final IsoResponseSender isoResponseSender;
   private final TracerHelper tracerHelper;
   private final Tracer tracer;
   private final Executor isoTransactionExecutor;
@@ -75,7 +76,7 @@ public class TransactionResponseParticipant
 
   public TransactionResponseParticipant(SystemPropertiesService systemPropertiesService,
       CorrelationRegistry correlationRegistry, ObservationRegistry observationRegistry,
-      IsoMessageLoggerHelper isoMessageLoggerHelper, IsoFieldHelper isoFieldHelper, TracerHelper tracerHelper,
+      IsoMessageLoggerHelper isoMessageLoggerHelper, IsoResponseSender isoResponseSender, TracerHelper tracerHelper,
       Tracer tracer, ClientProperties clientProperties,
       @Lazy @Qualifier(ISO_TRANSACTION_EXECUTOR) Executor isoTransactionExecutor) {
 
@@ -83,7 +84,7 @@ public class TransactionResponseParticipant
     this.correlationRegistry = correlationRegistry;
     this.observationRegistry = observationRegistry;
     this.isoMessageLoggerHelper = isoMessageLoggerHelper;
-    this.isoFieldHelper = isoFieldHelper;
+    this.isoResponseSender = isoResponseSender;
     this.tracerHelper = tracerHelper;
     this.tracer = tracer;
     this.clientProperties = clientProperties;
@@ -115,8 +116,13 @@ public class TransactionResponseParticipant
 
     try (SpanInScope spanInScope = tracer.withSpan(span)) {
       IsoCategory isoCategory = completeCorrelation(isoMessage);
-      isoMessageLoggerHelper.logIsoMessage(isoMessage);
+      isoMessageLoggerHelper.logIsoMessage(isoMessage, IsoMessageLoggerHelper.INCOMING_ISO);
       isoTransactionExecutor.execute(() -> completeResponse(isoMessage, isoCategory, observation, span, mdc));
+
+      // logged here, still inside the span scope -- logging after the try block runs after
+      // restoreCallerMdc() below has already wiped trace_id/span_id from MDC back to the
+      // caller's pre-message state, so it would always log with a null trace/span context.
+      log.info(AppLogMessage.message("#Transaction - response message with RRN {} received", IsoFieldHelper.getField(isoMessage, 37)));
     } catch (RejectedExecutionException rejected) {
       handleRejectedTransaction(isoMessage, rejected, observation, span);
       return false;
@@ -124,7 +130,6 @@ public class TransactionResponseParticipant
       tracerHelper.restoreCallerMdc(isoContext);
     }
 
-    log.info(AppLogMessage.message("#Transaction - response message with RRN {} received", IsoFieldHelper.getField(isoMessage, 37)));
     return false;
   }
 
@@ -162,7 +167,7 @@ public class TransactionResponseParticipant
       String de39 = IsoFieldHelper.getField(isoMessage, 39);
       String isoFeatureConstant = IsoFieldHelper.getIsoFeature(isoMessage);
       ObservationHelper.createTransactionContext(observation, de37, isoFeatureConstant);
-      isoFieldHelper.publishIsoEvent(observation, isoMessage, IsoFieldHelper.ISO_RESPONSE_EVENT);
+      isoResponseSender.publishIsoEvent(observation, isoMessage, IsoResponseSender.ISO_RESPONSE_EVENT, IsoMessageLoggerHelper.INCOMING_ISO);
       ObservationHelper.observeResponse(observation, de39, null);
       log.info(AppLogMessage.message("#Transaction - response registry {} completed [{}]",
           IsoFieldHelper.getCorrelationId(isoMessage), category));
@@ -183,7 +188,7 @@ public class TransactionResponseParticipant
       Observation observation, Span span) {
     log.error(AppLogMessage.message("#Transaction - executor saturated, dropping response completion for RRN {}",
         IsoFieldHelper.getField(isoMessage, 37)).error(rejected));
-    isoFieldHelper.publishIsoEvent(observation, isoMessage, IsoFieldHelper.ISO_RESPONSE_EVENT);
+    isoResponseSender.publishIsoEvent(observation, isoMessage, IsoResponseSender.ISO_RESPONSE_EVENT, IsoMessageLoggerHelper.INCOMING_ISO);
     ObservationHelper.observeResponse(observation, IsoResponseCode.SYSTEM_MALFUNCTION.getCode(), rejected);
     observation.stop();
     span.end();

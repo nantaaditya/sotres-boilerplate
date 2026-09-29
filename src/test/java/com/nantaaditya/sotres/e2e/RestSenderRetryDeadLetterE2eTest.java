@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.nantaaditya.sotres.e2e.support.E2eTestConfig;
+import com.nantaaditya.sotres.BaseIntegrationTest;
 import com.nantaaditya.sotres.e2e.support.FakeIsoHost;
 import com.nantaaditya.sotres.e2e.support.IsoMessages;
 import com.nantaaditya.sotres.entity.DeadLetterProcess;
@@ -24,15 +24,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Phase 7E — end-to-end: proves that when the downstream call exhausts its retry budget, a real
@@ -42,17 +36,15 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * {@code IsoMessageLoggerHelper}/{@code ApiLogbookFormatter}'s log-line masking via
  * {@link com.nantaaditya.sotres.helper.MaskingHelper} — because dead-letter reprocessing needs
  * the exact original request to replay it.
+ *
+ * <p>Declares its own {@code ISO_HOST}/{@code DOWNSTREAM} (shadowing {@link BaseIntegrationTest}'s
+ * shared instances) rather than reusing them: this class needs a distinct
+ * {@code client-read-time-out}/retry tuning, which forces its own Spring context and therefore
+ * its own {@code EnhancedIsoClient} bean -- sharing the JVM-static shared FakeIsoHost/WireMock
+ * with another, concurrently-cached Spring context would mean two app instances connecting to the
+ * one fake switch, corrupting its single-client-channel/message-queue model.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(E2eTestConfig.class)
-@Testcontainers
-class RestSenderRetryDeadLetterE2eTest {
-
-  @Container
-  @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16-alpine")
-          .withInitScript("e2e/init.sql");
+class RestSenderRetryDeadLetterE2eTest extends BaseIntegrationTest {
 
   static final FakeIsoHost ISO_HOST = new FakeIsoHost();
   static final WireMockServer DOWNSTREAM = new WireMockServer(0);

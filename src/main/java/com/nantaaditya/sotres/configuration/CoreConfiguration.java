@@ -3,8 +3,8 @@ package com.nantaaditya.sotres.configuration;
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
 import com.nantaaditya.sotres.helper.CorrelationRegistry;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.MessageFactoryHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.dto.IsoClientConfigurationRequest;
@@ -38,7 +38,7 @@ public class CoreConfiguration {
   private final SystemPropertiesService systemPropertiesService;
   private final CorrelationRegistry correlationRegistry;
   private final TracerHelper tracerHelper;
-  private final IsoFieldHelper isoFieldHelper;
+  private final IsoResponseSender isoResponseSender;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
   private final ParticipantConfigurationProperties participantConfigurationProperties;
   private final ClientProperties clientProperties;
@@ -93,7 +93,7 @@ public class CoreConfiguration {
             .build(),
         messageFactoryHelper.getDefaultMessageFactory(),
         correlationRegistry,
-        isoFieldHelper,
+        isoResponseSender,
         isoMessageLoggerHelper,
         systemPropertiesService,
         tracerHelper,

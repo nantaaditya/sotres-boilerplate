@@ -51,7 +51,7 @@ public final class IsoMessages {
     m.setValue(4, String.valueOf(amountMinor), IsoType.NUMERIC, 12);
     m.setValue(11, stan, IsoType.NUMERIC, 6);
     // DE28: fee type (1) + 8-digit fee. Optional in ISO8583 but the app's
-    // createTransaction() NPEs without it (IsoFieldHelper.java:122).
+    // RequestContextHelper.createTransaction() NPEs without it.
     m.setValue(28, "D00000000", IsoType.LLVAR, 9);
     m.setValue(12, "103045", IsoType.NUMERIC, 6);
     m.setValue(13, "0615", IsoType.NUMERIC, 4);
@@ -81,7 +81,7 @@ public final class IsoMessages {
   public static IsoMessage callbackReply(IsoMessage request, String productIndicator, String responseCode) {
     IsoMessage m = FACTORY.newMessage(0x210);
     m.setValue(3, field(request, 3), IsoType.NUMERIC, 6);
-    // DE4/DE28/DE49: RequestContextHelper.create -> IsoFieldHelper.createTransaction NPEs
+    // DE4/DE28/DE49: RequestContextHelper.create -> RequestContextHelper.createTransaction NPEs
     // (Double.parseDouble(null)) when DE4 is absent, same as IsoMessages.authRequest.
     m.setValue(4, field(request, 4), IsoType.NUMERIC, 12);
     m.setValue(7, field(request, 7), IsoType.NUMERIC, 10);

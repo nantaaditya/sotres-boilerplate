@@ -2,7 +2,6 @@ package com.nantaaditya.sotres.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.nantaaditya.sotres.e2e.support.FakeIsoHost;
 import com.nantaaditya.sotres.helper.ApiLogbookWriter;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -11,23 +10,13 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
-import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * End-to-end check that an inbound HTTP request to this app's own endpoint is captured by Logbook
@@ -35,43 +24,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * {@code apps.log.enable-inbound-api-log} is on (its default). The disabled case is covered by
  * {@code AppLogbookConfigurationTest}.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureTestRestTemplate
-@Testcontainers
 @DisplayName("Inbound API logging (Logbook)")
-class InboundApiLoggingE2eTest {
-
-  @Container
-  @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16-alpine")
-          .withInitScript("e2e/init.sql");
-
-  static final FakeIsoHost ISO_HOST = new FakeIsoHost();
+class InboundApiLoggingE2eTest extends SharedInfraE2eTestBase {
 
   @Autowired
   TestRestTemplate rest;
 
   private LoggerContext loggerContext;
   private CapturingAppender appender;
-
-  @BeforeAll
-  static void startIso() throws InterruptedException {
-    ISO_HOST.start();
-  }
-
-  @AfterAll
-  static void stopIso() {
-    ISO_HOST.stop();
-  }
-
-  @DynamicPropertySource
-  static void isoProperties(DynamicPropertyRegistry registry) {
-    registry.add("iso8583.configuration.connection.host", () -> "127.0.0.1");
-    registry.add("iso8583.configuration.connection.port", ISO_HOST::getPort);
-    registry.add("iso8583.configuration.network.reconnect-interval", () -> 2000);
-    registry.add("iso8583.configuration.network.scheduled-echo-enabled", () -> false);
-  }
 
   @BeforeEach
   void attachAppender() {

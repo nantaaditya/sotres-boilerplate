@@ -68,7 +68,7 @@ INSERT INTO system_properties (id, group_id, property_id, property_value) VALUES
     -- 59:05 is deliberately non-identity (host code 59 -> ISO DE39 05) to exercise a real
     -- mapping translation, as opposed to 00:00/05:05/51:51 which happen to be identity.
     (7, 'response',      'incoming_outgoing_mapping',  '00:00,05:05,51:51,59:05'),
-    (8, 'registry',      'callback_selector',          ''),
+    (8, 'registry',      'callback_selector',          '21.97-E001'),
     (9, 'registry',      'response_selector',          '');
 
 -- JSLT: request shaping for selector 20.97-E001 (RequestContext -> downstream body)

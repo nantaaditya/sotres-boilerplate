@@ -2,16 +2,20 @@ package com.nantaaditya.sotres.helper;
 
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import java.lang.reflect.InvocationTargetException;
+import java.security.SecureRandom;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 import lombok.extern.log4j.Log4j2;
 
 @Log4j2
 public class StringHelper {
+
+  private static final Random RANDOM = new SecureRandom();
 
   private StringHelper() {}
 
@@ -131,5 +135,13 @@ public class StringHelper {
     }
 
     return String.valueOf(character).repeat(maxLength - value.length()) + value;
+  }
+
+  public static String generateNumeric(int length) {
+    StringBuilder sb = new StringBuilder(length);
+    for (int i = 0; i < length; i++) {
+      sb.append(RANDOM.nextInt(10));
+    }
+    return sb.toString();
   }
 }

@@ -14,8 +14,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.constant.ManagerConstant;
 import com.nantaaditya.sotres.model.constant.ObservationConstant;
@@ -70,7 +70,7 @@ class TransactionProcessorParticipantTest {
   @Mock
   private IsoMessageLoggerHelper isoMessageLoggerHelper;
   @Mock
-  private IsoFieldHelper isoFieldHelper;
+  private IsoResponseSender isoResponseSender;
   @Mock
   private ObservationRegistry observationRegistry;
   @Mock
@@ -188,7 +188,7 @@ class TransactionProcessorParticipantTest {
         systemPropertiesService,
         handlers,
         isoMessageLoggerHelper,
-        isoFieldHelper,
+        isoResponseSender,
         observationRegistry,
         tracerHelper,
         tracer,
@@ -208,7 +208,7 @@ class TransactionProcessorParticipantTest {
         systemPropertiesService,
         handlers,
         isoMessageLoggerHelper,
-        isoFieldHelper,
+        isoResponseSender,
         registry,
         tracerHelper,
         tracer,
@@ -295,7 +295,7 @@ class TransactionProcessorParticipantTest {
       // transactionHandlers is empty — selectTransactionHandler sends "92" asynchronously
       await()
           .atMost(Duration.ofSeconds(2))
-          .untilAsserted(() -> verify(isoFieldHelper)
+          .untilAsserted(() -> verify(isoResponseSender)
               .sendResponseWithObservation(any(ParticipantContext.class), eq("92"), isNull()));
     }
 
@@ -326,7 +326,7 @@ class TransactionProcessorParticipantTest {
 
       p.onMessage(ctx, msg);
 
-      verify(isoFieldHelper)
+      verify(isoResponseSender)
           .sendResponseWithObservation(any(ParticipantContext.class), eq("96"), isNull());
       verify(senderProtocolStrategy, never()).send(any(), any(), any());
     }
@@ -417,7 +417,7 @@ class TransactionProcessorParticipantTest {
 
       p.onMessage(ctx, msg);
 
-      verify(isoFieldHelper).sendResponseWithObservation(
+      verify(isoResponseSender).sendResponseWithObservation(
           any(ParticipantContext.class), eq("96"), any(RejectedExecutionException.class));
       verify(routableHandler, never()).execute(any());
       verify(senderProtocolStrategy, never()).send(any(), any(), any());
