@@ -1,0 +1,51 @@
+@startuml
+autonumber
+title Inbound ISO 8583 transaction -> downstream REST -> ISO 8583 reply
+
+participant "ISO Switch" as Switch
+participant "Netty\nEventLoop" as Netty
+participant "TransactionProcessor-\nParticipant" as TPP
+participant "AbstractTransaction-\nHandler" as Handler
+participant "SenderProtocolStrategy\n(RestProtocolStrategy)" as Strategy
+participant TransactionClient as Client
+participant JsltTransformationHelper as Jslt
+participant "Downstream REST API" as REST
+
+Switch -> Netty: 0200 authorization
+Netty -> TPP: onMessage() [applies()=true, not network MTI]
+TPP -> TPP: start Observation/Span,\nbuild RequestContext
+TPP -> TPP: isoTransactionExecutor.execute(...)
+note right of TPP: handoff onto a virtual thread —\nnever block the event loop
+activate TPP
+TPP -> Handler: execute() [validate() then process()]
+Handler -> Strategy: send(ctx, isoMessage, requestContext)
+Strategy -> Client: send(requestContext)
+Client -> Jslt: transform(CLIENT_SPEC_REQUEST)
+Jslt --> Client: mapped JSON body
+Client -> REST: POST /api/...
+REST --> Client: 200 OK
+Client -> Jslt: transform(CLIENT_SPEC_RESPONSE)
+Jslt --> Client: ResponseContext
+Client --> Strategy: ResponseContext
+Strategy --> Handler: (via ParticipantContext)
+Handler -> Strategy: handleResponse(ctx)
+Strategy -> Switch: writeAndFlush 0210 (approved)
+deactivate TPP
+
+== Negative: downstream read timeout ==
+Client -> REST: POST /api/...
+REST --x Client: no response (ReadTimeoutException)
+Client --> Strategy: throws (wrapped in TransactionException)
+Strategy -> Strategy: handleError(ctx, throwable)
+alt throwable is ReadTimeoutException
+  note right of Strategy: no ISO reply sent —\nthe acquirer times out and\ndrives its own reversal
+else any other exception
+  Strategy -> Switch: writeAndFlush 0210 DE39=SYSTEM_MALFUNCTION
+end
+
+== Negative: executor/bulkhead saturated ==
+TPP -> TPP: isoTransactionExecutor.execute(...)
+TPP -x TPP: RejectedExecutionException
+TPP -> Switch: writeAndFlush 0210 DE39=SYSTEM_MALFUNCTION
+note right of TPP: shed on the event loop itself —\nno handoff possible
+@enduml

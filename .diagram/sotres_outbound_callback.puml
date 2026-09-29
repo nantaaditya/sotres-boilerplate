@@ -1,0 +1,35 @@
+@startuml
+autonumber
+title CALLBACK mode: EnhancedIsoClient.sendWithCallback() and its correlated reply
+
+participant "Our App" as App
+participant EnhancedIsoClient as Client
+participant CorrelationRegistry as Registry
+participant "ISO Server\n(switch/host)" as Server
+participant IsoCallbackResponseHandler as CallbackHandler
+participant "TransactionProcessor-\nParticipant" as TPP
+participant IsoFieldHelper as Helper
+
+App -> Client: sendWithCallback(request)
+Client -> Registry: register(correlationId)
+Client -> Server: writeAndFlush (outgoing ISO 8583 request)
+Client --> App: returns immediately (fire-and-forget)
+
+... later, on the same connection ...
+
+Server -> CallbackHandler: incoming ISO 8583 (the correlated reply)
+CallbackHandler -> Registry: complete(msg) [selector in registryCallbackSelectors]
+Registry --> CallbackHandler: IsoCategory.SUCCESS
+CallbackHandler -> CallbackHandler: tag channel attribute = SUCCESS
+CallbackHandler -> TPP: ctx.fireChannelRead(msg)
+
+TPP -> TPP: RequestContextHelper.create(isoMessage, ..., isoCategory)\n-> RequestContext.callbackResponse = true\n(isoCategory is SUCCESS/LATE_RESPONSE/ORPHAN, not EXTERNAL_REQUEST)
+TPP -> TPP: findTransactionHandler(selector) -> empty\n(this selector belongs to a reply,\nnot a registered inbound request)
+TPP -> Helper: sendResponseWithObservation(ctx, UNABLE_TO_ROUTE_TRANSACTION, null)
+Helper -> Helper: requestContext.isCallbackResponse() == true
+note right of Helper #CCFFCC
+  skip writeAndFlush entirely — record the
+  observation outcome only. There is nobody on
+  the switch side waiting for a reply-to-a-reply.
+end note
+@enduml

@@ -34,7 +34,6 @@ build/
 core-api.log
 *.log
 
-.diagram/*
 graphify-out/*
 .claude/*
 architecture.json

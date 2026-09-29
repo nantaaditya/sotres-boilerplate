@@ -1,0 +1,45 @@
+@startuml
+autonumber
+title RESPONSE mode: EnhancedIsoClient.send() blocks for its correlated reply
+
+participant "Our App" as App
+participant EnhancedIsoClient as Client
+participant CorrelationRegistry as Registry
+participant "ISO Server\n(switch/host)" as Server
+participant IsoCallbackResponseHandler as CallbackHandler
+participant "TransactionProcessor-\nParticipant" as TPP
+participant "TransactionResponse-\nParticipant" as TRP
+
+App -> Client: send(request, timeout)
+Client -> Registry: register(correlationId) -> pending future
+Client -> Server: writeAndFlush (outgoing ISO 8583 request)
+activate Client
+Client -> Client: pending.get(timeout)\n[blocks the calling virtual thread]
+
+... later, on the same connection ...
+
+Server -> CallbackHandler: incoming ISO 8583 (the correlated reply)
+CallbackHandler -> TPP: ctx.fireChannelRead(msg)
+TPP -> TPP: isResponseRegistryEnabled(requestContext)\n[RegistryType.RESPONSE + selector match] -> true
+TPP -> TPP: stop own Observation/Span, return true (yield)
+TPP -> TRP: (same message continues down the listener chain)
+TRP -> TRP: completeCorrelation(isoMessage)
+TRP -> Registry: complete(isoMessage)
+Registry --> Client: resolves the pending CompletableFuture
+Client --> App: returns the correlated IsoMessage
+deactivate Client
+TRP -> TRP: completeResponse() on isoTransactionResponseExecutor\n(observation/logging only — no ISO reply)
+
+== Negative: no response within timeout ==
+Client -> Client: pending.get(timeout) throws TimeoutException
+Client -> Registry: cancel(correlationId)
+Client --> App: synthetic IsoMessage, DE39=SUSPEND_TRANSACTION\n(never sent to the ISO Server)
+
+== Negative: reply arrives after the timeout already fired ==
+Server -> CallbackHandler: incoming ISO 8583 (late reply)
+CallbackHandler -> TPP: ctx.fireChannelRead(msg)
+TPP -> TRP: (yielded, same as happy path)
+TRP -> Registry: complete(isoMessage)
+Registry --> TRP: IsoCategory.ORPHAN\n(both correlation windows already cleared by cancel())
+note right of TRP: logged as an orphan reply —\nno caller left waiting to receive it
+@enduml
