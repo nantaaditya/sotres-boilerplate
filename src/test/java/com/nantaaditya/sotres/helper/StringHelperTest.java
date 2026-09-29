@@ -301,4 +301,23 @@ class StringHelperTest {
       assertThat(StringHelper.logPrepend("abcde", 5, '0')).isEqualTo("abcde");
     }
   }
+
+  @Nested
+  @DisplayName("generateNumeric(int)")
+  class GenerateNumeric {
+
+    @Test
+    @DisplayName("generates numeric string of the requested length containing only digits")
+    void generateNumeric_length6_returns6Digits() {
+      String result = StringHelper.generateNumeric(6);
+      assertThat(result).hasSize(6).matches("[0-9]{6}");
+    }
+
+    @Test
+    @DisplayName("generates numeric string of length 12")
+    void generateNumeric_length12_returns12Digits() {
+      String result = StringHelper.generateNumeric(12);
+      assertThat(result).hasSize(12).matches("[0-9]{12}");
+    }
+  }
 }

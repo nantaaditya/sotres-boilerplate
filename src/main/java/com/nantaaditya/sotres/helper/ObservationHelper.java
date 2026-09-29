@@ -21,7 +21,7 @@ public class ObservationHelper {
 
   private ObservationHelper() {}
 
-  public static void observeIsoRequest(Observation observation, String rrn, String feature) {
+  public static void createTransactionContext(Observation observation, String rrn, String feature) {
     if (observation == null)
       return;
 
@@ -41,34 +41,42 @@ public class ObservationHelper {
   }
 
   public static void observeResponse(Observation observation, String responseCode, Throwable error) {
-    if (observation == null)
+    if (observation == null) {
+      log.warn(AppLogMessage.message("#Observation - no current observation"));
       return;
+    }
 
     Optional.ofNullable(responseCode)
       .ifPresent(code -> observation.lowCardinalityKeyValue(RESPONSE_CODE, code));
 
     Optional.ofNullable(error)
       .ifPresent(t -> {
-        String exceptionClass = t instanceof TransactionException e ?
-            e.getOriginalError().getClass().getName() : t.getCause().getClass().getName();
+        String exceptionClass = getExceptionClass(t);
         observation.lowCardinalityKeyValue(ERROR, exceptionClass);
-        publishEvent(observation, ERROR, exceptionClass);
+        publishEvent(observation, ERROR, t.getMessage());
         observation.error(t);
       });
+  }
+
+  private static String getExceptionClass(Throwable t) {
+    if (t instanceof TransactionException e) {
+      return e.getOriginalError().getClass().getName();
+    }
+
+    return Optional.ofNullable(t.getCause())
+      .map(cause -> cause.getClass().getName())
+      .orElseGet(() -> t.getClass().getName());
   }
 
   public static Context createApiContext(ContextDTO contextDTO) {
     Context observationContext = new Context();
 
     ApiFeatureConstant feature = ApiFeatureConstant.get(contextDTO.getMethod(), contextDTO.getPath());
-    if (feature != null) {
-      observationContext.addLowCardinalityKeyValue(KeyValue.of("feature", feature.name()));
-    } else {
-      observationContext.addLowCardinalityKeyValue(KeyValue.of("feature", contextDTO.getUnknownFeature()));
-    }
+    observationContext.addLowCardinalityKeyValue(KeyValue.of(FEATURE,
+        feature != null ? feature.name() : contextDTO.getUnknownFeature()));
 
     if (contextDTO.getRequestId() != null) {
-      observationContext.addHighCardinalityKeyValue(KeyValue.of("requestId", contextDTO.getRequestId()));
+      observationContext.addHighCardinalityKeyValue(KeyValue.of(REQUEST_ID, contextDTO.getRequestId()));
     }
 
     return observationContext;

@@ -3,7 +3,7 @@ package com.nantaaditya.sotres.helper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.configuration.GsonConfiguration;
 import com.nantaaditya.sotres.properties.LogProperties;

@@ -1,14 +1,14 @@
 package com.nantaaditya.sotres.service.impl;
 
-import com.nantaaditya.sotres.helper.ReactorHelper;
-import com.nantaaditya.sotres.helper.SchedulerHelper;
+import com.nantaaditya.sotres.entity.EventLog;
+import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.repository.EventLogRepository;
 import com.nantaaditya.sotres.service.internal.EventLogService;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
 
 @Log4j2
 @Service
@@ -16,17 +16,21 @@ import reactor.core.publisher.Mono;
 public class EventLogServiceImpl implements EventLogService {
 
   private final EventLogRepository eventLogRepository;
-  private final SchedulerHelper schedulerHelper;
-  private final ReactorHelper reactorHelper;
 
+  @Async("defaultAsyncTaskExecutor")
   @Override
-  public Mono<Boolean> remove(int days) {
-    return Mono.just(Boolean.TRUE)
-        .doOnNext(result -> reactorHelper.runBackgroundTask(
-            "remove_obsolete_event_log",
-            () -> eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days)),
-            schedulerHelper.from("default-async")
-            )
-        );
+  public void save(EventLog eventLog) {
+    try {
+      eventLogRepository.save(eventLog);
+    } catch (Exception e) {
+      log.error(AppLogMessage.message("#EventLog - failed save event log").error(e));
+    }
+  }
+
+  @Async("defaultAsyncTaskExecutor")
+  @Override
+  public void remove(int days) {
+    int deleted = eventLogRepository.deleteByCreatedDateBefore(LocalDateTime.now().minusDays(days));
+    log.info(AppLogMessage.message("#EventLog - removed {} obsolete event log(s) older than {} days", deleted, days));
   }
 }

@@ -3,12 +3,9 @@ package com.nantaaditya.sotres.helper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
-import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -102,65 +99,6 @@ class IsoFieldHelperTest {
     @DisplayName("correctly identifies response MTI by function digit")
     void isMTIResponse_variousMTIs_returnsCorrectResult(int mti, boolean expected) {
       assertThat(IsoFieldHelper.isMTIResponse(mti)).isEqualTo(expected);
-    }
-  }
-
-  @Nested
-  @DisplayName("convertAmount(double, int)")
-  class ConvertAmount {
-
-    @Test
-    @DisplayName("moves decimal left by fractionDigit for a standard amount")
-    void convertAmount_twoFractionDigits_movesDecimalLeft2() {
-      BigDecimal result = IsoFieldHelper.convertAmount(100000.0, 2);
-      assertThat(result).isEqualByComparingTo(new BigDecimal("1000.00"));
-    }
-
-    @Test
-    @DisplayName("moves decimal left by 3 for currencies with 3 fraction digits")
-    void convertAmount_threeFractionDigits_movesDecimalLeft3() {
-      BigDecimal result = IsoFieldHelper.convertAmount(1000000.0, 3);
-      assertThat(result).isEqualByComparingTo(new BigDecimal("1000.00"));
-    }
-
-    @Test
-    @DisplayName("returns zero when amount is 0")
-    void convertAmount_zeroAmount_returnsZero() {
-      BigDecimal result = IsoFieldHelper.convertAmount(0.0, 2);
-      assertThat(result).isEqualByComparingTo(BigDecimal.ZERO);
-    }
-
-    @Test
-    @DisplayName("returns zero when fractionDigit is less than 1")
-    void convertAmount_zeroFractionDigit_returnsZero() {
-      BigDecimal result = IsoFieldHelper.convertAmount(50000.0, 0);
-      assertThat(result).isEqualByComparingTo(BigDecimal.ZERO);
-    }
-
-    @Test
-    @DisplayName("result always has scale of 2 after HALF_UP rounding")
-    void convertAmount_anyValidInput_scaleIsTwo() {
-      BigDecimal result = IsoFieldHelper.convertAmount(100001.0, 2);
-      assertThat(result.scale()).isEqualTo(2);
-    }
-  }
-
-  @Nested
-  @DisplayName("generateNumeric(int)")
-  class GenerateNumeric {
-
-    @Test
-    @DisplayName("generates numeric string of the requested length containing only digits")
-    void generateNumeric_length6_returns6Digits() {
-      String result = IsoFieldHelper.generateNumeric(6);
-      assertThat(result).hasSize(6).matches("[0-9]{6}");
-    }
-
-    @Test
-    @DisplayName("generates numeric string of length 12")
-    void generateNumeric_length12_returns12Digits() {
-      String result = IsoFieldHelper.generateNumeric(12);
-      assertThat(result).hasSize(12).matches("[0-9]{12}");
     }
   }
 
@@ -342,54 +280,4 @@ class IsoFieldHelperTest {
     }
   }
 
-  @Nested
-  @DisplayName("createMerchant(IsoMessage)")
-  class CreateMerchant {
-
-    @Test
-    @DisplayName("extracts MCC from DE18 and merchant name/city/country from DE43")
-    void createMerchant_validFields_returnsMerchant() {
-      when(isoMessage.getField(18)).thenReturn(mockIsoValue("5411"));
-      // DE43 format: name(25 chars) + city(13 chars) + country code(2 chars) = 40 chars total
-      when(isoMessage.getField(43)).thenReturn(
-          mockIsoValue("GROCERY STORE NAME       JAKARTA      ID"));
-
-      Merchant result = IsoFieldHelper.createMerchant(isoMessage);
-
-      assertThat(result).isNotNull();
-      assertThat(result.getMerchantCategoryCode()).isEqualTo("5411");
-      assertThat(result.getMerchantName()).isEqualTo("GROCERY STORE NAME       ");
-      assertThat(result.getMerchantCountryCode()).isEqualTo("ID");
-    }
-  }
-
-  @Nested
-  @DisplayName("createReversal(IsoMessage)")
-  class CreateReversal {
-
-    @Test
-    @DisplayName("returns null when DE90 is not present")
-    void createReversal_noDE90_returnsNull() {
-      when(isoMessage.hasField(90)).thenReturn(false);
-      assertThat(IsoFieldHelper.createReversal(isoMessage)).isNull();
-    }
-
-    @Test
-    @DisplayName("extracts reversal fields from DE90 when present")
-    void createReversal_withDE90_returnsReversal() {
-      when(isoMessage.hasField(90)).thenReturn(true);
-      // DE90: originalMti(4) + originalStan(6) + originalDateTime(10) + acquirer(11) + forwarding(11) = 42 chars
-      when(isoMessage.getField(90))
-          .thenReturn(mockIsoValue("020012345606151030450000000001100000000012"));
-
-      Reversal result = IsoFieldHelper.createReversal(isoMessage);
-
-      assertThat(result).isNotNull();
-      assertThat(result.getOriginalMti()).isEqualTo("0200");
-      assertThat(result.getOriginalStan()).isEqualTo("123456");
-      assertThat(result.getOriginalTransmissionDateTime()).isEqualTo("0615103045");
-      assertThat(result.getOriginalAcquiringInstitutionId()).isEqualTo("00000000011");
-      assertThat(result.getOriginalForwardingInstitutionId()).isEqualTo("00000000012");
-    }
-  }
 }

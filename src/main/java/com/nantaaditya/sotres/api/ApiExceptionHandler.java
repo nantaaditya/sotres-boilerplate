@@ -1,13 +1,16 @@
 package com.nantaaditya.sotres.api;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nantaaditya.sotres.helper.ObservationHelper;
+import com.nantaaditya.sotres.helper.ObservationWrapper;
 import com.nantaaditya.sotres.helper.ResponseHelper;
 import com.nantaaditya.sotres.model.constant.ApiResponseCode;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.error.GeneralFlowException;
+import com.nantaaditya.sotres.model.error.InvalidTemplateException;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.response.Response;
+import io.micrometer.observation.Observation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
@@ -22,17 +25,19 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
-import org.springframework.r2dbc.BadSqlGrammarException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.validation.FieldError;
 import org.springframework.validation.method.ParameterValidationResult;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
-import org.springframework.web.reactive.resource.NoResourceFoundException;
-import reactor.core.publisher.Sinks.EmissionException;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Log4j2
 @RestControllerAdvice
@@ -41,11 +46,14 @@ public class ApiExceptionHandler {
 
   private final ObjectMapper objectMapper;
   private final ResponseHelper responseHelper;
+  private final ObservationWrapper observationWrapper;
+  private final HttpServletRequest request;
 
   private static final String ERROR_LOG = "#ApiError - got error";
   private static final String EXCEPTION_KEY = "exception";
-  private static final String EXCEPTION_DETAIL = "exception_detail";
   private static final int START_INDEX = 0;
+
+  private record ErrorResult(Map<String, List<String>> errors, Response<Object> response) {}
 
   @ResponseBody
   @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -54,18 +62,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of("endpoint", List.of("not available"));
       Response<Object> response = responseHelper.failed(ApiResponseCode.BAD_REQUEST, errors);
-      return Tuples.of(errors, response);
-    });
-  }
-
-  @ResponseBody
-  @ResponseStatus(HttpStatus.BAD_REQUEST)
-  @ExceptionHandler(EmissionException.class)
-  public Response<Object> emissionException(EmissionException ex) {
-    return toBaseErrorResponse(ex, error -> {
-      Map<String, List<String>> errors = Map.of("publisher", List.of(ex.getReason().name()));
-      Response<Object> response = responseHelper.failed(ApiResponseCode.BAD_REQUEST, errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -76,7 +73,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of(EXCEPTION_KEY, List.of(ex.getMessage()));
       Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, Collections.emptyMap());
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -87,7 +84,7 @@ public class ApiExceptionHandler {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = ex.getViolations();
       Response<Object> response = responseHelper.failed(ex.getResponse(), errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -107,7 +104,36 @@ public class ApiExceptionHandler {
         errors.put(errorKey, List.of("NotValid"));
       }
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
-      return Tuples.of(errors, response);
+      return new ErrorResult(errors, response);
+    });
+  }
+
+  @ResponseBody
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public Response<Object> methodArgumentNotValidException(MethodArgumentNotValidException ex) {
+    return toBaseErrorResponse(ex, error -> {
+      Map<String, List<String>> errors = new HashMap<>();
+      for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+        putEntry(errors, fieldError.getField(),
+            fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "NotValid");
+      }
+      if (errors.isEmpty()) {
+        errors.put("body", List.of("NotValid"));
+      }
+      Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
+      return new ErrorResult(errors, response);
+    });
+  }
+
+  @ResponseBody
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public Response<Object> httpMessageNotReadableException(HttpMessageNotReadableException ex) {
+    return toBaseErrorResponse(ex, error -> {
+      Map<String, List<String>> errors = Map.of("body", List.of("not readable"));
+      Response<Object> response = responseHelper.failed(ApiResponseCode.BAD_REQUEST, errors);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -126,7 +152,18 @@ public class ApiExceptionHandler {
         });
 
       Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, map);
-      return Tuples.of(map, response);
+      return new ErrorResult(map, response);
+    });
+  }
+
+  @ResponseBody
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  @ExceptionHandler(InvalidTemplateException.class)
+  public Response<Object> invalidTemplateException(InvalidTemplateException ex) {
+    return toBaseErrorResponse(ex, error -> {
+      Map<String, List<String>> errors = Map.of("template", List.of("NotValid"));
+      Response<Object> response = responseHelper.failed(ApiResponseCode.INVALID_PARAMS, errors);
+      return new ErrorResult(errors, response);
     });
   }
 
@@ -136,23 +173,25 @@ public class ApiExceptionHandler {
   public Response<Object> throwable(Throwable ex) {
     return toBaseErrorResponse(ex, error -> {
       Map<String, List<String>> errors = Map.of(EXCEPTION_KEY, List.of(ex.getMessage()));
-      Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, errors);
-      return Tuples.of(errors, response);
+      Response<Object> response = responseHelper.failed(ApiResponseCode.INTERNAL_ERROR, Collections.emptyMap());
+      return new ErrorResult(errors, response);
     });
   }
 
-  private <T extends Throwable> Response<Object> toBaseErrorResponse(T ex, Function<T,
-      Tuple2<Map<String, List<String>>, Response<Object>>> function) {
+  private <T extends Throwable> Response<Object> toBaseErrorResponse(T ex, Function<T, ErrorResult> function) {
     log.error(AppLogMessage.message(ERROR_LOG).error(ex));
 
-    Tuple2<Map<String, List<String>>, Response<Object>> tuples = function.apply(ex);
+    ErrorResult result = function.apply(ex);
 
-    if (!tuples.getT1().isEmpty()) {
-      String exceptionDetail = getErrors(tuples.getT1());
+    if (!result.errors().isEmpty()) {
+      String exceptionDetail = getErrors(result.errors());
       responseHelper.getContextHelper().put(getRequestId(), exceptionDetail);
     }
 
-    return tuples.getT2();
+    Observation observation = observationWrapper.getObservation(request);
+    ObservationHelper.observeResponse(observation, result.response.getResponse().getCode(), ex);
+
+    return result.response();
   }
 
   private String getRequestId() {
@@ -162,7 +201,7 @@ public class ApiExceptionHandler {
   private String getErrors(Map<String, List<String>> violations) {
     try {
       return objectMapper.writeValueAsString(violations);
-    } catch (JsonProcessingException e) {
+    } catch (JacksonException e) {
       log.error(AppLogMessage.message("#ApiError - failed convert errors").error(e));
       return null;
     }

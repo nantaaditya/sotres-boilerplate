@@ -1,8 +1,5 @@
 package com.nantaaditya.sotres.helper;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.logger.JsonLogHttpRequest;
 import com.nantaaditya.sotres.model.logger.JsonLogHttpResponse;
@@ -16,6 +13,9 @@ import org.springframework.util.MultiValueMap;
 import org.zalando.logbook.Correlation;
 import org.zalando.logbook.HttpLogWriter;
 import org.zalando.logbook.Precorrelation;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Log4j2
 public class ApiLogbookWriter implements HttpLogWriter {
@@ -46,11 +46,11 @@ public class ApiLogbookWriter implements HttpLogWriter {
       additionalData.put("correlation", precorrelation.getId());
       additionalData.put("protocol", content.get("protocol"));
 
-      log.info(AppLogMessage.message("#API: incoming request")
+      log.info(AppLogMessage.message("#API: request")
           .httpRequest(jsonLogHttpRequest)
           .additionalData(additionalData));
     } catch (Exception e) {
-      log.error(AppLogMessage.message("#API: incoming request").error(e));
+      log.error(AppLogMessage.message("#API: request").error(e));
     }
   }
 
@@ -76,11 +76,11 @@ public class ApiLogbookWriter implements HttpLogWriter {
       additionalData.put("correlation", correlation.getId());
       additionalData.put("protocol", content.get("protocol"));
 
-      log.info(AppLogMessage.message("#API: outgoing response")
+      log.info(AppLogMessage.message("#API: response")
           .httpResponse(jsonLogHttpResponse)
           .additionalData(additionalData));
     } catch (Exception e) {
-      log.error(AppLogMessage.message("#API: outgoing response").error(e));
+      log.error(AppLogMessage.message("#API: response").error(e));
     }
   }
 

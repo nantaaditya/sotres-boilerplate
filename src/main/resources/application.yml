@@ -1,32 +1,37 @@
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: ${CONTEXT_PATH:/sotres}
 
 spring:
   application.name: ${APPLICATION_NAME:sotres-api}
-  webflux:
-    base-path: ${CONTEXT_PATH:/sotres}
   threads:
     virtual.enabled: ${VIRTUAL_THREAD_ENABLED:true}
-  r2dbc:
-    url: ${DB_URL:r2dbc:postgresql://localhost:5432/boilerplate}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/boilerplate}
     username: ${DB_USER:postgres}
     password: ${DB_PASS:changeme}
-    pool:
-      enabled: ${R2DBC_POOL_ENABLED:true}
-      initial-size: ${R2DBC_INITIAL_SIZE:5}
-      max-size: ${R2DBC_MAX_SIZE:10}
-      max-idle-time: ${R2DBC_IDLE_TIME:PT1M}
-      max-life-time: ${R2DBC_MAX_LIFE_TIME:PT5M}
-      max-acquire-time: ${R2DBC_MAX_ACQUIRE_TIME:PT5S}
-      validation-query: SELECT 1
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:10}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT:5000}
+      idle-timeout: ${DB_POOL_IDLE_TIMEOUT:30000}
+      max-lifetime: ${DB_POOL_MAX_LIFETIME:300000}
+      connection-test-query: SELECT 1
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    generate-ddl: false
+    show-sql: ${JPA_SHOW_SQL:false}
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate.format_sql: ${HIBERNATE_FORMAT_SQL:true}
 
 logging:
   level:
     root: ${ROOT_LOG_LEVEL:INFO}
     org.zalando.logbook: ${ZALANDO_LOG_LEVEL:TRACE}
-    org.springframework.r2dbc.core: ${R2DBC_LOG_LEVEL:DEBUG}
-    io.r2dbc.postgresql.QUERY: ${POSTGRESQL_LOG_LEVEL:DEBUG}
-    io.r2dbc.postgresql.PARAM: ${POSTGRESQL_LOG_LEVEL:DEBUG}
+    org.springframework.jdbc.core: ${JDBC_LOG_LEVEL:INFO}
   file:
     path: ${LOG_PATH:logs/}
   config: classpath:log4j2-spring-${apps.log.log-format}.xml
@@ -46,26 +51,13 @@ iso8583.configuration:
     reconnect-interval: ${RECONNECT_INTERVAL:60000}
     time-out: ${TIME_OUT_SECOND:15000}
     scheduled-echo-enabled: ${SCHEDULED_ECHO_ENABLED:true}
-    echo-interval: ${ECHO_INTERVAL_SECOND:30000}
+    echo-interval: ${ECHO_INTERVAL:30000}
 
 # Participant Pool Configurations
 participant.configuration.pool:
   transaction:
-    core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
-    queue-size: ${TRANSACTION_QUEUE_SIZE:50}
-    flight-pool: ${TRANSACTION_FLIGHT_POOL_SIZE:100}
-    message-pool: ${TRANSACTION_MESSAGE_POOL:200}
     flight-queue-time-out: ${TRANSACTION_FLIGHT_QUEUE_TIMEOUT:15000}
     message-queue-time-out: ${TRANSACTION_MESSAGE_QUEUE_TIME_OUT:60000}
-    prefix: ${TRANSACTION_PREFIX:TransactionManager}
-  api:
-    core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
-    queue-size: ${TRANSACTION_QUEUE_SIZE:50}
-    flight-pool: ${TRANSACTION_FLIGHT_POOL_SIZE:100}
-    message-pool: ${TRANSACTION_MESSAGE_POOL:200}
-    flight-queue-time-out: ${TRANSACTION_FLIGHT_QUEUE_TIMEOUT:15000}
-    message-queue-time-out: ${TRANSACTION_MESSAGE_QUEUE_TIME_OUT:60000}
-    prefix: ${TRANSACTION_PREFIX:ApiManager}
 
 client:
   registry-type: ${CLIENT_REGISTRY_TYPE:CALLBACK}
@@ -81,10 +73,6 @@ client:
       client-read-time-out: ${TRANSACTION_CLIENT_READ_TIMEOUT:10000}
       client-write-time-out: ${TRANSACTION_CLIENT_WRITE_TIMEOUT:10000}
       time-unit: ${TRANSACTION_CLIENT_TIMEUNIT:MILLISECONDS}
-      retry-configuration:
-        max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
-        min-back-off: ${TRANSACTION_RETRY_MIN_BACK_OFF:500}
-        retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:reactor.netty.http.client.PrematureCloseException:true}
 
 # Actuator Configurations
 management:
@@ -124,6 +112,16 @@ apps:
     sensitive-field: ${SENSITIVE_FIELD:cardNo}
     log-format: ${APPS_LOG_LEVEL:json}
     ignored-path: ${APPS_IGNORED_PATH:/actuator/**,/internal-api/**}
+  retry.configurations:
+    transaction:
+      type: ${TRANSACTION_RETRY_TYPE:EXPONENTIAL_RANDOM}
+      initial-interval: ${TRANSACTION_RETRY_INITIAL_INTERVAL:500}
+      multiplier: ${TRANSACTION_RETRY_MULTIPLIER:2.0}
+      max-interval: ${TRANSACTION_RETRY_MAX_INTERVAL:10000}
+      # 1 = single execution, no retry. Raise ONLY if the downstream dedupes on x-request-id (RRN).
+      max-attempt: ${TRANSACTION_RETRY_MAX_ATTEMPT:1}
+      dead-letter-enabled: ${TRANSACTION_RETRY_DEAD_LETTER:true}
+      retryable-exceptions: ${TRANSACTION_RETRYABLE_EXCEPTIONS:org.springframework.web.client.ResourceAccessException:true}
   async.configurations:
     default:
       core-pool-size: ${ASYNC_CORE_POOL_SIZE:5}
@@ -131,13 +129,33 @@ apps:
       queue-capacity: ${ASYNC_QUEUE_CAPACITY:50}
       keep-alive-seconds: ${ASYNC_KEEP_ALIVE_SECONDS:30}
       thread-name-prefix: ${ASYNC_THREAD_NAME_PREFIX:default-async-}
-  scheduler.configurations:
-    retry-processor:
-      scheduler-type: ${RETRY_PROCESSOR_TYPE:BOUNDED_ELASTIC}
-      bounded-elastic:
-        name: ${RETRY_PROCESSOR_SCHEDULER_NAME:retry-processor}
-        daemon: ${RETRY_PROCESSOR_DAEMON:true}
-        core-pool-size: ${RETRY_PROCESSOR_POOL:10}
-        queue-size: ${RETRY_PROCESSOR_QUEUE:10}
-        ttl-in-seconds: ${RETRY_PROCESSOR_TTL:60}
+      virtual-thread-enabled: ${ASYNC_VIRTUAL_THREAD_ENABLED:true}
+      rejection-policy: ${ASYNC_REJECTION_POLICY:CALLER_RUNS}
+    isoTransaction:
+      core-pool-size: ${TRANSACTION_CORE_POOL_SIZE:25}
+      max-pool-size: ${TRANSACTION_MESSAGE_POOL:90}
+      queue-capacity: ${TRANSACTION_QUEUE_SIZE:10}
+      keep-alive-seconds: ${TRANSACTION_KEEP_ALIVE_SECONDS:60}
+      thread-name-prefix: ${TRANSACTION_PREFIX:iso-transaction-}
+      virtual-thread-enabled: ${ISO_TRANSACTION_VIRTUAL_THREAD_ENABLED:true}
+      rejection-policy: ${ISO_TRANSACTION_REJECTION_POLICY:ABORT}
+    isoTransactionResponse:
+      core-pool-size: ${TRANSACTION_RESPONSE_CORE_POOL_SIZE:5}
+      max-pool-size: ${TRANSACTION_RESPONSE_MESSAGE_POOL:20}
+      queue-capacity: ${TRANSACTION_RESPONSE_QUEUE_SIZE:5}
+      keep-alive-seconds: ${TRANSACTION_RESPONSE_KEEP_ALIVE_SECONDS:60}
+      thread-name-prefix: ${TRANSACTION_RESPONSE_PREFIX:iso-transaction-response-}
+      virtual-thread-enabled: ${ISO_TRANSACTION_RESPONSE_VIRTUAL_THREAD_ENABLED:true}
+      rejection-policy: ${ISO_TRANSACTION_RESPONSE_REJECTION_POLICY:ABORT}
+  bulkhead.configurations:
+    isoTransaction:
+      headroom: ${ISO_TRANSACTION_INFLIGHT_HEADROOM:10}
+      fair: ${ISO_TRANSACTION_INFLIGHT_FAIR:false}
+  cache.configurations:
+    context:
+      expire-after-write-seconds: ${CONTEXT_CACHE_TTL_SECONDS:60}
+    additionalContext:
+      expire-after-write-seconds: ${ADDITIONAL_CONTEXT_CACHE_TTL_SECONDS:60}
+    jslt:
+      maximum-size: ${JSLT_CACHE_SIZE:100}
 

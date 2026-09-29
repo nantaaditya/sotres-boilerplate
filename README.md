@@ -1,348 +1,546 @@
-# So-t-Res
-<img src=".diagram/img.png">
+# So-T-Res
 
-## Introduction
-This document provides technical specifications and operational details for the Spring Boot Boilerplate Project with main capabilities to convert ISO8583 message to JSON REST API.
-This project serves as a foundational, reactive, single-module application built on the Spring Boot framework and [jreactive8583](https://github.com/kpavlov/jreactive-8583), 
-designed to incorporate common enterprise capabilities like robust logging, retry mechanisms, and operational endpoints.
+ISO 8583 to REST Api
 
-## Prerequisites
-
-Before running this project, ensure the following are installed and available:
-
-| Requirement | Version | Notes |
-|---|---|---|
-| Java (JDK) | 25 | Virtual threads enabled by default |
-| Maven | 3.9+ | Or use the included `./mvnw` wrapper |
-| PostgreSQL | 14+ | Database named `boilerplate` must exist |
-| ISO8583 Server | — | A live ISO8583 TCP server or simulator on `ISO8583_HOST:ISO8583_PORT` |
-
-> The ISO8583 connection is required at startup. If the server is unreachable, the application will retry on a configurable interval (`RECONNECT_INTERVAL`, default 60 s).
+![](.diagram/img.png)
 
 ---
 
-## Database Setup
+## Table of Contents
 
-Run the DDL and DML scripts against your PostgreSQL instance to create the required tables and seed the initial `system_properties` data.
-
-```bash
-psql -U postgres -d boilerplate -f src/main/resources/ddl.sql
-psql -U postgres -d boilerplate -f src/main/resources/dml.sql
-```
-
-### Tables Created
-
-| Table | Purpose |
-|---|---|
-| `dead_letter_process` | Stores failed transactions for scheduled retry processing |
-| `system_properties` | Runtime configuration loaded into a Caffeine in-memory cache on startup |
-| `event_logs` | Audit log of every HTTP request processed by the application |
-
-### Seed Data (`dml.sql`)
-
-The DML file seeds the minimum required `system_properties` rows:
-
-| `group_id` | `property_id` | Purpose |
-|---|---|---|
-| `acquirers` | `acquirers` | Acquirer network routing map |
-| `mti` | `incoming` | Allowed incoming MTI whitelist |
-| `mti` | `outgoing` | Allowed outgoing MTI whitelist |
-| `mask_fields` | `iso8583` | ISO8583 DE field numbers to mask in logs |
-| `currency` | `fractions` | Currency fraction digits (e.g. `360:2` = IDR with 2 decimal places) |
-| `endpoint_path` | `mapping` | Selector → REST path mapping for outgoing HTTP calls |
-| `response` | `incoming_outgoing_mapping` | Response code translation map |
-| `registry` | `callback_selector` | Selectors routed via callback-style response correlation |
-| `registry` | `response_selector` | Selectors routed via Mono-based response correlation |
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Features](#features)
+- [API Reference](#api-reference)
+- [Configuration](#configuration)
+- [Local Development](#local-development)
+- [Database](#database)
 
 ---
 
-## Environment Variables
+## Overview
 
-All variables have defaults defined in `application.yml`. Override them via system environment, a `.env` file, or Docker `--env-file`.
+sotres is a gateway that translates inbound ISO 8583 card-transaction messages from an upstream switch/acquirer into REST calls against a downstream payment API, then maps the REST response back into an ISO 8583 reply. 
+It owns the wire protocol, the request/response field mapping (via configurable JSLT templates), correlation of async replies, and failure recovery (retry + dead-letter) for the downstream leg.
 
-### Server
+Secondary responsibilities:
+- Operational endpoints to drive the ISO 8583 connection (sign-on/sign-off/echo) and to inspect/repair failed transactions
+- DB-backed configuration (routing tables, currency fractions, response-code mappings) that can be hot-reloaded without a restart
+- Per-request audit logging with PAN/PCI-sensitive field masking in logs
 
-| Variable | Default | Description |
-|---|---|---|
-| `SERVER_PORT` | `8080` | HTTP API port |
-| `ACTUATOR_PORT` | `1000` | Metrics and actuator port |
-| `CONTEXT_PATH` | `/sotres` | WebFlux base path |
-| `APPLICATION_NAME` | `sotres-api` | Spring application name |
-
-### Database
-
-| Variable | Default | Description |
-|---|---|---|
-| `DB_URL` | `r2dbc:postgresql://localhost:5432/boilerplate` | R2DBC connection URL |
-| `DB_USER` | `postgres` | Database username |
-| `DB_PASS` | `changeme` | Database password |
-| `R2DBC_POOL_ENABLED` | `true` | Enable R2DBC connection pool |
-| `R2DBC_MAX_SIZE` | `10` | Maximum pool size |
-
-### ISO8583 Connection
-
-| Variable | Default | Description |
-|---|---|---|
-| `ISO8583_HOST` | `127.0.0.1` | Remote ISO8583 server host |
-| `ISO8583_PORT` | `13001` | Remote ISO8583 server port |
-| `FORWARDING_INSTITUTION_ID` | `625` | Institution ID used in DE11 prefix |
-| `RECONNECT_INTERVAL` | `60000` | Reconnect interval in milliseconds |
-| `TIME_OUT_SECOND` | `15000` | ISO8583 message timeout in milliseconds |
-| `SCHEDULED_ECHO_ENABLED` | `true` | Enable periodic echo (heartbeat) messages |
-| `ECHO_INTERVAL_SECOND` | `30000` | Echo interval in milliseconds |
-
-### Outgoing Strategy
-
-| Variable | Default | Description |
-|---|---|---|
-| `OUTGOING_PROTOCOL` | `REST` | How ISO8583 transactions are forwarded (`REST` is currently supported) |
-| `CLIENT_REGISTRY_TYPE` | `CALLBACK` | Response correlation mode (`CALLBACK` or `RESPONSE`) |
-| `TRANSACTION_CLIENT_HOSTNAME` | `http://localhost:8080` | Base URL of the downstream REST service |
-| `TRANSACTION_CLIENT_READ_TIMEOUT` | `10000` | HTTP client read timeout in milliseconds |
-| `TRANSACTION_RETRY_MAX_ATTEMPT` | `1` | Max HTTP retry attempts on `PrematureCloseException` |
-
-### Logging
-
-| Variable | Default | Description |
-|---|---|---|
-| `LOG_PATH` | `logs/` | Directory for log files |
-| `APPS_LOG_LEVEL` | `json` | Log format: `json` or `text` |
-| `APPS_API_ENABLED` | `true` | Enable HTTP request/response logging via Logbook |
-| `APPS_TRACE_ENABLED` | `true` | Enable response time trace log |
-| `SENSITIVE_FIELD` | `cardNo` | Space-separated JSON fields to mask in logs |
+**Runtime**: `Spring Boot 3.5.16` · `Java 25` · `Servlet (Tomcat)` + `virtual threads` · `PostgreSQL`
 
 ---
 
-## Running Locally
-
-```bash
-# 1. Initialize the database (first time only)
-psql -U postgres -d boilerplate -f src/main/resources/ddl.sql
-psql -U postgres -d boilerplate -f src/main/resources/dml.sql
-
-# 2. Build
-./mvnw install -DskipTests
-
-# 3. Run
-./mvnw spring-boot:run
-```
-
-The application starts on `http://localhost:8080/sotres` by default.
-Actuator endpoints are available on `http://localhost:1000/actuator`.
-
----
-
-## Running with Docker
-
-```bash
-# 1. Build the JAR
-bash .script/build_jar.sh
-
-# 2. Build the Docker image
-bash .script/build_docker.sh
-
-# 3. Run the container
-docker run -d \
-  --cpus="0.5" --memory="768m" \
-  -p 8080:8080 \
-  --env-file .env/dev.env \
-  --name sotres \
-  sotres:1.0.0-SNAPSHOT
-```
-
-Create `.env/dev.env` with the environment variables listed above, overriding any defaults for your environment.
-
----
-
-## Running Tests
-
-```bash
-# Run all tests
-./mvnw test
-
-# Run tests and generate JaCoCo coverage report
-./mvnw verify
-
-# Open coverage report (macOS)
-open target/site/jacoco/index.html
-```
-
----
-
-## How It Works
-
-The application bridges an ISO8583 TCP channel to a downstream REST API. There are two independent processing lanes: ISO8583 message handling and HTTP API handling.
-
-### ISO8583 Transaction Flow
+## Architecture
 
 ```
-ISO8583 Server (TCP :13001)
-        │
-        ▼
-TransactionProcessorParticipant
-  ├─ Decodes ISO8583 message
-  ├─ Builds RequestContext (MTI, amount, currency, selector)
-  └─ Resolves AbstractTransactionHandler by selector
-        │
-        ▼
-AbstractTransactionHandler.process()
-  ├─ Applies business logic / enrichment
-  └─ Delegates to SenderProtocolStrategy
-        │
-        ▼
-RestProtocolStrategy.send()
-  ├─ Calls TransactionClient (reactive WebClient)
-  └─ POST to endpoint resolved from system_properties[endpoint_path]
-        │
-        ▼
-handleResponse()
-  ├─ Maps response code via system_properties[response]
-  └─ Writes ISO8583 0210 response back to TCP channel
+                 Upstream ISO 8583 switch/acquirer
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │  Netty (jReactive-8583)   │
+              │  event loop               │
+              └─────────────┬─────────────┘
+                            │ handoff (never block the event loop)
+                            ▼
+              ┌───────────────────────────┐
+              │  Participants             │
+              │  TransactionProcessor-    │
+              │  Participant,             │
+              │  TransactionResponse-     │
+              │  Participant              │
+              │  (virtual-thread          │
+              │  executors)               │
+              └─────────────┬─────────────┘
+                            ▼
+              ┌───────────────────────────┐
+              │  Strategy + JSLT          │
+              │  transform (request/      │
+              │  response field mapping)  │
+              └─────────────┬─────────────┘
+                            ▼
+              ┌───────────────────────────┐
+              │  RestSender (Apache       │
+              │  HttpClient 5, Spring     │
+              │  Retry + dead-letter)     │
+              └─────────────┬─────────────┘
+                            ▼
+                 Downstream REST payment API
+
+
+        Operators / internal tooling
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │  REST Layer               │
+              │  (api/internal/*          │
+              │  Controllers)             │
+              └─────────────┬─────────────┘
+                            ▼
+              ┌───────────────────────────┐
+              │  Service Layer            │
+              └─────────────┬─────────────┘
+                            ▼
+              ┌───────────────────────────┐
+              │  Repository Layer         │
+              │  (Spring Data JPA)        │
+              └─────────────┬─────────────┘
+                            ▼
+                       PostgreSQL
 ```
+![](.diagram/sotres_architecture.png)
 
-**Network messages** (MTI 0800) are handled separately by `NetworkProcessorParticipant`:
+### Key design decisions
 
-| Subtype | Action |
-|---|---|
-| LOGON | Marks channel as signed-on (`HealthCheckHelper.setSignedOn(true)`) |
-| LOGOFF | Marks channel as signed-off |
-| ECHO | Replies with healthy 0810 response |
+**Never block the Netty event loop**
+Every inbound ISO 8583 message is handed off from the Netty event loop onto a dedicated virtual-thread executor (`isoTransactionAsyncTaskExecutor`) before any blocking work — JSLT transform, JDBC, the outbound REST call — runs. That executor's rejection policy is deliberately `ABORT`, never `CALLER_RUNS`: under saturation, `CALLER_RUNS` would execute a full transaction on the event loop thread, stalling every ISO 8583 connection sharing it. A second, separate executor (`isoTransactionResponseAsyncTaskExecutor`) completes correlated responses so a fast completion never queues behind a slow in-flight transaction.
 
-### Response Correlation Modes
+**Two correlation modes for outbound calls**
+`CorrelationRegistry` backs both `CALLBACK` (fire-and-forget; the reply is matched and delivered asynchronously) and `RESPONSE` (`EnhancedIsoClient.send()` blocks the calling virtual thread on a `CompletableFuture` until the matching reply arrives or times out) modes behind one Caffeine-backed primitive, so a late or duplicate reply is classified (`SUCCESS` / `LATE_RESPONSE` / `ORPHAN`) rather than silently dropped or double-processed.
 
-Two modes are supported, selected by `CLIENT_REGISTRY_TYPE`:
+**Bulkhead sized from the executor, not independently**
+`BulkheadConfiguration` derives its `Semaphore` permit count from the same executor's `maxPoolSize + queueCapacity + headroom` rather than a standalone number, so admission control can never drift out of sync with the pool it's protecting. Both the derived and the explicit path fail fast at startup on a non-positive or misconfigured value — a silently-zero bulkhead would shed 100% of transactions with no signal that anything was wrong.
 
-| Mode | Class | Behaviour |
-|---|---|---|
-| `CALLBACK` | `IsoCallbackRegistry` | Stores a `Consumer<ResponseContext>` keyed on RRN. The callback is invoked when the matching response arrives. |
-| `RESPONSE` | `IsoResponseRegistry` | Stores a `Sinks.One<ResponseContext>` keyed on RRN. The transaction thread subscribes and waits reactively. |
+**JSLT as the mapping layer**
+Request/response field mapping between ISO 8583 and the downstream REST contract is expressed as JSLT templates stored in `system_properties` and compiled once into a Caffeine cache (`JsltTransformationHelper`), keyed by group + selector. A missing template is a deliberate pass-through, not an error; a broken template is cached as pass-through too, so a bad template degrades one selector's mapping rather than failing the connection — while `POST /internal-api/jslt/_reload*` still reports the compile failure loudly to the operator.
 
-Unsolicited responses (0210 arriving without a prior 0200) are routed through `TransactionResponseParticipant` → `IsoResponseRegistry.onResponse()`.
+**Dead-letter keeps the original, unmasked payload**
+When `RestSenderRetryListener` exhausts the retry budget for an outbound call, it persists the exact original request/response/headers to `dead_letter_process` — deliberately not routed through the PAN-masking helper used for log lines, because dead-letter reprocessing needs the untouched payload to replay it faithfully.
 
-### HTTP API Flow
+### Sequence Diagrams
 
-```
-HTTP Request (:8080)
-      │
-      ▼
-AppFilter  (order = HIGHEST_PRECEDENCE + 2)
-  ├─ Caches request body for downstream re-reading
-  ├─ Copies request headers to response
-  ├─ Starts Micrometer Observation
-  └─ Puts ContextDTO in Reactor context
-      │
-      ▼
-Controller → Service
-      │
-      ▼
-doFinally (on complete or error):
-  ├─ Saves audit record to event_logs table
-  └─ Stops Observation
-```
+#### 1. Inbound transaction (switch-initiated)
 
-### Dead Letter & Retry
+![](.diagram/sotres_inbound.png)
 
-Failed transactions that cannot be delivered are persisted to `dead_letter_process` with status `NEW`. A scheduled processor:
+#### 2. Outbound CALLBACK mode — no reply-to-a-reply
 
-1. Queries records where `status IN ('NEW', 'FAILED')` and `retry_count < max_retry`
-2. Re-delivers the payload
-3. Marks as `SUCCESS` on delivery, or increments `retry_count` / sets `FAILED` on error
-4. Records that reach `max_retry` are marked `EXHAUSTED` and cleaned up on a configurable schedule
+![](.diagram/sotres_outbound_callback.png)
 
-### System Properties Cache
+Covered end-to-end by `CallbackModeE2eTest` (asserts no second ISO message is written back to the switch for the correlated reply) and at the unit level by `IsoFieldHelperTest.SendResponseWithObservation`, `RequestContextHelperTest`, and `EnhancedIsoClientTest.PipelineWiring` (locks in the handler ordering).
 
-Runtime configuration (response mappings, path mappings, acquirer lists, etc.) is stored in the `system_properties` table and loaded into a Caffeine in-memory cache at startup via `SystemPropertiesService`. Individual groups can be reloaded at runtime without restarting the application.
+#### 3. Outbound RESPONSE mode
+
+![](.diagram/sotres_outbound_response.png)
 
 ---
 
 ## Project Structure
 
-### Module Structure
-`src/main/java` The project employs a standard single-module structure, organized by functional concern to promote separation of duties and maintainability.
+```
+src/main/java/com/nantaaditya/sotres/
+├── api/                            # REST controllers
+│   ├── ExampleController           # Health-check-style demo endpoints
+│   └── internal/                   # Operational/admin endpoints
+│       ├── DeadLetterProcessController   # Purge/retry failed downstream calls
+│       ├── EventLogController            # Purge old audit-log rows
+│       ├── JsltAdminController           # Manage JSLT request/response templates
+│       ├── NetworkController             # ISO 8583 sign-on/sign-off/echo control
+│       └── SystemPropertiesController    # View/reload DB-backed config groups
+├── client/                         # Outbound REST client to the downstream payment API
+├── configuration/                  # Bean wiring: executors, bulkhead, retry, tracing, JPA auditing
+├── entity/                         # JPA entities
+│   ├── DeadLetterProcess           # Failed outbound calls pending retry
+│   ├── EventLog                    # Per-request audit trail
+│   └── SystemProperties            # DB-backed config values + JSLT templates
+├── factory/                        # Retry-template construction per named client config
+├── helper/                         # Cross-cutting helpers — masking, caching, ISO field parsing, correlation
+├── interceptor/                    # Servlet filter/interceptor pipeline (context capture, audit logging)
+├── listener/                       # Spring Retry listener → dead-letter persistence on exhaustion
+├── model/
+│   ├── constant/                   # Response codes, header/config-group constants
+│   ├── dto/                        # Internal data transfer objects
+│   ├── error/                      # Domain exceptions
+│   ├── logger/                     # Structured log message builders
+│   ├── request/                    # API request types
+│   └── response/                   # API response types
+├── participant/                    # ISO 8583 message listeners (Netty event-loop → virtual-thread handoff)
+├── properties/                     # @ConfigurationProperties bindings
+│   └── embedded/                   # Nested config records (per-key pools, retry, cache, bulkhead)
+├── repository/                     # Spring Data JPA repositories
+├── service/
+│   ├── impl/                       # Service implementations
+│   └── internal/                   # Service interfaces for internal/admin operations
+└── strategy/
+    ├── outgoing/                   # Outbound protocol strategy (REST)
+    └── transaction/                # Per-selector transaction handler contract
+```
 
-| Package       | Description                               | Key Responsibilities                                                                                      |
-|---------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| API           | Houses all REST API endpoint controllers. | Defines application-facing services and handles HTTP request mapping.                                     |
-| Client        | External Client Integration.              | Contains components for making outbound calls to external services.                                       |
-| Configuration | Application Configuration.                | Stores Spring bean definitions, external library setups, and general application helpers.                 |
-| Entity        | Data Persistence Layer.                   | Stores POJO classes that map directly to database tables (JPA Entities).                                  |
-| Factory       | Component Creation.                       | Used for creating or managing implementations of specific beans or components.                            |
-| Helper        | General Utility Classes.                  | Stores reusable utility and helper methods.                                                               |
-| Interceptor   | Request/Response Processing Hooks.        | Contains logic executed before or after request/response processing (e.g., logging, header manipulation). |
-| Listener      | Event Handling.                           | Stores classes that listen for and react to application or external events.                               |
-| Model         | Data Transfer Objects (DTOs).             | Stores request/response DTOs, constants, and enums for data structuring.                                  |
-| Participant   | Base Handler for Incoming ISO8583.        | ISO8583 Handler for incoming message seggregated based on transaction / network message                   |
-| Properties    | Configuration Definitions.                | Stores custom application configuration properties, designed to be environment-overridable.               |
-| Repository    | Data Access Layer.                        | Defines interfaces for database query operations (e.g., Spring Data JPA repositories).                    |
-| Service       | Contains the core business logic.         | Orchestrates business processes, independent of persistence or transport layers.                          |
-| Strategy      | Strategy Pattern Classes.                 | Strategy Pattern for ISO8583 transaction message                                                          |
+---
 
-### Supporting Files
-- `.docker` Contains the Dockerfile for building a standardized Docker container image of the application.
-- `.deployment` Stores environment variables required for running the application via Docker containers.
-- `.script` Holds shell scripts for common operational tasks, such as building the JAR, building the Docker image, and running the application.
+## Features
 
-## Core Capabilities and Features
-The boilerplate includes several advanced features to enhance observability, reliability, and operational control.
+### ISO 8583 transaction processing
 
-### Logging
-| Feature                             | Description                                                                                               | Configuration                                                                                                                                                                                                |
-|-------------------------------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Structured & Segregated Logging     | Logs are output in a custom JSON format for machine readability and segregated into distinct files.       | App Log: `${LOG_PATH}/${APPLICATION_NAME}.log` Metric Log: `${LOG_PATH}/metrics.log` Trace Log: `${LOG_PATH}/trace.log`                                                                                      |
-| Response Time Tracing               | Automatically logs the duration/response time of each endpoint call.                                      | Enabled by default. Disable with: `apps.log.enable-trace-log=false`. Paths can be ignored using `apps.log.ignored-path`.                                                                                     |
-| ISO & HTTP Request/Response Logging | Logs the full content of incoming requests and outgoing responses.                                        | Enabled by default. Disable with: `apps.log.enable-api-log=false`.                                                                                                                                           |
-| Masking Sensitive PII               | Automatically masks PII (Personally Identifiable Information) in logs generated by external client calls. | Define sensitive fields in configuration: `apps.masking.sensitive-field` and in `system_properties` table with group_id `mask_fields`. Space separated value. Supports both headers and JSON payload fields. |
+Receives inbound ISO 8583 messages (e.g. `0200` authorization) from the upstream switch, maps request/response fields via JSLT, calls the downstream REST payment API, and replies with the corresponding ISO 8583 response (`0210`). No HTTP endpoint — driven entirely by the Netty ISO 8583 listener.
 
-> Note on Logging Usage: Developers must use the custom wrapper (`AppLogMessage`) with `Log4j2` annotation to ensure structured JSON logging is correctly populated with context (HTTP details, errors, etc.).
+### Network control
 
-Example:
-```java
-@Log4j2
-public class ExampleController {
-  public void method() {
-    log.info(AppLogMessage
-        .message("log message {} {}", "p1", "p2")
-        .httpRequest(request)
-        .httpResponse(response)
-        .isoMessage(isoMessage)
-        .error(throwable)
-        .additionalData(additionalData)
-    );
+**`GET /internal-api/network/sign-on`**
+Initiates the ISO 8583 sign-on handshake with the upstream host.
+
+**`GET /internal-api/network/sign-off`**
+Initiates the ISO 8583 sign-off handshake.
+
+**`GET /internal-api/network/echo`**
+Sends an ISO 8583 echo to verify upstream connectivity.
+
+### JSLT template administration
+
+**`GET /internal-api/jslt/templates`**
+Returns the current request/response JSLT templates configured for a selector.
+
+**`PUT /internal-api/jslt/template`**
+Creates or updates the JSLT template for a selector and direction, then evicts that entry from the compiled-expression cache.
+
+**`POST /internal-api/jslt/_reload`**
+Evicts and re-fetches both directions of a selector's templates, reporting a compile failure as a `400` rather than silently caching it.
+
+**`POST /internal-api/jslt/_reload-all`**
+Clears the entire template cache and re-warms every configured selector, reporting per-selector compile status.
+
+### Dead-letter retry and recovery
+
+**`POST /internal-api/dead_letter_process/_retry`**
+Replays failed downstream calls matching a process type/name, up to a batch size, asynchronously.
+
+**`DELETE /internal-api/dead_letter_process`**
+Purges dead-letter records older than a given age, asynchronously.
+
+### Configuration management
+
+**`GET /internal-api/configurations`**
+Returns the in-memory values for a DB-backed configuration group (currency fractions, routing tables, response-code mappings, etc.).
+
+**`PUT /internal-api/configurations/_reload`**
+Reloads a configuration group from the database into the in-memory cache without a restart.
+
+### Operational utilities
+
+| Feature | Description |
+|---|---|
+| `DELETE /internal-api/event_log` | Purge audit-log rows older than a given age, asynchronously |
+| `GET /api/example`, `GET /api/example/error` | Health-check-style demo endpoints showing the success/error response envelope |
+
+---
+
+## API Reference
+
+All responses share a common envelope:
+
+```json
+{
+  "response": {
+    "code": "000",
+    "description": "success",
+    "time": "2026-09-03T10:30:45.123+07:00"
+  },
+  "data": {},
+  "error": null
+}
+```
+
+Optional request headers `x-client-id`, `x-request-id`, `x-request-time` are echoed on the response, along with `x-received-time` and `x-response-time`.
+
+**Response codes**
+
+| Code | Constant | HTTP Status | Meaning |
+|------|----------|-------------|---------|
+| `000` | `SUCCESS` | 200 | Request processed successfully |
+| `900` | `INVALID_PARAMS` | 400 | Validation failure |
+| `998` | `BAD_REQUEST` | 400 | Business rule rejection |
+| `999` | `INTERNAL_ERROR` | 500 (via exception handler) / 400 (direct controller build) | Unexpected server error — the message itself is never included in the response body |
+
+---
+
+### Network
+
+#### `GET /internal-api/network/sign-on`
+
+Initiates the ISO 8583 sign-on handshake with the upstream host.
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": true
+}
+```
+
+#### `GET /internal-api/network/echo`
+
+Sends an ISO 8583 echo to verify upstream connectivity.
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": true
+}
+```
+
+---
+
+### Dead Letter Process
+
+#### `POST /internal-api/dead_letter_process/_retry`
+
+**Request**
+```json
+{
+  "processType": "client",
+  "processName": "transaction",
+  "size": 10
+}
+```
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": true
+}
+```
+
+**Response `400` (validation failure)**
+```json
+{
+  "response": { "code": "900", "description": "invalid parameters", "time": "..." },
+  "error": { "violations": { "processType": ["NotBlank"], "size": ["MustPositive"] } }
+}
+```
+
+#### `DELETE /internal-api/dead_letter_process?days=30`
+
+Purges dead-letter rows older than `days` (default `30`), asynchronously.
+
+---
+
+### JSLT Admin
+
+#### `GET /internal-api/jslt/templates?selector=20.97-E001`
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": {
+    "client_spec_request": ".clientId = .merchant.id | .amount = .txn.amount",
+    "client_spec_response": ".de39 = .response.responseCode | .amount = .response.amount"
   }
 }
 ```
 
-### Observability
-The application is configured to expose standard and custom feature-level metrics compatible with Prometheus.
-- Endpoint: Metrics are exposed on a dedicated port: `http://localhost:1000/actuator/prometheus`.
-- Default Port: Port `1000` is used exclusively for the metrics endpoint, separating it from the main application traffic port.
+#### `PUT /internal-api/jslt/template?selector=20.97-E001&group=CLIENT_SPEC_REQUEST`
 
-#### Feature Name Matching Mechanism
-To utilize feature-level metrics, the developer must explicitly define the feature name mapping:
-
-- Configuration Requirement: Developers must add an enum entry to the `ApiFeatureConstant` class for REST API and `IsoFeatureConstant` for ISO8583 transaction messages.
-- Matching Logic: 
-  - When an incoming HTTP request is processed, the application attempts to match the request's HTTP Method (e.g., GET, POST) and the API Path (e.g., /api/user/{id}) against the defined entries in `ApiFeatureConstant`.
-  - When an ISO8583 message is processed, the application attempts to match the message's MTI (Message Type Indicator) & selector against the defined entries in `IsoFeatureConstant`.
-- Metrics Scraping: If a match is found, the corresponding enum name from `ApiFeatureConstant` & `IsoFeatureConstant` is used as the feature name tag when the metrics are scraped by Prometheus, allowing for targeted monitoring of specific business transactions.
-
-Example:
-<img src=".diagram/img_1.png">
-
-## ISO8583 Handler
-ISO8583 using TCP protocol, so it can both as a client and server. which means it can be used to send and receive a message simulatenously.
-
-### ISO8583 as a sender
-to use as a client, you need to inject bean `Iso8583Client<IsoMessage>` into your class.
-
-Example:
-```java
-iso8583Client.send(request, isoMessageProperties.network().timeOut(), TimeUnit.MILLISECONDS);
+Request body (`Content-Type: text/plain`, raw JSLT):
+```
+.clientId = .merchant.id | .amount = .txn.amount | .currency = "IDR"
 ```
 
-### ISO8583 as a receiver
-to use as a server, you need to extends `IsoMessageListener<IsoMessage>` class.
-or in this boilerplate, it's already handled on `TransactionProcessorParticipant` class.
-and you need to create bean that extends `AbstractTransactionHandler` class.
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": {
+    "id": 12345,
+    "group": "CLIENT_SPEC_REQUEST",
+    "selector": "20.97-E001",
+    "template": ".clientId = .merchant.id | .amount = .txn.amount | .currency = \"IDR\""
+  }
+}
+```
 
-<img src=".diagram/img_2.png">
+#### `POST /internal-api/jslt/_reload?selector=20.97-E001`
+
+**Response `400` (a direction's template failed to compile)**
+```json
+{
+  "response": { "code": "900", "description": "invalid parameters", "time": "..." },
+  "error": { "violations": { "template": ["NotValid"] } }
+}
+```
+
+#### `POST /internal-api/jslt/_reload-all`
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": {
+    "client_spec_request:20.97-E001": true,
+    "client_spec_response:20.97-E001": true,
+    "client_spec_request:20.98-E002": false
+  }
+}
+```
+
+---
+
+### System Properties
+
+#### `GET /internal-api/configurations?key=CURRENCY_FRACTIONS`
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": { "360": "2", "840": "2" }
+}
+```
+
+#### `PUT /internal-api/configurations/_reload?group=CURRENCY_FRACTIONS`
+
+**Response `200`**
+```json
+{
+  "response": { "code": "000", "description": "success", "time": "..." },
+  "data": true
+}
+```
+
+---
+
+### Internal API
+
+These endpoints are intended for platform operations only.
+
+#### `DELETE /internal-api/event_log?days=30`
+
+Purges audit-log rows older than `days` (default `30`), asynchronously.
+
+---
+
+## Configuration
+
+All values are injectable via environment variables. Defaults are shown; the full reference (including sensitivity/prod guidance) lives in `docs/ENVIRONMENT_VARIABLES.md`.
+
+### Server
+
+| Variable | Default | Description |
+|---|---|---|
+| `SERVER_PORT` | `8080` | HTTP server listen port |
+| `CONTEXT_PATH` | `/sotres` | Servlet context path prefix |
+
+### Database
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_URL` | `jdbc:postgresql://localhost:5432/boilerplate` | JDBC connection URL |
+| `DB_USER` | `postgres` | Database username |
+| `DB_PASS` | `changeme` | Database password |
+| `DB_POOL_MAX_SIZE` | `10` | HikariCP maximum pool size |
+| `DB_POOL_MIN_IDLE` | `5` | HikariCP minimum idle connections |
+
+### ISO 8583
+
+| Variable | Default | Description |
+|---|---|---|
+| `ISO8583_HOST` | `127.0.0.1` | Upstream acquirer/switch hostname |
+| `ISO8583_PORT` | `13001` | Upstream acquirer/switch port |
+| `ISO8583_WORKER_THREAD_COUNT` | `100` | jReactive-8583 (Netty) worker thread count |
+| `ISO8583_MASKING_ENABLED` | `true` | Mask sensitive ISO fields (e.g. PAN) in logs |
+| `FORWARDING_INSTITUTION_ID` | `625` | Acquiring institution ID (DE32) |
+| `SCHEDULED_ECHO_ENABLED` | `true` | Send periodic echo/heartbeat to upstream |
+| `ECHO_INTERVAL_SECOND` | `30000` | Heartbeat interval (ms) |
+
+### Downstream REST client
+
+| Variable | Default | Description |
+|---|---|---|
+| `CLIENT_REGISTRY_TYPE` | `CALLBACK` | Correlation mode: `CALLBACK` (fire-and-forget) or `RESPONSE` (blocking) |
+| `TRANSACTION_CLIENT_HOSTNAME` | `http://localhost:8080` | Base URL of the downstream payment API |
+| `TRANSACTION_CLIENT_CONNECT_TIMEOUT` | `5000` | TCP connect timeout (ms) |
+| `TRANSACTION_CLIENT_READ_TIMEOUT` | `10000` | Response read timeout (ms) |
+| `TRANSACTION_MAX_CONNECTION` | `50` | Max concurrent connections to downstream |
+
+### Retry and dead-letter
+
+| Variable | Default | Description |
+|---|---|---|
+| `TRANSACTION_RETRY_TYPE` | `EXPONENTIAL_RANDOM` | Retry backoff strategy |
+| `TRANSACTION_RETRY_MAX_ATTEMPT` | `1` | Maximum retry attempts — raise only if downstream dedupes on `x-request-id` |
+| `TRANSACTION_RETRY_DEAD_LETTER` | `true` | Persist exhausted retries to `dead_letter_process` |
+| `TRANSACTION_RETRYABLE_EXCEPTIONS` | `org.springframework.web.client.ResourceAccessException:true` | Exceptions that trigger a retry |
+
+### Async, ISO transaction pools, and bulkhead
+
+| Variable | Default | Description |
+|---|---|---|
+| `TRANSACTION_CORE_POOL_SIZE` / `TRANSACTION_MESSAGE_POOL` | `25` / `90` | ISO transaction virtual-thread executor sizing (fed from the Netty event loop) |
+| `ISO_TRANSACTION_REJECTION_POLICY` | `ABORT` | Must stay `ABORT` — never `CALLER_RUNS` (see Architecture) |
+| `TRANSACTION_RESPONSE_CORE_POOL_SIZE` / `_MESSAGE_POOL` | `5` / `20` | Response-completion executor sizing — separate pool from the transaction executor |
+| `ISO_TRANSACTION_INFLIGHT_HEADROOM` | `10` | Extra bulkhead permits on top of `TRANSACTION_MESSAGE_POOL + TRANSACTION_QUEUE_SIZE` |
+| `ASYNC_CORE_POOL_SIZE` / `ASYNC_MAX_POOL_SIZE` | `5` / `25` | Default async executor sizing (audit log / dead-letter cleanup) |
+
+### Logging and masking
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROOT_LOG_LEVEL` | `INFO` | Root logger level |
+| `APPS_LOG_LEVEL` | `json` | Log format: `json` or `text` |
+| `SENSITIVE_FIELD` | `cardNo` | CSV list of fields masked in logs |
+| `APPS_IGNORED_PATH` | `/actuator/**,/internal-api/**` | Paths excluded from audit event logging |
+
+### Observability
+
+| Variable | Default | Description |
+|---|---|---|
+| `ACTUATOR_PORT` | `1000` | Actuator endpoints listen port (separate from `SERVER_PORT`) |
+| `ACTUATOR_EXPOSED` | `*` | Actuator endpoints to expose — restrict in production |
+| `PROMETHEUS_ENABLED` | `true` | Export Prometheus metrics |
+| `TRACING_SAMPLING_PROBABILITY` | `1.0` | Trace sampling rate |
+
+---
+
+## Local Development
+
+**Prerequisites**: Java 25, Maven 3.9+, PostgreSQL 16+, Docker (for the Testcontainers-based test suite)
+
+Every configuration value has a working local default, so no environment variables are strictly required to start the app — you only need a reachable PostgreSQL matching the defaults, or overrides pointing at your own instance:
+
+```bash
+export DB_URL=jdbc:postgresql://localhost:5432/boilerplate
+export DB_USER=postgres
+export DB_PASS=changeme
+```
+
+Apply the schema once (no Flyway — schema is a static script, `spring.jpa.hibernate.ddl-auto=none`):
+
+```bash
+psql "$DB_URL" -f src/main/resources/ddl.sql
+```
+
+**Run**
+```bash
+mvn spring-boot:run
+```
+
+**Swagger UI**: `http://localhost:8080/sotres/swagger-ui.html`
+
+**Actuator health**: `http://localhost:1000/actuator/health`
+
+**Run tests**
+```bash
+mvn test                 # unit + component tests
+mvn verify                # full suite incl. Testcontainers e2e; enforces 85% JaCoCo coverage
+```
+
+---
+
+## Database
+
+Schema is external and version-controlled as plain SQL (`src/main/resources/ddl.sql`, `dml.sql`) — Hibernate's `ddl-auto` is `none`, and there is no Flyway/Liquibase migration runner. Apply `ddl.sql` manually against a fresh database.
+
+**Tables**
+
+| Table | Purpose |
+|---|---|
+| `dead_letter_process` | Outbound calls that exhausted their retry budget, kept with the original request/response for manual or scheduled replay |
+| `system_properties` | DB-backed configuration: currency fractions, routing/response-code mappings, and JSLT request/response templates, keyed by `group_id` + `property_id` |
+| `event_logs` | Per-request audit trail (method, path, payload, response code) written after every non-ignored HTTP request |
+
+**Time-sortable primary key on `event_logs`**
+`EventLog.id` uses a TSID (`@TimeSeriesId`) instead of a database sequence — a lexically sortable, roughly time-ordered string ID generated in the application, avoiding both sequence round-trips and the index-locality problems of a random UUID on a high-write audit table.

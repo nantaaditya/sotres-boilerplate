@@ -1,6 +1,6 @@
 package com.nantaaditya.sotres.helper;
 
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.model.logger.JsonLogIsoMessage;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
@@ -18,19 +18,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class IsoMessageLoggerHelper {
 
+  public static final String INCOMING_ISO = "incoming";
+  public static final String OUTGOING_ISO = "outgoing";
+
   private final SystemPropertiesService systemPropertiesService;
 
   public IsoMessageLoggerHelper(SystemPropertiesService systemPropertiesService) {
     this.systemPropertiesService = systemPropertiesService;
   }
 
-  public void logIsoMessage(IsoMessage isoMessage) {
-    JsonLogIsoMessage logIsoMessage = toLogMessage(isoMessage);
+  public void logIsoMessage(IsoMessage isoMessage, String direction) {
+    JsonLogIsoMessage logIsoMessage = toLogMessage(isoMessage, direction);
     log.info(AppLogMessage.message("#ISO").isoMessage(logIsoMessage));
   }
 
-  public JsonLogIsoMessage toLogMessage(IsoMessage message) {
-    String direction = getDirection(message);
+  public JsonLogIsoMessage toLogMessage(IsoMessage message, String direction) {
     String mti = String.format("%04x", message.getType());
 
     try {
@@ -43,21 +45,10 @@ public class IsoMessageLoggerHelper {
         }
       }
 
-      return new JsonLogIsoMessage(mti, direction, dataElements);
+      return new JsonLogIsoMessage(direction, mti, dataElements);
     } catch (Exception e) {
       log.error(AppLogMessage.message("#Log - failed to serialize ISO8583 message. with message : {}", e.getMessage()).error(e));
       return null;
-    }
-  }
-
-  private String getDirection(IsoMessage message) {
-    String direction;
-    if (getMTI(PropertiesGroup.INCOMING_MTI).contains(message.getType())) {
-      return "incoming";
-    } else if (getMTI(PropertiesGroup.OUTGOING_MTI).contains(message.getType())) {
-      return "outgoing";
-    } else {
-      return "unknown";
     }
   }
 
@@ -70,15 +61,11 @@ public class IsoMessageLoggerHelper {
 
   @NotNull
   private Set<Integer> getMaskedFields() {
-    return PropertiesGroup.getList(systemPropertiesService, PropertiesGroup.ISO8583_MASK_FIELDS)
-      .stream()
-      .map(String::trim)
-      .map(Integer::parseInt)
-      .collect(Collectors.toSet());
+    return getConfiguredIntSet(ConfigGroup.ISO8583_MASK_FIELDS);
   }
 
-  private Set<Integer> getMTI(PropertiesGroup group) {
-    return PropertiesGroup.getList(systemPropertiesService, group)
+  private Set<Integer> getConfiguredIntSet(ConfigGroup group) {
+    return ConfigGroup.getList(systemPropertiesService, group)
       .stream()
       .map(String::trim)
       .map(Integer::parseInt)

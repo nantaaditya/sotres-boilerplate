@@ -1,12 +1,15 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.nantaaditya.sotres.helper.AsyncMDCTaskDecorator;
+import com.nantaaditya.sotres.model.constant.RejectionPolicy;
 import com.nantaaditya.sotres.model.logger.AppLogMessage;
 import com.nantaaditya.sotres.properties.AsyncTaskProperties;
 import com.nantaaditya.sotres.properties.embedded.AsyncConfiguration;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor.AbortPolicy;
+import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
@@ -21,8 +24,6 @@ public class AsyncTaskConfiguration {
   private AsyncTaskProperties asyncProperties;
   @Autowired
   private GenericApplicationContext applicationContext;
-  @Value("${spring.threads.virtual.enabled:false}")
-  private boolean virtualThreadEnabled;
 
   private static final String POSTFIX_BEAN_NAME = "AsyncTaskExecutor";
 
@@ -38,7 +39,7 @@ public class AsyncTaskConfiguration {
       .forEach((key, value) -> applicationContext.registerBean(
           key + POSTFIX_BEAN_NAME,
           ThreadPoolTaskExecutor.class,
-          () -> createAsyncExecutor(asyncProperties.getConfiguration(key), asyncMDCTaskDecorator, virtualThreadEnabled),
+          () -> createAsyncExecutor(asyncProperties.getConfiguration(key), asyncMDCTaskDecorator),
           definition -> definition.setLazyInit(true)
           )
       );
@@ -46,8 +47,8 @@ public class AsyncTaskConfiguration {
     log.debug(AppLogMessage.message("#AsyncExecutor - bean {} created", asyncProperties.getBeanNames(POSTFIX_BEAN_NAME)));
   }
 
-  private ThreadPoolTaskExecutor createAsyncExecutor(AsyncConfiguration configuration,
-      AsyncMDCTaskDecorator asyncMDCTaskDecorator, boolean virtualThreadEnabled) {
+  ThreadPoolTaskExecutor createAsyncExecutor(AsyncConfiguration configuration,
+      AsyncMDCTaskDecorator asyncMDCTaskDecorator) {
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
     executor.setCorePoolSize(configuration.corePoolSize());
     executor.setMaxPoolSize(configuration.maxPoolSize());
@@ -55,8 +56,17 @@ public class AsyncTaskConfiguration {
     executor.setThreadNamePrefix(configuration.threadNamePrefix());
     executor.setKeepAliveSeconds(configuration.keepAliveSeconds());
     executor.setTaskDecorator(asyncMDCTaskDecorator);
-    executor.setVirtualThreads(virtualThreadEnabled);
+    executor.setVirtualThreads(configuration.virtualThreadEnabled());
+    executor.setRejectedExecutionHandler(resolveRejectionHandler(configuration.rejectionPolicy()));
+    executor.setWaitForTasksToCompleteOnShutdown(true);
     executor.initialize();
     return executor;
+  }
+
+  RejectedExecutionHandler resolveRejectionHandler(RejectionPolicy policy) {
+    return switch (policy) {
+      case ABORT -> new AbortPolicy();
+      case CALLER_RUNS -> new CallerRunsPolicy();
+    };
   }
 }

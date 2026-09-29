@@ -1,6 +1,5 @@
 package com.nantaaditya.sotres.helper;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.nantaaditya.sotres.properties.LogProperties;
 import java.io.IOException;
@@ -16,6 +15,7 @@ import org.zalando.logbook.HttpMessage;
 import org.zalando.logbook.HttpRequest;
 import org.zalando.logbook.HttpResponse;
 import org.zalando.logbook.Precorrelation;
+import tools.jackson.databind.ObjectMapper;
 
 public class ApiLogbookFormatter implements HttpLogFormatter {
 
@@ -94,16 +94,7 @@ public class ApiLogbookFormatter implements HttpLogFormatter {
     if (headers == null || headers.isEmpty()) {
       return Optional.empty();
     }
-
-    final Map<String, List<String>> result = new LinkedHashMap<>();
-    for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-      result.put(entry.getKey(),
-          logProperties.isSensitiveFields(entry.getKey()) ?
-              entry.getValue().stream().map(MaskingHelper::masking).toList() :
-              entry.getValue()
-      );
-    }
-    return Optional.of(result);
+    return Optional.of(MaskingHelper.maskHeaders(headers, logProperties::isSensitiveFields));
   }
 
   private Optional<Object> prepareBody(final HttpMessage message) throws IOException {

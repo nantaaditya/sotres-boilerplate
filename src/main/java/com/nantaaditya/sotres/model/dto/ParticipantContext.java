@@ -23,7 +23,7 @@ public class ParticipantContext {
     this.channelHandlerContext = ctx;
     this.isoMessage = isoMessage;
     this.transactionHandler = handler;
-    this.requestContext = requestContext;
+    this.requestContext = request;
     this.observation = observation;
   }
 

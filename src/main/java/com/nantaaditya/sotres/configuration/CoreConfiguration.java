@@ -1,11 +1,10 @@
 package com.nantaaditya.sotres.configuration;
 
 import com.github.kpavlov.jreactive8583.client.ClientConfiguration;
+import com.nantaaditya.sotres.helper.CorrelationRegistry;
 import com.nantaaditya.sotres.helper.EnhancedIsoClient;
-import com.nantaaditya.sotres.helper.IsoCallbackRegistry;
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
 import com.nantaaditya.sotres.helper.IsoMessageLoggerHelper;
-import com.nantaaditya.sotres.helper.IsoResponseRegistry;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.MessageFactoryHelper;
 import com.nantaaditya.sotres.helper.TracerHelper;
 import com.nantaaditya.sotres.model.dto.IsoClientConfigurationRequest;
@@ -19,6 +18,7 @@ import com.nantaaditya.sotres.properties.ParticipantConfigurationProperties;
 import com.nantaaditya.sotres.properties.embedded.IsoMessageConnectionConfiguration;
 import com.nantaaditya.sotres.properties.embedded.IsoMessageNetworkConfiguration;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import io.micrometer.observation.ObservationRegistry;
 import java.net.InetSocketAddress;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -36,16 +36,16 @@ public class CoreConfiguration {
   private final IsoMessageProperties isoMessageProperties;
   private final MessageFactoryHelper messageFactoryHelper;
   private final SystemPropertiesService systemPropertiesService;
-  private final IsoCallbackRegistry isoCallbackRegistry;
-  private final IsoResponseRegistry isoResponseRegistry;
+  private final CorrelationRegistry correlationRegistry;
   private final TracerHelper tracerHelper;
-  private final IsoFieldHelper isoFieldHelper;
+  private final IsoResponseSender isoResponseSender;
   private final IsoMessageLoggerHelper isoMessageLoggerHelper;
   private final ParticipantConfigurationProperties participantConfigurationProperties;
   private final ClientProperties clientProperties;
   private final NetworkProcessorParticipant networkProcessorParticipant;
   private final TransactionProcessorParticipant transactionProcessorParticipant;
   private final TransactionResponseParticipant transactionResponseParticipant;
+  private final ObservationRegistry observationRegistry;
 
   @Bean
   public EnhancedIsoClient client() throws InterruptedException {
@@ -92,14 +92,14 @@ public class CoreConfiguration {
             .addLoggingHandler(isoMessageProperties.log().defaultLogHandlerEnabled())
             .build(),
         messageFactoryHelper.getDefaultMessageFactory(),
-        isoCallbackRegistry,
-        isoResponseRegistry,
-        isoFieldHelper,
+        correlationRegistry,
+        isoResponseSender,
         isoMessageLoggerHelper,
         systemPropertiesService,
         tracerHelper,
         participantConfigurationProperties,
-        clientProperties
+        clientProperties,
+        observationRegistry
     );
   }
 

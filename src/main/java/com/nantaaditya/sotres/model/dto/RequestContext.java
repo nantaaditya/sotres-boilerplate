@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nantaaditya.sotres.helper.DateTimeHelper;
 import com.nantaaditya.sotres.helper.IsoFieldHelper;
-import com.nantaaditya.sotres.model.constant.AccountType;
 import java.beans.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -79,6 +78,10 @@ public class RequestContext {
   private boolean lateResponse;
   private boolean orphanResponse;
   private boolean externalRequest;
+  // true when this inbound message is our own callback-mode request's correlated reply
+  // (IsoCategory SUCCESS/LATE_RESPONSE/ORPHAN) rather than a switch-initiated request — see
+  // IsoResponseSender.sendResponseWithObservation, which never writes an ISO reply when this is set.
+  private boolean callbackResponse;
 
   private Transaction transaction;
   private Merchant merchant;
@@ -164,16 +167,6 @@ public class RequestContext {
   }
 
   @Transient
-  public AccountType getFromAccountType() {
-    return AccountType.fromCode(IsoFieldHelper.substring(processingCode, 2, 4));
-  }
-
-  @Transient
-  public AccountType getToAccountType() {
-    return AccountType.fromCode(IsoFieldHelper.substring(processingCode, 4, 6));
-  }
-
-  @Transient
   public Map<String, String> getAdditionalDataMap() {
     return IsoFieldHelper.unpackTLV(additionalData, 2, 2);
   }
@@ -193,7 +186,7 @@ public class RequestContext {
     );
   }
 
-  // change this mapping
+  // TODO: change this mapping
   @Transient
   public String getSelector() {
     return IsoFieldHelper.createSelector(mti, processingCode, getAdditionalDataMap());

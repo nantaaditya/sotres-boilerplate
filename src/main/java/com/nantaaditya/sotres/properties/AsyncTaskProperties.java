@@ -6,10 +6,12 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@ConfigurationProperties("apps.async")
+@ConfigurationProperties(AsyncTaskProperties.PREFIX)
 public record AsyncTaskProperties(
     Map<String, AsyncConfiguration> configurations
 ) {
+
+  public static final String PREFIX = "apps.async";
 
   public AsyncConfiguration getConfiguration(String name) {
     return configurations.get(name);

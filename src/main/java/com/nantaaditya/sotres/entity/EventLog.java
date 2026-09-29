@@ -1,23 +1,28 @@
 package com.nantaaditya.sotres.entity;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.domain.Persistable;
-import org.springframework.data.relational.core.mapping.Table;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Data
+@Entity
 @Table(name = "event_logs")
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 @SuppressWarnings("java:S1068")
-public class EventLog implements Persistable<String> {
+public class EventLog {
   @Id
+  @TimeSeriesId
   private String id;
   private String clientId;
   private String requestId;
@@ -30,8 +35,4 @@ public class EventLog implements Persistable<String> {
   @CreatedDate
   private LocalDateTime createdDate;
 
-  @Override
-  public boolean isNew() {
-    return true;
-  }
 }

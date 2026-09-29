@@ -1,0 +1,110 @@
+@startuml sotres-architecture
+
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 80
+
+skinparam component {
+  BorderColor #334155
+  ArrowColor #334155
+}
+skinparam database {
+  BorderColor #334155
+}
+skinparam usecase {
+  BorderColor #334155
+}
+skinparam defaultTextAlignment center
+
+usecase "HTTP Caller" as node_http_caller #E0E7FF
+usecase "ISO8583 Server" as node_iso_server #DCFCE7
+
+package "HTTP API Lane" as group_api {
+  component "Application Filter\n[AppFilter.java]" as node_app_filter #DBEAFE
+  component "Example Controller" as node_example_controller #DBEAFE
+  component "Operational Controllers" as node_ops_controllers #DBEAFE
+  component "Network Controllers" as node_network_controllers #DBEAFE
+}
+
+package "ISO Processing" as group_iso {
+  component "Processor Participant" as node_transaction_participant #FEF3C7
+  component "Transaction Handler" as node_transaction_handler #FEF3C7
+  component "Enhanced ISO Client" as node_enhanced_iso_client #FEF3C7
+  component "Callback Registry" as node_callback_registry #FEF3C7
+  component "Response Registry" as node_response_registry #FEF3C7
+  component "Response Participant" as node_response_participant #FEF3C7
+  component "Network Participant" as node_network_participant #FEF3C7
+  component "Network Service" as node_network_service #FEF3C7
+}
+
+package "External Integration" as group_integration {
+  component "REST Protocol Strategy" as node_rest_strategy #DCFCE7
+  component "Transaction Client" as node_transaction_client #DCFCE7
+}
+
+package "Operations and State" as group_ops {
+  component "System Properties" as node_system_properties #FFE4E6
+  component "Event Log Service" as node_event_log_service #FFE4E6
+  database "Event Log Store" as node_event_log_store #FFE4E6
+  component "Dead Letter Service" as node_deadletter_service #FFE4E6
+  component "Retry Processor" as node_retry_processor #FFE4E6
+  database "Dead Letter Store" as node_deadletter_store #FFE4E6
+  database "Property Store" as node_property_store #FFE4E6
+}
+
+component "Downstream REST" as node_downstream_rest #E0E7FF
+
+url of node_app_filter is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/interceptor/AppFilter.java]]
+url of node_example_controller is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/api/ExampleController.java]]
+url of node_ops_controllers is [[https://github.com/nantaaditya/sotres-boilerplate/tree/master/src/main/java/com/nantaaditya/sotres/api/internal]]
+url of node_transaction_participant is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/participant/TransactionProcessorParticipant.java]]
+url of node_transaction_handler is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/strategy/transaction/AbstractTransactionHandler.java]]
+url of node_enhanced_iso_client is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/helper/EnhancedIsoClient.java]]
+url of node_callback_registry is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/helper/IsoCallbackRegistry.java]]
+url of node_response_registry is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/helper/IsoResponseRegistry.java]]
+url of node_response_participant is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/participant/TransactionResponseParticipant.java]]
+url of node_network_participant is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/participant/NetworkProcessorParticipant.java]]
+url of node_network_service is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/service/NetworkService.java]]
+url of node_rest_strategy is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/strategy/outgoing/RestProtocolStrategy.java]]
+url of node_transaction_client is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/client/TransactionClient.java]]
+url of node_system_properties is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/service/impl/SystemPropertiesServiceImpl.java]]
+url of node_event_log_service is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/service/impl/EventLogServiceImpl.java]]
+url of node_event_log_store is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/repository/EventLogRepository.java]]
+url of node_deadletter_service is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/service/impl/DeadLetterProcessServiceImpl.java]]
+url of node_retry_processor is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/service/AbstractRetryProcessorService.java]]
+url of node_deadletter_store is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/repository/DeadLetterProcessRepository.java]]
+url of node_property_store is [[https://github.com/nantaaditya/sotres-boilerplate/blob/master/src/main/java/com/nantaaditya/sotres/repository/SystemPropertiesRepository.java]]
+
+node_http_caller --> node_app_filter : request
+node_app_filter --> node_example_controller : dispatch
+node_app_filter --> node_ops_controllers : dispatch
+node_app_filter --> node_network_controllers: dispatch
+node_app_filter --> node_event_log_service : audit
+node_ops_controllers --> node_system_properties : reload
+node_ops_controllers --> node_deadletter_service : start retry
+node_ops_controllers --> node_event_log_service : logs
+node_network_controllers --> node_network_service: signon/signoff
+node_event_log_service --> node_event_log_store : r/w
+node_system_properties --> node_property_store : load
+node_deadletter_service --> node_deadletter_store : access
+node_deadletter_service --> node_retry_processor : retry
+node_retry_processor --> node_deadletter_store : update
+node_iso_server --> node_transaction_participant : transaction msg
+node_transaction_participant --> node_transaction_handler : selector
+node_transaction_participant --> node_response_participant: response registry
+node_transaction_handler --> node_rest_strategy : delegate
+node_rest_strategy --> node_transaction_client : REST
+node_transaction_client <--> node_downstream_rest : send
+node_rest_strategy --> node_iso_server : ISO resp
+node_enhanced_iso_client ..> node_iso_server: send
+node_enhanced_iso_client ..> node_callback_registry : register callback
+node_enhanced_iso_client ..> node_response_registry : register response
+node_response_participant --> node_response_registry : deliver
+node_iso_server --> node_network_participant : network msg
+node_network_service --> node_enhanced_iso_client : send
+
+note bottom of node_transaction_client
+  JSLT request & response mapping
+end note
+
+@enduml

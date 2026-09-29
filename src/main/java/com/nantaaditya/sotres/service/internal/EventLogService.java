@@ -1,7 +1,11 @@
 package com.nantaaditya.sotres.service.internal;
 
-import reactor.core.publisher.Mono;
+import com.nantaaditya.sotres.entity.EventLog;
 
 public interface EventLogService {
-  Mono<Boolean> remove(int days);
+
+  /** Persist an audit row off the request thread (fire-and-forget; a DB failure is logged only). */
+  void save(EventLog eventLog);
+
+  void remove(int days);
 }

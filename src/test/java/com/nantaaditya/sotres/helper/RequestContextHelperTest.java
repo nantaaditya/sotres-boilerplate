@@ -5,13 +5,18 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.constant.IsoCategory;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
+import com.nantaaditya.sotres.model.dto.RequestContext.Merchant;
+import com.nantaaditya.sotres.model.dto.RequestContext.Reversal;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
+import com.solab.iso8583.IsoType;
 import com.solab.iso8583.IsoValue;
+import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -48,7 +53,7 @@ class RequestContextHelperTest {
     lenient().when(isoMessage.hasField(90)).thenReturn(false);
 
     lenient().when(
-            systemPropertiesService.getProperty(PropertiesGroup.CURRENCY_FRACTIONS, "fractions"))
+            systemPropertiesService.getProperty(ConfigGroup.CURRENCY_FRACTIONS, "fractions"))
         .thenReturn("360:2");
   }
 
@@ -111,5 +116,145 @@ class RequestContextHelperTest {
     assertThat(context.getReversal()).isNotNull();
     assertThat(context.getReversal().getOriginalMti()).isEqualTo("0200");
     assertThat(context.getReversal().getOriginalStan()).isEqualTo("123456");
+  }
+
+  @Test
+  @DisplayName("create with SUCCESS sets callbackResponse (this inbound message is our own callback reply)")
+  void create_withSuccess_setsCallbackResponse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.SUCCESS);
+
+    assertThat(context.isCallbackResponse()).isTrue();
+  }
+
+  @Test
+  @DisplayName("create with LATE_RESPONSE sets callbackResponse")
+  void create_withLateResponse_setsCallbackResponse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.LATE_RESPONSE);
+
+    assertThat(context.isCallbackResponse()).isTrue();
+  }
+
+  @Test
+  @DisplayName("create with ORPHAN sets callbackResponse")
+  void create_withOrphan_setsCallbackResponse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.ORPHAN);
+
+    assertThat(context.isCallbackResponse()).isTrue();
+  }
+
+  @Test
+  @DisplayName("create with EXTERNAL_REQUEST leaves callbackResponse false (fresh switch-initiated request)")
+  void create_withExternalRequest_leavesCallbackResponseFalse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService,
+        IsoCategory.EXTERNAL_REQUEST);
+
+    assertThat(context.isCallbackResponse()).isFalse();
+  }
+
+  @Test
+  @DisplayName("create with null category leaves callbackResponse false")
+  void create_withNullCategory_leavesCallbackResponseFalse() {
+    RequestContext context = RequestContextHelper.create(isoMessage, systemPropertiesService, null);
+
+    assertThat(context.isCallbackResponse()).isFalse();
+  }
+
+  @SuppressWarnings("unchecked")
+  private IsoValue<Object> mockIsoValue(String value) {
+    return new IsoValue<>(IsoType.ALPHA, value, value.length());
+  }
+
+  @Nested
+  @DisplayName("convertAmount(double, int)")
+  class ConvertAmount {
+
+    @Test
+    @DisplayName("moves decimal left by fractionDigit for a standard amount")
+    void convertAmount_twoFractionDigits_movesDecimalLeft2() {
+      BigDecimal result = RequestContextHelper.convertAmount(100000.0, 2);
+      assertThat(result).isEqualByComparingTo(new BigDecimal("1000.00"));
+    }
+
+    @Test
+    @DisplayName("moves decimal left by 3 for currencies with 3 fraction digits")
+    void convertAmount_threeFractionDigits_movesDecimalLeft3() {
+      BigDecimal result = RequestContextHelper.convertAmount(1000000.0, 3);
+      assertThat(result).isEqualByComparingTo(new BigDecimal("1000.00"));
+    }
+
+    @Test
+    @DisplayName("returns zero when amount is 0")
+    void convertAmount_zeroAmount_returnsZero() {
+      BigDecimal result = RequestContextHelper.convertAmount(0.0, 2);
+      assertThat(result).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("returns zero when fractionDigit is less than 1")
+    void convertAmount_zeroFractionDigit_returnsZero() {
+      BigDecimal result = RequestContextHelper.convertAmount(50000.0, 0);
+      assertThat(result).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("result always has scale of 2 after HALF_UP rounding")
+    void convertAmount_anyValidInput_scaleIsTwo() {
+      BigDecimal result = RequestContextHelper.convertAmount(100001.0, 2);
+      assertThat(result.scale()).isEqualTo(2);
+    }
+  }
+
+  @Nested
+  @DisplayName("createMerchant(IsoMessage)")
+  class CreateMerchant {
+
+    @Test
+    @DisplayName("extracts MCC from DE18 and merchant name/city/country from DE43")
+    void createMerchant_validFields_returnsMerchant() {
+      when(isoMessage.getField(18)).thenReturn(mockIsoValue("5411"));
+      // DE43 format: name(25 chars) + city(13 chars) + country code(2 chars) = 40 chars total
+      when(isoMessage.getField(43)).thenReturn(
+          mockIsoValue("GROCERY STORE NAME       JAKARTA      ID"));
+
+      Merchant result = RequestContextHelper.createMerchant(isoMessage);
+
+      assertThat(result).isNotNull();
+      assertThat(result.getMerchantCategoryCode()).isEqualTo("5411");
+      assertThat(result.getMerchantName()).isEqualTo("GROCERY STORE NAME       ");
+      assertThat(result.getMerchantCountryCode()).isEqualTo("ID");
+    }
+  }
+
+  @Nested
+  @DisplayName("createReversal(IsoMessage)")
+  class CreateReversal {
+
+    @Test
+    @DisplayName("returns null when DE90 is not present")
+    void createReversal_noDE90_returnsNull() {
+      when(isoMessage.hasField(90)).thenReturn(false);
+      assertThat(RequestContextHelper.createReversal(isoMessage)).isNull();
+    }
+
+    @Test
+    @DisplayName("extracts reversal fields from DE90 when present")
+    void createReversal_withDE90_returnsReversal() {
+      when(isoMessage.hasField(90)).thenReturn(true);
+      // DE90: originalMti(4) + originalStan(6) + originalDateTime(10) + acquirer(11) + forwarding(11) = 42 chars
+      when(isoMessage.getField(90))
+          .thenReturn(mockIsoValue("020012345606151030450000000001100000000012"));
+
+      Reversal result = RequestContextHelper.createReversal(isoMessage);
+
+      assertThat(result).isNotNull();
+      assertThat(result.getOriginalMti()).isEqualTo("0200");
+      assertThat(result.getOriginalStan()).isEqualTo("123456");
+      assertThat(result.getOriginalTransmissionDateTime()).isEqualTo("0615103045");
+      assertThat(result.getOriginalAcquiringInstitutionId()).isEqualTo("00000000011");
+      assertThat(result.getOriginalForwardingInstitutionId()).isEqualTo("00000000012");
+    }
   }
 }

@@ -1,11 +1,13 @@
 package com.nantaaditya.sotres.repository;
 
 import com.nantaaditya.sotres.entity.SystemProperties;
-import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.repository.ListCrudRepository;
 import org.springframework.stereotype.Repository;
-import reactor.core.publisher.Flux;
 
 @Repository
-public interface SystemPropertiesRepository extends R2dbcRepository<SystemProperties, Long> {
-  Flux<SystemProperties> findByGroupId(String groupId);
+public interface SystemPropertiesRepository extends ListCrudRepository<SystemProperties, Long> {
+  List<SystemProperties> findByGroupId(String groupId);
+  Optional<SystemProperties> findByGroupIdAndPropertyId(String groupId, String propertyId);
 }

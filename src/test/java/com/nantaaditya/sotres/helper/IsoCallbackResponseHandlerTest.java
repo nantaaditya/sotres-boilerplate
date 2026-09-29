@@ -1,12 +1,12 @@
 package com.nantaaditya.sotres.helper;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.model.constant.IsoCategory;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
-import com.nantaaditya.sotres.model.dto.RegistryContext;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
@@ -31,7 +31,7 @@ class IsoCallbackResponseHandlerTest {
   @Mock
   private TracerHelper tracerHelper;
   @Mock
-  private IsoCallbackRegistry isoCallbackRegistry;
+  private CorrelationRegistry correlationRegistry;
   @Mock
   private SystemPropertiesService systemPropertiesService;
   @Mock
@@ -58,8 +58,8 @@ class IsoCallbackResponseHandlerTest {
   @BeforeEach
   void setUp() {
     when(systemPropertiesService.getProperty(
-        PropertiesGroup.REGISTRY_CALLBACK_SELECTOR,
-        PropertiesGroup.REGISTRY_CALLBACK_SELECTOR.getPropertyId()))
+        ConfigGroup.REGISTRY_CALLBACK_SELECTOR,
+        ConfigGroup.REGISTRY_CALLBACK_SELECTOR.getPropertyId()))
         .thenReturn(MATCHING_SELECTOR);
 
     // Tracer chain for span creation used inside channelRead0
@@ -73,16 +73,13 @@ class IsoCallbackResponseHandlerTest {
     when(ctx.channel()).thenReturn(channel);
     when(channel.attr(any())).thenReturn(attr);
 
-    // Mocks for tracerHelper.createTraceContext
-    // we use any(Integer.class) because field numbers are integers
+    // fields accessed by createSelector / getCorrelationId / createTraceContext
     when(msg.getField(37)).thenReturn(isoValue("000000000001"));
-    // Also mock other fields that might be accessed during createSelector or getCorrelationId
-    // to avoid NPEs if they are called before setupMatchingMessage/setupNonMatchingMessage
     when(msg.getType()).thenReturn(0);
     when(msg.getField(3)).thenReturn(isoValue("000000"));
     when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
 
-    handler = new IsoCallbackResponseHandler(isoCallbackRegistry, systemPropertiesService,
+    handler = new IsoCallbackResponseHandler(correlationRegistry, systemPropertiesService,
         tracerHelper);
   }
 
@@ -92,14 +89,16 @@ class IsoCallbackResponseHandlerTest {
   }
 
   private void setupMatchingMessage() {
-    // MTI 0x0210 (528) → getMTI → "0210" → chars[1-2]="10"
-    // DE3[0-1]="00", PI="QR" → selector="10.00-QR" which is in the list
+    // MTI 0x0210 (528) → getMTI → "0210" → chars[1-2]="21", DE3[0-1]="00", PI="QR" → "21.00-QR"
     when(msg.getType()).thenReturn(528);
     when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
     when(msg.getField(3)).thenReturn(isoValue("000000"));
-    when(msg.getField(11)).thenReturn(isoValue("123456"));
-    when(msg.getField(37)).thenReturn(isoValue("000000000001"));
-    when(msg.getField(7)).thenReturn(isoValue("0615103045"));
+    // DE11/DE37/DE7 are not read by channelRead0() itself (tracerHelper.createTraceContext is
+    // mocked here, so it never actually touches DE37) — kept lenient for readability of the
+    // full message shape rather than pruning them to whatever channelRead0() happens to touch.
+    lenient().when(msg.getField(11)).thenReturn(isoValue("123456"));
+    lenient().when(msg.getField(37)).thenReturn(isoValue("000000000001"));
+    lenient().when(msg.getField(7)).thenReturn(isoValue("0615103045"));
   }
 
   private void setupNonMatchingMessage() {
@@ -107,9 +106,10 @@ class IsoCallbackResponseHandlerTest {
     when(msg.getType()).thenReturn(512);
     when(msg.getField(48)).thenReturn(isoValue("PI02QR"));
     when(msg.getField(3)).thenReturn(isoValue("000000"));
-    when(msg.getField(11)).thenReturn(isoValue("123456"));
-    when(msg.getField(37)).thenReturn(isoValue("000000000001"));
-    when(msg.getField(7)).thenReturn(isoValue("0615103045"));
+    // see setupMatchingMessage() — DE11/DE37/DE7 are not read by channelRead0() itself.
+    lenient().when(msg.getField(11)).thenReturn(isoValue("123456"));
+    lenient().when(msg.getField(37)).thenReturn(isoValue("000000000001"));
+    lenient().when(msg.getField(7)).thenReturn(isoValue("0615103045"));
   }
 
   @Nested
@@ -117,12 +117,11 @@ class IsoCallbackResponseHandlerTest {
   class SelectorMatchedPath {
 
     @Test
-    @DisplayName("sets IsoCategory.SUCCESS on channel attribute when registryContext is success")
+    @DisplayName("sets the IsoCategory returned by CorrelationRegistry.complete on the channel attribute")
     @SuppressWarnings("unchecked")
     void channelRead0_selectorMatchedAndSuccess_setsSuccessCategory() {
       setupMatchingMessage();
-      when(isoCallbackRegistry.onResponse(msg))
-          .thenReturn(new RegistryContext(msg, false, false));
+      when(correlationRegistry.complete(msg)).thenReturn(IsoCategory.SUCCESS);
 
       handler.channelRead0(ctx, msg);
 
@@ -131,12 +130,11 @@ class IsoCallbackResponseHandlerTest {
     }
 
     @Test
-    @DisplayName("sets IsoCategory.LATE_RESPONSE when registryContext.lateResponse is true")
+    @DisplayName("propagates LATE_RESPONSE from CorrelationRegistry.complete")
     @SuppressWarnings("unchecked")
     void channelRead0_selectorMatchedAndLateResponse_setsLateResponseCategory() {
       setupMatchingMessage();
-      when(isoCallbackRegistry.onResponse(msg))
-          .thenReturn(new RegistryContext(msg, true, false));
+      when(correlationRegistry.complete(msg)).thenReturn(IsoCategory.LATE_RESPONSE);
 
       handler.channelRead0(ctx, msg);
 
@@ -145,12 +143,11 @@ class IsoCallbackResponseHandlerTest {
     }
 
     @Test
-    @DisplayName("sets IsoCategory.ORPHAN when registryContext.unknownMatchResponse is true")
+    @DisplayName("propagates ORPHAN from CorrelationRegistry.complete")
     @SuppressWarnings("unchecked")
     void channelRead0_selectorMatchedAndOrphan_setsOrphanCategory() {
       setupMatchingMessage();
-      when(isoCallbackRegistry.onResponse(msg))
-          .thenReturn(new RegistryContext(msg, false, true));
+      when(correlationRegistry.complete(msg)).thenReturn(IsoCategory.ORPHAN);
 
       handler.channelRead0(ctx, msg);
 
@@ -164,7 +161,7 @@ class IsoCallbackResponseHandlerTest {
   class SelectorNotMatchedPath {
 
     @Test
-    @DisplayName("sets IsoCategory.EXTERNAL_REQUEST when selector is not in the list")
+    @DisplayName("sets IsoCategory.EXTERNAL_REQUEST without touching CorrelationRegistry")
     @SuppressWarnings("unchecked")
     void channelRead0_selectorNotMatched_setsExternalRequestCategory() {
       setupNonMatchingMessage();

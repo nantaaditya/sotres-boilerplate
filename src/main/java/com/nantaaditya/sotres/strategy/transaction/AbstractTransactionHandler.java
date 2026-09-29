@@ -3,23 +3,21 @@ package com.nantaaditya.sotres.strategy.transaction;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import reactor.core.publisher.Mono;
 
 @RequiredArgsConstructor
 public abstract class AbstractTransactionHandler {
 
   public abstract Set<String> getSelectors();
 
-  protected abstract Mono<ParticipantContext> validate(ParticipantContext participantContext);
+  protected abstract ParticipantContext validate(ParticipantContext participantContext);
 
-  protected abstract Mono<ParticipantContext> process(ParticipantContext participantContext);
+  protected abstract ParticipantContext process(ParticipantContext participantContext);
 
   public void populateResponse(ParticipantContext participantContext) {
     // override on transaction handler child class
   }
 
-  public Mono<ParticipantContext> execute(ParticipantContext participantContext) {
-    return validate(participantContext)
-        .flatMap(this::process);
+  public ParticipantContext execute(ParticipantContext participantContext) {
+    return process(validate(participantContext));
   }
 }

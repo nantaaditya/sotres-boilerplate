@@ -6,38 +6,71 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import com.nantaaditya.sotres.helper.JsltTransformationHelper;
+import com.nantaaditya.sotres.helper.RetryTemplateHelper;
 import com.nantaaditya.sotres.model.constant.HeaderConstant;
-import com.nantaaditya.sotres.model.constant.PropertiesGroup;
+import com.nantaaditya.sotres.model.constant.ConfigGroup;
+import com.nantaaditya.sotres.model.constant.ObservationConstant;
+import com.nantaaditya.sotres.model.constant.TemplateGroup;
 import com.nantaaditya.sotres.model.dto.RequestContext;
+import com.nantaaditya.sotres.model.dto.ResponseContext;
 import com.nantaaditya.sotres.properties.ClientProperties;
 import com.nantaaditya.sotres.properties.embedded.ClientConfiguration;
 import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+import io.micrometer.observation.tck.TestObservationRegistry;
+import io.micrometer.observation.tck.TestObservationRegistryAssert;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.zalando.logbook.Logbook;
-import reactor.test.StepVerifier;
 
 @DisplayName("TransactionClient")
 @ExtendWith(MockitoExtension.class)
 class TransactionClientTest {
 
   private WireMockServer wireMockServer;
+  private ObjectMapper objectMapper;
+  private TestObservationRegistry observationRegistry;
 
   @Mock
   private SystemPropertiesService systemPropertiesService;
+
+  @Mock
+  private JsltTransformationHelper jsltTransformationHelper;
+
+  @Mock
+  private RetryTemplateHelper retryTemplateHelper;
 
   private TransactionClient transactionClient;
 
@@ -50,8 +83,7 @@ class TransactionClientTest {
         "http://localhost:" + wireMockServer.port(),
         50, 60000, 60000, 60000, 30000,
         5000, 30000, 30000,
-        TimeUnit.MILLISECONDS,
-        null
+        TimeUnit.MILLISECONDS
     );
 
     ClientProperties clientProperties = new ClientProperties();
@@ -59,9 +91,15 @@ class TransactionClientTest {
     configs.put("transaction", clientConfig);
     clientProperties.setConfigurations(configs);
 
-    Logbook logbook = Logbook.builder().build();
+    objectMapper = new ObjectMapper();
+    observationRegistry = TestObservationRegistry.create();
 
-    transactionClient = new TransactionClient(systemPropertiesService, logbook, clientProperties);
+    when(retryTemplateHelper.getRetryTemplate("transaction"))
+        .thenReturn(RetryTemplate.builder().maxAttempts(1).build());
+
+    transactionClient = new TransactionClient(
+        systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
+        clientProperties, retryTemplateHelper, observationRegistry);
     ReflectionTestUtils.setField(transactionClient, "applicationName", "test-app");
   }
 
@@ -72,80 +110,458 @@ class TransactionClientTest {
 
   @Test
   @DisplayName("send receives 200 and emits ResponseContext with response code")
-  void send_receives200_emitsResponseContextWithCode() {
+  void send_receives200_emitsResponseContextWithCode() throws Exception {
+    JsonNode reqBody = objectMapper.readTree("{}");
+    JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\",\"description\":\"approved\"}}");
+
     wireMockServer.stubFor(
         post(urlPathEqualTo("/api/payment"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
-                .withBody("{\"response\":{\"code\":\"00\",\"description\":\"approved\"}}")
+                .withBody("{\"raw\":\"downstream_response\"}")
             )
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+        .thenReturn(reqBody);
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+        .thenReturn(normalizedResp);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .assertNext(ctx -> assertThat(ctx.getResponseCode()).isEqualTo("00"))
-        .verifyComplete();
+    ResponseContext ctx = transactionClient.send(buildRequest());
+
+    assertThat(ctx.getResponseCode()).isEqualTo("00");
   }
 
   @Test
   @DisplayName("send receives 4xx and still emits ResponseContext from body")
-  void send_receives4xx_emitsResponseContextFromBody() {
+  void send_receives4xx_emitsResponseContextFromBody() throws Exception {
+    JsonNode reqBody = objectMapper.readTree("{}");
+    JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"96\",\"description\":\"bad request\"}}");
+
     wireMockServer.stubFor(
         post(urlPathEqualTo("/api/payment"))
             .willReturn(aResponse()
                 .withStatus(400)
                 .withHeader("Content-Type", "application/json")
-                .withBody("{\"response\":{\"code\":\"96\",\"description\":\"bad request\"}}")
+                .withBody("{\"error\":\"bad_request\"}")
             )
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+        .thenReturn(reqBody);
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+        .thenReturn(normalizedResp);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .assertNext(ctx -> assertThat(ctx.getResponseCode()).isEqualTo("96"))
-        .verifyComplete();
+    ResponseContext ctx = transactionClient.send(buildRequest());
+
+    assertThat(ctx.getResponseCode()).isEqualTo("96");
   }
 
   @Test
   @DisplayName("send receives 5xx and propagates error")
-  void send_receives5xx_propagatesError() {
+  void send_receives5xx_propagatesError() throws Exception {
+    JsonNode reqBody = objectMapper.readTree("{}");
+
     wireMockServer.stubFor(
         post(urlPathEqualTo("/api/payment"))
             .willReturn(aResponse().withStatus(500))
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+        .thenReturn(reqBody);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .expectError()
-        .verify();
+    assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+        .isInstanceOf(HttpServerErrorException.class);
   }
 
   @Test
   @DisplayName("send sets CLIENT_ID and REQUEST_ID headers on the outgoing request")
-  void send_setsClientIdAndRequestIdHeaders() {
+  void send_setsClientIdAndRequestIdHeaders() throws Exception {
+    JsonNode reqBody = objectMapper.readTree("{}");
+    JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\"}}");
+
     wireMockServer.stubFor(
         post(urlPathEqualTo("/api/payment"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
-                .withBody("{\"response\":{\"code\":\"00\"}}")
+                .withBody("{\"raw\":\"response\"}")
             )
     );
-    when(systemPropertiesService.getProperty(PropertiesGroup.PATH_MAPPING, "mapping"))
+    when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
         .thenReturn("20.00-NA:/api/payment");
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+        .thenReturn(reqBody);
+    when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+        .thenReturn(normalizedResp);
 
-    StepVerifier.create(transactionClient.send(buildRequest()))
-        .expectNextCount(1)
-        .verifyComplete();
+    assertThat(transactionClient.send(buildRequest())).isNotNull();
 
     wireMockServer.verify(
         postRequestedFor(urlPathEqualTo("/api/payment"))
             .withHeader(HeaderConstant.CLIENT_ID.getHeader(), equalTo("test-app"))
             .withHeader(HeaderConstant.REQUEST_ID.getHeader(), equalTo("123456789012"))
     );
+  }
+
+  @Nested
+  @DisplayName("JsltTransformation")
+  class JsltTransformation {
+
+    @Test
+    @DisplayName("calls CLIENT_SPEC_REQUEST transform before sending request body")
+    void requestTransform_calledWithClientSpecRequestGroup() throws Exception {
+      JsonNode reqBody = objectMapper.readTree("{\"amount\":\"100\"}");
+      JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\"}}");
+
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(reqBody);
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenReturn(normalizedResp);
+
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
+
+      verify(jsltTransformationHelper)
+          .transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any(RequestContext.class));
+    }
+
+    @Test
+    @DisplayName("calls CLIENT_SPEC_RESPONSE transform after receiving raw response")
+    void responseTransform_calledWithClientSpecResponseGroup() throws Exception {
+      JsonNode reqBody = objectMapper.readTree("{}");
+      JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\"}}");
+
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"transaction_id\":\"txn-001\",\"status\":\"approved\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(reqBody);
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenReturn(normalizedResp);
+
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
+
+      verify(jsltTransformationHelper)
+          .transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any(JsonNode.class));
+    }
+
+    @Test
+    @DisplayName("propagates error when CLIENT_SPEC_REQUEST transform fails")
+    void requestTransformError_propagatesToCaller() {
+      RuntimeException transformError = new RuntimeException("JSLT compile error");
+
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenThrow(transformError);
+
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessage("JSLT compile error");
+    }
+
+    @Test
+    @DisplayName("propagates error when CLIENT_SPEC_RESPONSE transform fails")
+    void responseTransformError_propagatesToCaller() throws Exception {
+      JsonNode reqBody = objectMapper.readTree("{}");
+      RuntimeException transformError = new RuntimeException("JSLT apply error");
+
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(reqBody);
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenThrow(transformError);
+
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessage("JSLT apply error");
+    }
+  }
+
+  @Nested
+  @DisplayName("Observation tracking (API_EXTERNAL)")
+  class ObservationTracking {
+
+    @Test
+    @DisplayName("tags the observation with requestId and feature, and records the responseCode on success")
+    void send_success_tagsRequestIdFeatureAndResponseCode() throws Exception {
+      JsonNode reqBody = objectMapper.readTree("{}");
+      JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\"}}");
+
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(reqBody);
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenReturn(normalizedResp);
+
+      RequestContext request = buildRequest();
+      request.setIsoFeatureConstant("20.00-QR");
+
+      assertThat(transactionClient.send(request)).isNotNull();
+
+      TestObservationRegistryAssert.assertThat(observationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
+          .that()
+          .hasHighCardinalityKeyValue("requestId", "123456789012")
+          .hasLowCardinalityKeyValue("feature", "POST/api/payment")
+          .hasLowCardinalityKeyValue("responseCode", "00");
+    }
+
+    @Test
+    @DisplayName("records the error class and does not throw when the downstream call fails without a cause")
+    void send_causelessError_recordsErrorClassWithoutThrowing() {
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse().withStatus(500))
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(objectMapper.createObjectNode());
+
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(HttpServerErrorException.class);
+
+      TestObservationRegistryAssert.assertThat(observationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
+          .that()
+          .hasLowCardinalityKeyValueWithKey("error");
+    }
+
+    @Test
+    @DisplayName("starts exactly one observation per send() call even when the underlying request retries")
+    void send_oneObservationPerCall_notPerRetryAttempt() throws Exception {
+      JsonNode reqBody = objectMapper.readTree("{}");
+      JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\"}}");
+
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(reqBody);
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenReturn(normalizedResp);
+
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
+
+      TestObservationRegistryAssert.assertThat(observationRegistry)
+          .hasNumberOfObservationsWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName(), 1);
+    }
+
+    @Test
+    @DisplayName("read timeout throws ResourceAccessException and records the timeout as the observation error")
+    void send_readTimeout_throwsAndRecordsTimeoutError() throws Exception {
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withFixedDelay(1000)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(objectMapper.createObjectNode());
+
+      ClientConfiguration shortReadTimeoutConfig = new ClientConfiguration(
+          "http://localhost:" + wireMockServer.port(),
+          50, 60000, 60000, 60000, 30000,
+          5000, 200, 30000,
+          TimeUnit.MILLISECONDS
+      );
+      ClientProperties shortReadTimeoutProperties = new ClientProperties();
+      Map<String, ClientConfiguration> configs = new HashMap<>();
+      configs.put("transaction", shortReadTimeoutConfig);
+      shortReadTimeoutProperties.setConfigurations(configs);
+
+      TransactionClient shortTimeoutClient = new TransactionClient(
+          systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
+          shortReadTimeoutProperties, retryTemplateHelper, observationRegistry);
+      ReflectionTestUtils.setField(shortTimeoutClient, "applicationName", "test-app");
+
+      assertThatThrownBy(() -> shortTimeoutClient.send(buildRequest()))
+          .isInstanceOf(ResourceAccessException.class);
+
+      TestObservationRegistryAssert.assertThat(observationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
+          .that()
+          .thenError()
+          .isInstanceOf(ResourceAccessException.class);
+    }
+
+    @Test
+    @DisplayName("http 5xx error records the real HttpServerErrorException as the observation error")
+    void send_http5xxError_recordsHttpServerErrorException() throws Exception {
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse().withStatus(500))
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(objectMapper.createObjectNode());
+
+      assertThatThrownBy(() -> transactionClient.send(buildRequest()))
+          .isInstanceOf(HttpServerErrorException.class);
+
+      TestObservationRegistryAssert.assertThat(observationRegistry)
+          .hasObservationWithNameEqualTo(ObservationConstant.API_EXTERNAL.getName())
+          .that()
+          .thenError()
+          .isInstanceOf(HttpServerErrorException.class);
+    }
+
+    @Test
+    @DisplayName("publishes request and response events with the serialized JSON payloads")
+    void send_success_publishesRequestAndResponseEvents() throws Exception {
+      List<Observation.Event> capturedEvents = new ArrayList<>();
+      observationRegistry.observationConfig().observationHandler(new ObservationHandler<Observation.Context>() {
+        @Override
+        public void onEvent(Observation.Event event, Observation.Context context) {
+          capturedEvents.add(event);
+        }
+
+        @Override
+        public boolean supportsContext(Observation.Context context) {
+          return true;
+        }
+      });
+
+      JsonNode reqBody = objectMapper.readTree("{\"amount\":\"100\"}");
+      JsonNode normalizedResp = objectMapper.readTree("{\"response\":{\"code\":\"00\"}}");
+
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"downstream_response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(reqBody);
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenReturn(normalizedResp);
+
+      assertThat(transactionClient.send(buildRequest())).isNotNull();
+
+      assertThat(capturedEvents).hasSize(2);
+      assertThat(capturedEvents).anySatisfy(event -> {
+        assertThat(event.getName()).isEqualTo("request");
+        assertThat(event.getContextualName()).contains("\"amount\":\"100\"");
+      });
+      assertThat(capturedEvents).anySatisfy(event -> {
+        assertThat(event.getName()).isEqualTo("response");
+        assertThat(event.getContextualName()).contains("downstream_response");
+      });
+    }
+  }
+
+  @Nested
+  @DisplayName("connection pool (Phase 6: Apache HttpClient 5)")
+  class ConnectionPool {
+
+    @Test
+    @DisplayName("maxConnections=1 serializes two concurrent calls instead of running them in parallel")
+    void maxConnectionsOne_serializesConcurrentCalls() throws Exception {
+      wireMockServer.stubFor(
+          post(urlPathEqualTo("/api/payment"))
+              .willReturn(aResponse()
+                  .withStatus(200)
+                  .withFixedDelay(300)
+                  .withHeader("Content-Type", "application/json")
+                  .withBody("{\"raw\":\"response\"}")
+              )
+      );
+      when(systemPropertiesService.getProperty(ConfigGroup.PATH_MAPPING, "mapping"))
+          .thenReturn("20.00-NA:/api/payment");
+      when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_REQUEST), anyString(), any()))
+          .thenReturn(objectMapper.createObjectNode());
+      lenient().when(jsltTransformationHelper.transform(eq(TemplateGroup.CLIENT_SPEC_RESPONSE), anyString(), any()))
+          .thenAnswer(inv -> objectMapper.readTree("{\"response\":{\"code\":\"00\"}}"));
+
+      ClientConfiguration singleConnectionConfig = new ClientConfiguration(
+          "http://localhost:" + wireMockServer.port(),
+          1, 60000, 60000, 60000, 30000,
+          5000, 5000, 5000,
+          TimeUnit.MILLISECONDS
+      );
+      ClientProperties singleConnectionProperties = new ClientProperties();
+      Map<String, ClientConfiguration> configs = new HashMap<>();
+      configs.put("transaction", singleConnectionConfig);
+      singleConnectionProperties.setConfigurations(configs);
+
+      TransactionClient singleConnectionClient = new TransactionClient(
+          systemPropertiesService, jsltTransformationHelper, objectMapper, Logbook.builder().build(),
+          singleConnectionProperties, retryTemplateHelper, observationRegistry);
+      ReflectionTestUtils.setField(singleConnectionClient, "applicationName", "test-app");
+
+      ExecutorService executor = Executors.newFixedThreadPool(2);
+      try {
+        long start = System.nanoTime();
+        List<Future<?>> futures = List.of(
+            executor.submit(() -> singleConnectionClient.send(buildRequest())),
+            executor.submit(() -> singleConnectionClient.send(buildRequest())));
+        for (Future<?> future : futures) {
+          future.get(5, TimeUnit.SECONDS);
+        }
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        // two 300ms calls serialized through a 1-connection pool take ~600ms; if they ran in
+        // parallel (pool cap not actually enforced) it would be ~300ms
+        assertThat(elapsedMs).isGreaterThanOrEqualTo(550);
+      } finally {
+        executor.shutdownNow();
+      }
+    }
   }
 
   private RequestContext buildRequest() {

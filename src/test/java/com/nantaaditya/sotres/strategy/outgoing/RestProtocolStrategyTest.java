@@ -1,19 +1,21 @@
 package com.nantaaditya.sotres.strategy.outgoing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nantaaditya.sotres.client.TransactionClient;
-import com.nantaaditya.sotres.helper.IsoFieldHelper;
+import com.nantaaditya.sotres.helper.IsoResponseSender;
 import com.nantaaditya.sotres.helper.TracerHelper;
+import com.nantaaditya.sotres.model.constant.HeaderConstant;
 import com.nantaaditya.sotres.model.constant.OutgoingProtocol;
 import com.nantaaditya.sotres.model.dto.ParticipantContext;
 import com.nantaaditya.sotres.model.dto.RequestContext;
@@ -23,9 +25,6 @@ import com.nantaaditya.sotres.service.internal.SystemPropertiesService;
 import com.nantaaditya.sotres.strategy.transaction.AbstractTransactionHandler;
 import com.solab.iso8583.IsoMessage;
 import io.micrometer.observation.Observation;
-import io.micrometer.tracing.Span;
-import io.micrometer.tracing.TraceContext;
-import io.micrometer.tracing.Tracer;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.ReadTimeoutException;
 import java.util.function.Consumer;
@@ -35,9 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
-import reactor.util.context.Context;
 
 @DisplayName("RestProtocolStrategy")
 @ExtendWith(MockitoExtension.class)
@@ -48,11 +44,9 @@ class RestProtocolStrategyTest {
   @Mock
   private TransactionClient transactionClient;
   @Mock
-  private IsoFieldHelper isoFieldHelper;
+  private IsoResponseSender isoResponseSender;
   @Mock
   private TracerHelper tracerHelper;
-  @Mock
-  private Tracer tracer;
   @Mock
   private ParticipantContext participantCtx;
   @Mock
@@ -72,7 +66,7 @@ class RestProtocolStrategyTest {
   @BeforeEach
   void setUp() {
     strategy = new RestProtocolStrategy(
-        systemPropertiesService, transactionClient, isoFieldHelper, tracerHelper, tracer);
+        systemPropertiesService, transactionClient, isoResponseSender, tracerHelper);
 
     requestContext = new RequestContext();
     requestContext.setRrn("rrn-001");
@@ -90,44 +84,24 @@ class RestProtocolStrategyTest {
   }
 
   @Test
-  @DisplayName("send delegates to TransactionClient and emits ResponseContext")
-  void send_delegatesToTransactionClient_emitsResponseContext() {
-    Span mockSpan = mock(Span.class);
-    Span nextSpan = mock(Span.class);
-    TraceContext traceCtx = mock(TraceContext.class);
-    when(tracer.nextSpan(mockSpan)).thenReturn(nextSpan);
-    when(nextSpan.context()).thenReturn(traceCtx);
-    when(traceCtx.traceId()).thenReturn("trace-001");
-    when(traceCtx.spanId()).thenReturn("span-001");
-    when(transactionClient.send(requestContext)).thenReturn(Mono.just(responseContext));
+  @DisplayName("send delegates to TransactionClient and returns ResponseContext")
+  void send_delegatesToTransactionClient_returnsResponseContext() {
+    when(transactionClient.send(requestContext)).thenReturn(responseContext);
 
-    StepVerifier.create(
-            strategy.send(channelHandlerContext, isoMessage, requestContext)
-                .contextWrite(Context.of(Span.class, mockSpan))
-        )
-        .expectNext(responseContext)
-        .verifyComplete();
+    ResponseContext result = strategy.send(channelHandlerContext, isoMessage, requestContext);
+
+    assertThat(result).isSameAs(responseContext);
+    verify(tracerHelper).setBaggage(HeaderConstant.REQUEST_ID.getHeader(), "rrn-001");
   }
 
   @Test
   @DisplayName("send wraps TransactionClient error in TransactionException")
   void send_whenTransactionClientErrors_wrapsInTransactionException() {
-    Span mockSpan = mock(Span.class);
-    Span nextSpan = mock(Span.class);
-    TraceContext traceCtx = mock(TraceContext.class);
-    when(tracer.nextSpan(mockSpan)).thenReturn(nextSpan);
-    when(nextSpan.context()).thenReturn(traceCtx);
-    when(traceCtx.traceId()).thenReturn("trace-001");
-    when(traceCtx.spanId()).thenReturn("span-001");
     when(transactionClient.send(requestContext))
-        .thenReturn(Mono.error(new RuntimeException("network error")));
+        .thenThrow(new RuntimeException("network error"));
 
-    StepVerifier.create(
-            strategy.send(channelHandlerContext, isoMessage, requestContext)
-                .contextWrite(Context.of(Span.class, mockSpan))
-        )
-        .expectError(TransactionException.class)
-        .verify();
+    assertThatThrownBy(() -> strategy.send(channelHandlerContext, isoMessage, requestContext))
+        .isInstanceOf(TransactionException.class);
   }
 
   @Test
@@ -137,8 +111,8 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), eq("96"));
-    verify(observation).stop();
+    verify(isoResponseSender).sendResponseWithObservation(participantCtx, "96", null);
+    verify(observation, never()).stop();
   }
 
   @Test
@@ -149,9 +123,9 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage),
+    verify(isoResponseSender).sendResponseWithObservation(eq(participantCtx), eq("96"), isNull(),
         any(Consumer.class));
-    verify(observation).stop();
+    verify(observation, never()).stop();
   }
 
   @Test
@@ -163,8 +137,8 @@ class RestProtocolStrategyTest {
 
     strategy.handleResponse(participantCtx);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), eq("96"));
-    verify(observation).stop();
+    verify(isoResponseSender).sendResponseWithObservation(eq(participantCtx), eq("96"), any(RuntimeException.class));
+    verify(observation, never()).stop();
   }
 
   @Test
@@ -175,7 +149,21 @@ class RestProtocolStrategyTest {
 
     strategy.handleError(participantCtx, ex);
 
-    verify(isoFieldHelper, never()).sendResponse(any(), any(), anyString());
+    verify(isoResponseSender, never()).sendResponse(any(), any(), anyString());
+  }
+
+  @Test
+  @DisplayName("handleError with a RestClient read timeout (ResourceAccessException) does not send response")
+  void handleError_withRestClientReadTimeout_doesNotSendResponse() {
+    org.springframework.web.client.ResourceAccessException timeout =
+        new org.springframework.web.client.ResourceAccessException("read timed out",
+            new java.net.http.HttpTimeoutException("request timed out"));
+    TransactionException ex = new TransactionException(timeout, requestContext);
+
+    strategy.handleError(participantCtx, ex);
+
+    verify(isoResponseSender, never()).sendResponse(any(), any(), anyString());
+    verify(isoResponseSender, never()).sendResponseWithObservation(any(), anyString(), any());
   }
 
   @Test
@@ -186,7 +174,7 @@ class RestProtocolStrategyTest {
 
     strategy.handleError(participantCtx, ex);
 
-    verify(isoFieldHelper).sendResponse(eq(channelHandlerContext), eq(isoMessage), eq("96"));
+    verify(isoResponseSender).sendResponseWithObservation(participantCtx, "96", ex);
   }
 
   @Test
@@ -194,6 +182,6 @@ class RestProtocolStrategyTest {
   void handleError_withUnknownException_doesNotSendResponse() {
     strategy.handleError(participantCtx, new IllegalStateException("unknown"));
 
-    verify(isoFieldHelper, never()).sendResponse(any(), any(), anyString());
+    verify(isoResponseSender, never()).sendResponse(any(), any(), anyString());
   }
 }
