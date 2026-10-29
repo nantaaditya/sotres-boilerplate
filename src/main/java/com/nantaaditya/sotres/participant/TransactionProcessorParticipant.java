@@ -79,7 +79,6 @@ public class TransactionProcessorParticipant
   private final long inFlightAcquireTimeoutMs;
   private final IsoMessageProperties isoMessageProperties;
   private final ClientProperties clientProperties;
-  private final List<String> responseRegistrySelectors;
 
   public TransactionProcessorParticipant(SystemPropertiesService systemPropertiesService,
       List<AbstractTransactionHandler> transactionHandlers,
@@ -106,10 +105,6 @@ public class TransactionProcessorParticipant
     this.inFlightAcquireTimeoutMs = participantConfigurationProperties.getPool(ManagerConstant.TRANSACTION)
         .flightQueueTimeOut();
 
-    this.responseRegistrySelectors = ConfigGroup.getList(
-        this.systemPropertiesService,
-        ConfigGroup.REGISTRY_RESPONSE_SELECTOR
-    );
 
     this.senderProtocolStrategy = senderProtocolStrategies.stream()
         .filter(sender -> sender.getProtocol() == isoMessageProperties.outgoingProtocol())
@@ -251,7 +246,9 @@ public class TransactionProcessorParticipant
   }
 
   private boolean isResponseRegistryEnabled(RequestContext requestContext) {
+    // read per message, not snapshotted in the constructor, which runs before the config cache is warm
     return RegistryType.RESPONSE == clientProperties.getRegistryType()
-        && responseRegistrySelectors.contains(requestContext.getSelector());
+        && ConfigGroup.getList(systemPropertiesService, ConfigGroup.REGISTRY_RESPONSE_SELECTOR)
+            .contains(requestContext.getSelector());
   }
 }

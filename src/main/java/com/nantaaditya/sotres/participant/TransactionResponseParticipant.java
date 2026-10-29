@@ -72,7 +72,6 @@ public class TransactionResponseParticipant
   private final Tracer tracer;
   private final Executor isoTransactionExecutor;
   private final ClientProperties clientProperties;
-  private final List<String> responseRegistrySelectors;
 
   public TransactionResponseParticipant(SystemPropertiesService systemPropertiesService,
       CorrelationRegistry correlationRegistry, ObservationRegistry observationRegistry,
@@ -90,10 +89,6 @@ public class TransactionResponseParticipant
     this.clientProperties = clientProperties;
     this.isoTransactionExecutor = isoTransactionExecutor;
 
-    this.responseRegistrySelectors = ConfigGroup.getList(
-        this.systemPropertiesService,
-        ConfigGroup.REGISTRY_RESPONSE_SELECTOR
-    );
   }
 
   /**
@@ -195,7 +190,9 @@ public class TransactionResponseParticipant
   }
 
   private boolean isResponseRegistryEnabled(RequestContext requestContext) {
+    // read per message, not snapshotted in the constructor, which runs before the config cache is warm
     return RegistryType.RESPONSE == clientProperties.getRegistryType()
-        && responseRegistrySelectors.contains(requestContext.getSelector());
+        && ConfigGroup.getList(systemPropertiesService, ConfigGroup.REGISTRY_RESPONSE_SELECTOR)
+            .contains(requestContext.getSelector());
   }
 }

@@ -20,7 +20,7 @@ public class IsoCallbackResponseHandler
 
   private final TracerHelper tracerHelper;
   private final CorrelationRegistry correlationRegistry;
-  private final List<String> registryCallbackSelectors;
+  private final SystemPropertiesService systemPropertiesService;
 
   private static final AttributeKey<IsoCategory> CALLBACK_KEY = AttributeKey.valueOf(CALLBACK_ATTRIBUTE);
 
@@ -30,11 +30,7 @@ public class IsoCallbackResponseHandler
 
     this.correlationRegistry = correlationRegistry;
     this.tracerHelper = tracerHelper;
-    this.registryCallbackSelectors = ConfigGroup.getList(
-        systemPropertiesService,
-        ConfigGroup.REGISTRY_CALLBACK_SELECTOR
-    );
-
+    this.systemPropertiesService = systemPropertiesService;
   }
 
   @Override
@@ -47,7 +43,11 @@ public class IsoCallbackResponseHandler
       tracerHelper.createTraceContext(msg);
 
       // match is response callback — deliver to the waiting future and classify
-      if (this.registryCallbackSelectors != null && this.registryCallbackSelectors.contains(selector)) {
+      // read per message, not snapshotted: this handler is built on connect, before the config
+      // cache is warm, and a snapshot would also ignore later reloads
+      List<String> registryCallbackSelectors = ConfigGroup.getList(
+          systemPropertiesService, ConfigGroup.REGISTRY_CALLBACK_SELECTOR);
+      if (registryCallbackSelectors != null && registryCallbackSelectors.contains(selector)) {
         isoCategory = correlationRegistry.complete(msg);
       } else {
         isoCategory = IsoCategory.EXTERNAL_REQUEST;

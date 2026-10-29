@@ -157,6 +157,36 @@ class IsoCallbackResponseHandlerTest {
   }
 
   @Nested
+  @DisplayName("channelRead0 — selector config loaded after construction")
+  class LateConfigPath {
+
+    @Test
+    @DisplayName("honours a callback selector that only became available after the handler was built")
+    @SuppressWarnings("unchecked")
+    void channelRead0_selectorLoadedAfterConstruction_isHonoured() {
+      // cold start: the pipeline (and this handler) is built before SystemPropertiesServiceImpl
+      // has loaded the config cache on ApplicationReadyEvent
+      when(systemPropertiesService.getProperty(
+          ConfigGroup.REGISTRY_CALLBACK_SELECTOR,
+          ConfigGroup.REGISTRY_CALLBACK_SELECTOR.getPropertyId()))
+          .thenReturn(null);
+      IsoCallbackResponseHandler coldHandler = new IsoCallbackResponseHandler(
+          correlationRegistry, systemPropertiesService, tracerHelper);
+
+      when(systemPropertiesService.getProperty(
+          ConfigGroup.REGISTRY_CALLBACK_SELECTOR,
+          ConfigGroup.REGISTRY_CALLBACK_SELECTOR.getPropertyId()))
+          .thenReturn(MATCHING_SELECTOR);
+      setupMatchingMessage();
+      when(correlationRegistry.complete(msg)).thenReturn(IsoCategory.SUCCESS);
+
+      coldHandler.channelRead0(ctx, msg);
+
+      verify(attr).set(IsoCategory.SUCCESS);
+    }
+  }
+
+  @Nested
   @DisplayName("channelRead0 — selector not in registryCallbackSelectors")
   class SelectorNotMatchedPath {
 
