@@ -88,7 +88,7 @@ management:
       export:
         enabled: ${PROMETHEUS_ENABLED:true}
   tracing:
-    enabled: true
+    export.enabled: true
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
     baggage:
