@@ -16,6 +16,7 @@ ISO 8583 to REST Api
 - [Configuration](#configuration)
 - [Local Development](#local-development)
 - [Database](#database)
+- [License](#license)
 
 ---
 
@@ -544,3 +545,14 @@ Schema is external and version-controlled as plain SQL (`src/main/resources/ddl.
 
 **Time-sortable primary key on `event_logs`**
 `EventLog.id` uses a TSID (`@TimeSeriesId`) instead of a database sequence — a lexically sortable, roughly time-ordered string ID generated in the application, avoiding both sequence round-trips and the index-locality problems of a random UUID on a high-write audit table.
+
+---
+
+## License
+
+Copyright (C) 2026 nantaaditya
+
+This project is dual-licensed:
+
+- **Open source — [GNU AGPL-3.0](LICENSE).** Free to use and modify, including commercially, as long as any modified version you distribute **or run as a network service** is released with its full source under the AGPL-3.0.
+- **Commercial license.** Companies and for-profit users who want to keep their modifications private (closed source) need a paid license. Pricing is per agreement — see [COMMERCIAL.md](COMMERCIAL.md) for how to request a quote.
