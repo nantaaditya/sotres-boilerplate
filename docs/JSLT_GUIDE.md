@@ -111,16 +111,18 @@ VALUES (
   }'
 );
 
--- Response template: transforms raw downstream JSON → ResponseContext fields
+-- Response template: transforms raw downstream JSON → ResponseContext fields.
+-- The output MUST use the ResponseContext shape (response.code, data.transaction.*).
+-- Unknown field names are silently ignored and the reply then maps to DE39 96..
+-- The output MUST use the ResponseContext shape (response.code, data.transaction.*).
+-- Unknown field names are silently ignored and the reply then maps to DE39 96.
 INSERT INTO system_properties (group_id, property_id, property_value)
 VALUES (
   'client_spec_response',
   '10.97-E001',
   '{
-    "responseCode": .resultCode,
-    "responseMessage": .resultMessage,
-    "rrn": .partnerReferenceNo,
-    "stan": .transactionId
+    "response": { "code": .resultCode, "description": .resultMessage },
+    "data": { "transaction": { "rrn": .partnerReferenceNo, "approvalCode": .authCode } }
   }'
 );
 ```
@@ -240,7 +242,7 @@ Returns the raw template text for both directions without touching the expressio
   "response": { "code": "000", "description": "success", "time": "..." },
   "data": {
     "client_spec_request":  "{ \"partnerReferenceNo\": .rrn }",
-    "client_spec_response": "{ \"responseCode\": .resultCode }"
+    "client_spec_response": "{ \"response\": { \"code\": .resultCode } }"
   }
 }
 ```
@@ -291,7 +293,7 @@ Checklist for each new downstream client spec:
 ```sql
 INSERT INTO system_properties (group_id, property_id, property_value) VALUES
   ('client_spec_request',  '10.26-A002', '{ "partnerRef": .rrn }'),
-  ('client_spec_response', '10.26-A002', '{ "responseCode": .status }');
+  ('client_spec_response', '10.26-A002', '{ "response": { "code": .status } }');
 ```
 
 **2. Add the path mapping**
@@ -307,19 +309,19 @@ WHERE group_id = 'endpoint_path' AND property_id = 'mapping';
 **3. Reload the JSLT cache**
 
 ```bash
-curl -X POST "http://localhost:8080/internal-api/jslt/_reload?selector=10.26-A002"
+curl -X POST "http://localhost:8080/sotres/internal-api/jslt/_reload?selector=10.26-A002"
 ```
 
 **4. Verify both templates are live**
 
 ```bash
-curl "http://localhost:8080/internal-api/jslt/templates?selector=10.26-A002"
+curl "http://localhost:8080/sotres/internal-api/jslt/templates?selector=10.26-A002"
 ```
 
 **5. Reload the path mapping**
 
-The `endpoint_path` group is a flat-config reloaded separately. Call the system-properties reload endpoint or restart the pod:
+The `endpoint_path` group is a flat-config reloaded separately. Call the configurations reload endpoint (note: `PUT`, and the `/sotres` context path) or restart the pod:
 
 ```bash
-curl -X POST "http://localhost:8080/internal-api/system-properties/_reload?group=PATH_MAPPING"
+curl -X PUT "http://localhost:8080/sotres/internal-api/configurations/_reload?group=PATH_MAPPING"
 ```
